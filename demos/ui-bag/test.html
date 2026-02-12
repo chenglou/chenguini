@@ -1,0 +1,85 @@
+<meta charset="utf-8" />
+<body>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      font: 16px system-ui;
+      user-select: none; /* no text selection needed */
+    }
+    .container {
+      outline: 1px solid lightgray;
+      position: absolute;
+      overflow: scroll;
+      cursor: pointer;
+    }
+    .row {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden; /* height might be small during animation */
+      transition: opacity 1s linear;
+    }
+  </style>
+  <script>
+    let containerHeight = 500;
+    let containerWidth = 400;
+    let containerTopY = 60;
+    let rowCount = 10000;
+    let debugPadding = 0;
+
+    // DOM setup
+    let container = document.createElement("div");
+    container.className = "container";
+    container.style.height = containerHeight;
+    container.style.width = containerWidth;
+    container.style.top = containerTopY;
+
+    document.body.appendChild(container);
+    let rows = [];
+
+    function makeRow(i) {
+      let wrap = document.createElement("div");
+      wrap.className = "row";
+      for (let j = 0; j < 10; j++) {
+        let node = document.createElement("div");
+        node.className = "row";
+        node.style.height = Math.round(Math.random() * 60 + 50);
+        node.innerText = "Cell " + (i + 1);
+        node.style.backgroundColor = `hsl(205, 100%, ${
+          Math.random() * 40 + 50
+        }%)`;
+        wrap.appendChild(node);
+      }
+      return wrap;
+    }
+
+    for (let i = 0; i < 10000; i++) {
+      let wrap = makeRow(i);
+      rows.push(wrap);
+      container.appendChild(wrap);
+    }
+
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => {
+        rows[i + 2].style.opacity = 0;
+        setTimeout(() => {
+          container.removeChild(container.childNodes[2]);
+        }, 1000);
+      }, i * 1200);
+    }
+    setTimeout(() => {
+      for (let i = 2; i >= 0; i--) {
+        setTimeout(() => {
+          let wrap = makeRow(4 - i);
+          container.insertBefore(wrap, container.childNodes[2]);
+          wrap.style.opacity = 0;
+          setTimeout(() => {
+            wrap.style.opacity = 1;
+          }, 20);
+        }, i * 1000);
+      }
+    }, 5000);
+  </script>
+</body>

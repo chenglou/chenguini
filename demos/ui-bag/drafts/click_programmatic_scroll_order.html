@@ -1,0 +1,47 @@
+<!-- https://medium.com/@paul_irish/requestanimationframe-scheduling-for-nerds-9c57f7438ef4 -->
+<body>
+  <style>
+    .container {
+      width: 200px;
+      height: 350px;
+      outline: 1px solid lightgray;
+      overflow: scroll;
+    }
+    .row {
+      height: 100px;
+      outline: 1px solid lightgray;
+    }
+  </style>
+  <div class="container">
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+  </div>
+  <script>
+    function loop() {
+      console.log("loop");
+      requestAnimationFrame(loop);
+    }
+    let container = document.getElementsByClassName("container")[0];
+    container.addEventListener("click", () => {
+      console.log("clicked");
+      // setTimeout(() => {
+      container.scrollTo(0, Math.random() * 1000);
+      // }, 15);
+    });
+    container.addEventListener("scroll", () => {
+      console.log("scrolled");
+    });
+
+    loop();
+    // Result: "clicked" and "scrolled" should be in the same frame. Aka sync
+    // callling scrollTo inside an event will trigger a scroll event in the same
+    // frame. Uncomment setTimeout and try a few ms to see sometime the log
+    // won't be in the same frame
+  </script>
+</body>

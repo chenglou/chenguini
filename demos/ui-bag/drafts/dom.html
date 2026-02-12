@@ -1,0 +1,47 @@
+<body>
+  <script>
+    let container = document.createElement("div");
+    document.body.appendChild(container);
+
+    function populateContainer() {
+      for (let i = 0; i < 3000; i++) {
+        let row = document.createElement("div");
+        row.style.outline = "1px solid black";
+        row.style.width = 20;
+        container.appendChild(row);
+      }
+    }
+    populateContainer();
+
+    // interleaved read & write
+    let now = performance.now();
+    let sum = 0;
+    for (let i = 0; i < container.childNodes.length; i++) {
+      // write...
+      container.childNodes[i].style.height = Math.random() * 50;
+      // read...
+      sum += container.childNodes[i].getBoundingClientRect().height;
+    }
+
+    console.log("Height", sum);
+    console.log("Interleaved read & write:", performance.now() - now);
+
+    // batched write & batched read
+    container.innerHTML = "";
+    populateContainer();
+
+    let now2 = performance.now();
+    let sum2 = 0;
+    for (let i = 0; i < container.childNodes.length; i++) {
+      // write...
+      container.childNodes[i].style.height = Math.random() * 50;
+    }
+    for (let i = 0; i < container.childNodes.length; i++) {
+      // read...
+      sum2 += container.childNodes[i].getBoundingClientRect().height;
+    }
+
+    console.log("Height", sum2);
+    console.log("Batched read & write:", performance.now() - now2);
+  </script>
+</body>

@@ -1,0 +1,86 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+
+<body>
+  <style>
+    * {
+      touch-action: pan-y; /* disable page zoom */
+    }
+    body {
+      font-family: Verdana, Geneva, sans-serif;
+      user-select: none; /* no text selection needed */
+      -webkit-user-select: none;
+      overflow: hidden; /* disable page scroll */
+      margin: 0;
+      background-color: rgb(240, 240, 229);
+    }
+    .thread-container {
+      position: absolute;
+      border-radius: 8px;
+      box-shadow: rgba(0, 0, 0, 0.1) 0 0 8px 4px;
+      background-color: white;
+    }
+    .submission-line-1 {
+      position: absolute;
+      display: flex;
+      gap: 4px;
+      left: 8px;
+      font-size: 13px;
+    }
+    .submission-line-2 {
+      position: absolute;
+      font-size: 11px;
+    }
+    .search {
+      position: absolute;
+      border-radius: 99px;
+      border: 1px solid lightgray;
+      padding-left: 8px; /* for the placeholder */
+      font-size: 13px;
+      outline: none;
+    }
+    .canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .comments-scroller {
+      position: absolute;
+      overflow-y: scroll;
+    }
+    .comments-display {
+      position: absolute;
+      overflow: hidden;
+      background-color: hsl(60deg 28% 95%);
+    }
+    .user {
+      position: absolute;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      font-size: 11px;
+      overflow: hidden;
+    }
+    .comment {
+      position: absolute;
+      font-size: 12px;
+      overflow: hidden;
+    }
+    .comment a {
+      color: black;
+    }
+    .comment a:visited {
+      color: rgb(130, 130, 130);
+    }
+    .comment p {
+      margin-top: 8px;
+      margin-bottom: 0;
+    }
+  </style>
+  <!-- <script type="text/javascript" src="justice.min.js"></script> <script type="text/javascript">Justice.init();</script> -->
+
+  <script src="./data.js"></script>
+  <script src="./hn.js"></script>
+  <!-- <script src="./debug.js"></script> -->
+</body>

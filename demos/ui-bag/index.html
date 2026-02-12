@@ -1,0 +1,42 @@
+<meta charset="utf-8" />
+<body>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      font: 16px system-ui;
+      user-select: none; /* no text selection needed */
+    }
+    .container {
+      outline: 1px solid lightgray;
+      position: absolute;
+      overflow: scroll;
+      cursor: pointer;
+    }
+    .debug {
+      position: absolute;
+      background: repeating-linear-gradient(
+        45deg,
+        #606dbc,
+        #606dbc 10px,
+        #465298 10px,
+        #465298 20px
+      );
+      opacity: 0.3;
+      pointer-events: none;
+    }
+    .row {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      width: 100%;
+      pointer-events: none; /* disable clicks for container event delegation */
+      box-sizing: border-box;
+      overflow: hidden; /* height might be small during animation */
+    }
+  </style>
+  ↑/↓ arrows for keyboard navigation. ⌥+click row to insert below. Shift+⌥+click
+  row to remove it.
+  <script src="./multiselect.js"></script>
+  <script src="./scrollview.js"></script>
+</body>

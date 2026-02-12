@@ -1,0 +1,54 @@
+<body>
+  <style>
+    .container {
+      width: 200px;
+      height: 350px;
+      outline: 1px solid lightgray;
+      overflow: scroll;
+    }
+    .row {
+      height: 100px;
+      outline: 1px solid lightgray;
+    }
+  </style>
+  <div class="container">
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+    <div class="row"></div>
+  </div>
+  <script>
+    // 3 render frames: | scroll, render | scroll, render | scroll, render |
+    // scroll calling rAF should always be for the rAF of the current frame:
+    // https://medium.com/@paul_irish/requestanimationframe-scheduling-for-nerds-9c57f7438ef4
+    // aka it'll never be enqueued for the next frame's rAF
+    // below, the log should be, for example: | scroll, rAF, rAF2 | scroll, rAF, rAF2 |
+    // then rinse and repeat, with arbitrarily many "rAF" in-between.
+    // A wrong order would be: | scroll, rAF | scroll, rAF, rAF2 |
+    // or | scroll, rAF | scroll, rAF2, rAF |
+    // if scroll sees the counter is 1 (aka rAF2 didn't get to bump it), it's wrong
+    let counter = 0;
+    let container = document.getElementsByClassName("container")[0];
+    container.addEventListener("scroll", () => {
+      console.log("=== scroll");
+      if (counter === 1) console.error("Something wrong");
+      counter = 0;
+      requestAnimationFrame(() => {
+        console.log("rAF2");
+        counter++;
+      });
+    });
+    function loop() {
+      requestAnimationFrame(() => {
+        console.log("rAF");
+        counter++;
+        loop();
+      });
+    }
+    loop();
+  </script>
+</body>

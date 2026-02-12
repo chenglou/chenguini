@@ -1,0 +1,160 @@
+<body>
+  <script>
+    let currentShownIndex = 1
+    let cards = ['tim', 'steve', 'mac', 'jon', 'blow', 'apple']
+    let pagesTopCurrent = cards.map(_ => 0)
+
+    document.body.style.margin = 0
+
+    function hash(n) {
+      n = (n * 0.1031) % 1;
+      n *= n + 33.33;
+      n *= n + n;
+      return n % 1;
+    }
+
+    function makePage() {
+      let page = document.createElement('div')
+      page.style.position = 'absolute'
+      page.style.borderRadius = '12px'
+      // page.style.opacity = 0.8
+      page.style.boxShadow = 'rgba(0, 0, 0, 0.1) 0 0 8px 4px'
+      page.style.fontSize = 40
+      page.style.color = 'white'
+      page.style.fontFamily = '-apple-system'
+      page.style.display = 'flex'
+      page.style.justifyContent = 'center'
+      page.style.userSelect = page.style.webkitUserSelect = 'none'
+
+      return page
+    }
+
+    window.addEventListener('mousedown', () => {
+      currentShownIndex = (currentShownIndex + 1 + cards.length) % cards.length
+    })
+
+    let container = document.createElement('div')
+    document.body.append(container)
+
+    function render() {
+      let pagesPosFinal = []
+      let {innerWidth, innerHeight} = window
+      innerHeight -= 300
+      let pageHeightNatural = innerHeight - 100
+      let pageWidthNatural = 500
+
+      container.textContent = ''
+      for (let i = 0; i < cards.length; i++) {
+        let pageTopFinal
+        if (i > currentShownIndex) {
+          // pageTopFinal = innerHeight - 160 + 80 * (i - currentShownIndex)
+          pageTopFinal = innerHeight - 160 + 80 * Math.log(i - currentShownIndex)
+        } else if (i === currentShownIndex) {
+          pageTopFinal = 50
+        } else { // i < currentShownIndex
+          // pageTopFinal = 50 - (currentShownIndex - i) * 50
+          // pageTopFinal = 50 * (i - currentShownIndex + 1)
+          pageTopFinal = -50 * Math.log(currentShownIndex - i)
+        }
+        pageTopFinal += 100 // debug top padding
+        pagesTopCurrent[i] += (pageTopFinal - pagesTopCurrent[i]) / 4
+        let pageWidth = pageWidthNatural + (pagesTopCurrent[i] * 0.6 - innerHeight * 0.1) * 0.1
+        let page = makePage()
+            page.style.left = (innerWidth - pageWidth) / 2
+            page.style.width = pageWidth
+            page.style.top = pagesTopCurrent[i]
+            page.style.height = pageHeightNatural
+            page.innerText = cards[i]
+            page.style.backgroundColor = `hsl(${hash(i + 0.1) * 200 + 20}, ${hash(i + 0.1) * 60 + 20}%, ${hash(i + 0.1) * 100}%)`
+        container.appendChild(page)
+      }
+
+      requestAnimationFrame(render)
+    }
+
+    render()
+
+    // let {devicePixelRatio} = window
+    // const canvas = document.createElement('canvas');
+    // const ctx = canvas.getContext('2d');
+    // canvas.style.border = '10px solid red'
+    // canvas.style.height = 500
+    // canvas.style.width = 700
+    // canvas.height = 500 * devicePixelRatio
+    // canvas.width  = 700 * devicePixelRatio // different than canvas.style.width. Btw this clears the canvas as well
+    // ctx.scale(devicePixelRatio, devicePixelRatio)
+
+    // // Shadow
+    // ctx.shadowColor = 'black';
+    // ctx.shadowBlur = 16;
+
+    // ctx.beginPath();
+    // ctx.moveTo(30, 20);
+    // ctx.lineTo(100, 20);
+    // ctx.quadraticCurveTo(120, 20, 120, 30);
+    // ctx.lineTo(120, 100);
+    // ctx.quadraticCurveTo(120, 120, 100, 120);
+    // ctx.lineTo(30, 120);
+    // ctx.quadraticCurveTo(20, 120, 20, 100);
+    // ctx.lineTo(20, 30);
+    // ctx.quadraticCurveTo(20, 20, 30, 20);
+    // ctx.fill();
+
+    // clip: {
+    //   // break clip;
+    //   let x = 0
+    //   let y = 0
+    //   let radius = 120
+    //   ctx.save();
+    //   ctx.moveTo(30, 20);
+    //   ctx.lineTo(100, 20);
+    //   ctx.quadraticCurveTo(120, 20, 120, 30);
+    //   ctx.lineTo(120, 100);
+    //   ctx.quadraticCurveTo(120, 120, 100, 120);
+    //   ctx.lineTo(30, 120);
+    //   ctx.quadraticCurveTo(20, 120, 20, 100);
+    //   ctx.lineTo(20, 30);
+    //   ctx.quadraticCurveTo(20, 20, 30, 20);
+
+    //   ctx.clip();
+    //   ctx.clearRect(x-radius,y-radius,radius*2,radius*2);
+    //   ctx.restore();
+    // }
+
+    // ctx.beginPath();
+    // ctx.moveTo(20, 10);
+    // ctx.lineTo(80, 10);
+    // ctx.quadraticCurveTo(90, 10, 90, 20);
+    // ctx.lineTo(90, 80);
+    // ctx.quadraticCurveTo(90, 90, 80, 90);
+    // ctx.lineTo(20, 90);
+    // ctx.quadraticCurveTo(10, 90, 10, 80);
+    // ctx.lineTo(10, 20);
+    // ctx.quadraticCurveTo(10, 10, 20, 10);
+    // ctx.fill();
+
+    // clip: {
+    //   // break clip;
+    //   let x = 0
+    //   let y = 0
+    //   let radius = 120
+    //   ctx.save();
+    //   ctx.beginPath();
+    //   ctx.moveTo(20, 10);
+    //   ctx.lineTo(80, 10);
+    //   ctx.quadraticCurveTo(90, 10, 90, 20);
+    //   ctx.lineTo(90, 80);
+    //   ctx.quadraticCurveTo(90, 90, 80, 90);
+    //   ctx.lineTo(20, 90);
+    //   ctx.quadraticCurveTo(10, 90, 10, 80);
+    //   ctx.lineTo(10, 20);
+    //   ctx.quadraticCurveTo(10, 10, 20, 10);
+
+    //   ctx.clip();
+    //   ctx.clearRect(x-radius,y-radius,radius*2,radius*2);
+    //   ctx.restore();
+    // }
+
+    // document.body.append(canvas)
+  </script>
+</body>

@@ -1,0 +1,255 @@
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Story of Your Life</title>
+  <style>
+    body {
+      background-color: #22272e;
+      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+    }
+    canvas {
+      position: absolute;
+    }
+    #tooltip {
+      position: absolute;
+      display: none;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px 0 black;
+      padding: 8px 16px;
+      color: #ffffff;
+      background-color: #6e7681;
+      white-space: nowrap;
+      font-size: 14px;
+      border: none;
+      outline: none;
+      width: 220px;
+      text-align: center;
+    }
+    #tooltip::placeholder {
+      color: #bbbbbb;
+    }
+  </style>
+</head>
+<body>
+<script>
+'use strict'
+
+const life = Math.floor(75 * 365.25)
+const today = new Date().getDay() // sunday = 0
+const age = Math.floor((31 * 365.25 + 6 * 30.5 - 10) / 7) * 7 + today - 1 // rough days, rounded to week, 0-indexed
+const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+// === generic helpers
+function hash(n) { // random for a seed value n. For fun coloring, debugging, etc
+  n = (n * 0.1031) % 1;
+  n *= n + 33.33;
+  n *= n + n;
+  return n % 1;
+}
+
+// === constant layout metrics. The rest is dynamic
+const gridGap = 8
+const leftBlockRadius = [99, 0, 0, 99], rightBlockRadius = [0, 99, 99, 0], pillRadius = [99, 99, 99, 99]
+function radius(i) {
+  if (i % 7 === 0) return leftBlockRadius
+  if (i % 7 === 6) return rightBlockRadius
+  return 0
+}
+
+// === state
+const customDot_ = localStorage.getItem('customDot')
+let customDot = customDot_ == null ? null : parseInt(customDot_)
+let customDotValue = localStorage.getItem('customDotValue')
+/** @type 'down' | 'up' | 'firstDown' */
+let pointerState = 'up'
+let pointer = {x: -Infinity, y: -Infinity} // btw, on page load, there's no way to render a first cursor state =(,
+let events = {click: null, input: null, mouseup: null, mousemove: null, pointerdown: null}
+let canvas = document.createElement('canvas')
+let ctx = canvas.getContext('2d')
+
+let tooltip = document.createElement('input')
+tooltip.id = 'tooltip'
+tooltip.placeholder = 'Set goal...'
+
+document.body.appendChild(canvas)
+document.body.appendChild(tooltip)
+
+// === events
+// pointermove doesn't work on android, pointerdown isn't fired on Safari on the first left click after dismissing context menus, mousedown doesn't trigger properly on mobile, pointerup isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event. Tldr there's no pointer event that works cross-browser that can replace mouse & touch events.
+window.addEventListener('resize', () => render())
+window.addEventListener('click', (e) => {events.click = e; render()})
+tooltip.addEventListener('input', (e) => {events.input = e; render()})
+window.addEventListener("mouseup", (e) => {events.mouseup = e; render()})
+window.addEventListener('mousemove', (e) => {events.mousemove = e; render()})
+window.addEventListener('pointerdown', (e) => {events.pointerdown = e; render()})
+
+// === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either). Use the dynamic area here for once
+function hitTest(blockSize, countX, countY, gridLeft, gridTop, gridFinalSizeX, gridFinalSizeY, pointer) {
+  const px = pointer.x-/*toLocal*/gridLeft
+  const py = pointer.y-/*toLocal*/gridTop
+  if (px < 0 || px > gridFinalSizeX || py < 0 || py > gridFinalSizeY) return null
+  return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
+}
+
+function render() {
+  // === step 0: process events
+  // click
+  let clicked = false
+  if (events.click != null) {
+    clicked = true
+    // needed to update coords even when we already track mousemove. E.g. in Chrome, right click context menu, move elsewhere, then click to dismiss. BAM, mousemove triggers with stale/wrong (??) coordinates... Click again without moving, and now you're clicking on the wrong thing
+    pointer.x = events.click.pageX - window.scrollX; pointer.y = events.click.pageY - window.scrollY
+  }
+  // input
+  const newCustomDotValue = events.input == null ? null : events.input.target.value
+  // mouseup
+  if (events.mouseup != null) pointerState = 'up'
+  // mousemove
+  if (events.mousemove != null) {
+    // when scrolling (which might schedule a render), a container's mousemove doesn't trigger, so the pointer's local coordinates are stale
+    // this means we should only use pointer's global coordinates, which is always right (thus the subtraction of scroll)
+    pointer.x = events.mousemove.pageX -/*toGlobal*/window.scrollX; pointer.y = events.mousemove.pageY -/*toGlobal*/window.scrollY
+    // btw, pointer can exceed document bounds, e.g. dragging reports back out-of-bound, legal negative values
+  }
+  // pointerdown
+  if (events.pointerdown != null) {
+    pointerState = 'firstDown'
+    pointer.x = events.pointerdown.pageX - window.scrollX; pointer.y = events.pointerdown.pageY - window.scrollY
+  }
+
+  // === step 1: batched DOM reads (to avoid accidental DOM read & write interleaving)
+  const devicePixelRatio = window.devicePixelRatio
+  const windowSizeX = document.documentElement.clientWidth
+  const windowSizeY = window.innerHeight
+  const gridSizeX = windowSizeX - gridGap
+  const gridSizeY = windowSizeY - gridGap
+
+  const blockSize_ = (life * Math.sqrt((4*life*gridSizeX*gridSizeY + (7*gridSizeY)**2) / (life**2)) + 7 * gridSizeY) / 2 / life
+  const countX = Math.floor((gridSizeX / blockSize_) / 7) * 7
+  const countY = Math.ceil(life / countX)
+  const blockSize = gridSizeY / countY
+  const gridFinalSizeX = countX * blockSize
+  const gridFinalSizeY = countY * blockSize
+  const gridLeft = (windowSizeX - gridFinalSizeX) / 2 // center
+  const gridTop = (windowSizeY - gridFinalSizeY) / 2 // center
+
+  // === step 2: handle inputs-related state change
+  const hover = hitTest(blockSize, countX, countY, gridLeft, gridTop, gridFinalSizeX, gridFinalSizeY, pointer)
+  const newCustomDot =
+    clicked && hover === customDot ? null
+    : clicked ? hover
+    : customDot
+  const cursor =
+    hover == null ? 'auto'
+    : hover === age || hover === newCustomDot ? 'move'
+    : 'pointer'
+
+  // === step 5: render. Batch DOM writes
+  // no blurry canvas: coderwall.com/p/vmkk6a/how-to-make-the-canvas-not-look-like-crap-on-retina
+  canvas.width = gridFinalSizeX * devicePixelRatio // different than canvas.style.width. Btw this clears the canvas as well
+  canvas.height = gridFinalSizeY * devicePixelRatio
+  canvas.style.width = gridFinalSizeX
+  canvas.style.height = gridFinalSizeY
+  canvas.style.left = gridLeft
+  canvas.style.top = gridTop
+  ctx.scale(devicePixelRatio, devicePixelRatio)
+  ctx.clearRect(0, 0, gridFinalSizeX, gridFinalSizeY)
+
+  ctx.strokeStyle = '#22272e'
+  ctx.lineWidth = 0.5
+  const emptyColor = 'hsl(214, 13%, 25%)'
+  const filledColor = '#39d353'
+  for (let i = 0; i < life - 1; ) {
+    const x = i % countX * blockSize
+    const y = Math.floor(i / countX) * blockSize
+
+    const iPill = Math.floor(i / 7), agePill = Math.floor(age / 7), lifePill = Math.floor(life / 7)
+    ctx.beginPath()
+    if (iPill < agePill) {
+      ctx.fillStyle = filledColor
+      ctx.roundRect(x, y, blockSize * 7, blockSize, pillRadius)
+      i += 7
+    } else if (iPill > agePill && iPill !== lifePill) { // TODO: check condition
+      ctx.fillStyle = emptyColor
+      ctx.roundRect(x, y, blockSize * 7, blockSize, pillRadius)
+      i += 7
+    } else {
+      ctx.fillStyle =
+        i < age ? filledColor
+        : i === age ? '#006d32'
+        : emptyColor
+      ctx.roundRect(x, y, blockSize, blockSize, radius(i))
+      i++
+    }
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  function drawOneDot(i) {
+    const x = i % countX * blockSize
+    const y = Math.floor(i / countX) * blockSize
+    ctx.beginPath()
+    ctx.roundRect(x, y, blockSize, blockSize, radius(i))
+    ctx.fill()
+    ctx.stroke()
+  }
+  if (hover != null) {
+    ctx.fillStyle = `hsl(${hash(hover) * 360}, ${hash(hover) * 30 + 70}%, 60%)`
+    drawOneDot(hover)
+  }
+  if (newCustomDot != null) {
+    ctx.fillStyle = `hsl(${hash(newCustomDot) * 360}, ${hash(newCustomDot) * 60 + 30}%, 60%)`
+    drawOneDot(newCustomDot)
+  }
+  { // last dot
+    ctx.fillStyle = 'red'
+    drawOneDot(life - 1)
+  }
+
+  for (let i = 1; i < countX; i++) {
+    if (i % 7 === 0) continue
+    ctx.moveTo(blockSize * i, 0)
+    const height = i < Math.floor((life - (countY - 1) * countX) / 7) * 7 ? countY * blockSize : (countY - 1) * blockSize
+    ctx.lineTo(blockSize * i, height)
+    ctx.stroke()
+  }
+
+  document.body.style.cursor = cursor
+  tooltip.style.left = pointer.x - 110
+  tooltip.style.top = pointer.y - 36
+  if (hover === age) {
+    tooltip.style.display = 'block'
+    tooltip.disabled = true
+    tooltip.value = `You're ${Math.floor(age / 365.25)}, born in ${months[Math.floor(age % 365.25 / 30)]}`
+  } else if (hover === life - 1) {
+    tooltip.style.display = 'block'
+    tooltip.disabled = true
+    tooltip.value = 'Good bye'
+  } else {
+    tooltip.style.display = hover != null && hover === newCustomDot ? 'block' : 'none'
+    tooltip.disabled = false
+    tooltip.value = newCustomDotValue == null ? customDotValue : newCustomDotValue
+  }
+  tooltip.focus()
+
+  // === step 6: update state & prepare for next frame
+  if (customDot !== newCustomDot) {
+    localStorage.setItem('customDot', newCustomDot) // TODO: validate (e.g. out of range)
+    customDot = newCustomDot
+  }
+  if (newCustomDotValue != null && customDotValue !== newCustomDotValue) {
+    localStorage.setItem('customDotValue', newCustomDotValue) // TODO: validate (e.g. out of range)
+    customDotValue = newCustomDotValue
+  }
+  events.click = events.input = events.mouseup = events.mousemove = events.pointerdown = null
+}
+
+render()
+/*
+TODOs:
+- drag today dot
+- tooltip
+- gl?
+*/
+</script>
+</body>
