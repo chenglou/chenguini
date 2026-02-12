@@ -1,0 +1,392 @@
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screensaver</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at center, hsl(210, 50%, 24%), hsl(210, 50%, 4%));
+    }
+    .box {
+      position: absolute;
+      border-radius: 8px;
+      background-size: cover;
+      background-position: center;
+      will-change: transform;
+      transform-origin: center;
+    }
+  </style>
+</head>
+<body>
+<script>
+'use strict'
+
+// @cs
+// Screensaver: images spawn near center, repel each other outward, fade at edges
+//
+// use: scheduler, spring (k=130, b=21, 6ms step), midui helpers (hash11, hash21, overlap, remap, length, vec2, vec4)
+//
+// images: 20 placeholder images from picsum.photos, preloaded
+//   each has width, height, url, aesthetic_score (hash11(i) > 0.95 ? 1 : 0)
+//
+// box state: id, imageIdx, width (sized to fill containerArea/7 or /12), centerX, centerY, vx, vy,
+//   opacitySpring(1→1 enter, 1→0 exit), scaleSpring(0→1 enter), enterProgress (0→1 over 1s), exiting
+//
+// spawn: new box near center (+ hash21 nudge) every 2500-3500ms (aesthetic) or 200-1500ms (regular)
+//   only when preloaded images available, countdown decrements by msPerAnimationStep each step
+//
+// physics (per step):
+//   pairwise repulsion: force = remap(overlapArea, 0, selfArea, 0, 15 * enterProgress)
+//   direction = normalized(dx, dy), skewed by (containerW/containerH)*0.8 on x
+//   velocity += force, position += velocity, velocity *= 0.2 (damping)
+//   scale.dest = 1 - pow(0.9 - max(0, minEdgeDistPct), 10)
+//   minEdgeDistPct = min distance to any container edge as fraction of container dimension
+//   exit when minEdgeDistPct <= 0.05: opacity.dest = 0, remove when opacity reaches 0
+//
+// render: translate3d(centerX-w/2, centerY-h/2, 0) scale(s), opacity
+//   aesthetic: orange glow shadow; others: dark shadow
+// @/cs
+
+// ---- midui helpers (inlined) ----
+
+const msPerAnimationStep = 6
+
+function spring(pos, dest, v, k, b) {
+  return {pos: pos, dest: dest, v: v || 0, k: k || 130, b: b || 21}
+}
+
+function springStep(s) {
+  let t = msPerAnimationStep / 1000
+  let Fspring = -s.k * (s.pos - s.dest)
+  let Fdamper = -s.b * s.v
+  let a = Fspring + Fdamper
+  s.v = s.v + a * t
+  s.pos = s.pos + s.v * t
+}
+
+function springGoToEnd(s) {
+  s.pos = s.dest
+  s.v = 0
+}
+
+function springMostlyDone(s) {
+  return Math.abs(s.v) < 0.01 && Math.abs(s.dest - s.pos) < 0.01
+}
+
+function fract(x) {
+  return x - Math.floor(x)
+}
+
+function hash11(p) {
+  let x = fract(Math.sin(p * 127.1) * 43758.5453123)
+  return x
+}
+
+function hash21(p) {
+  return {
+    x: fract(Math.sin(p * 127.1) * 43758.5453123),
+    y: fract(Math.sin(p * 269.5) * 43758.5453123)
+  }
+}
+
+function length(x, y) {
+  return Math.sqrt(x * x + y * y)
+}
+
+function remap(value, oldMin, oldMax, newMin, newMax) {
+  let oldRange = oldMax - oldMin
+  if (Math.abs(oldRange) < 0.000001) return (newMin + newMax) * 0.5
+  let t = (value - oldMin) / oldRange
+  return newMin + t * (newMax - newMin)
+}
+
+function overlapArea(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
+  let ox = Math.max(0, Math.min(ax2, bx2) - Math.max(ax1, bx1))
+  let oy = Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1))
+  return ox * oy
+}
+
+// ---- image definitions ----
+
+let images = []
+let preloadedImages = []
+
+for (let i = 0; i < 20; i++) {
+  let w = 300 + Math.floor(hash11(i + 0.1) * 200)
+  let h = 300 + Math.floor(hash11(i + 0.2) * 200)
+  let url = 'https://picsum.photos/seed/' + (i + 1) + '/' + w + '/' + h
+  let aesthetic = hash11(i) > 0.95 ? 1 : 0
+  images.push({width: w, height: h, url: url, aesthetic_score: aesthetic, preloaded: false})
+}
+
+let preloadCount = 0
+
+function preloadImage(idx) {
+  let img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = function() {
+    images[idx].preloaded = true
+    preloadedImages.push(idx)
+    preloadCount++
+    scheduleRender()
+  }
+  img.onerror = function() {
+    images[idx].preloaded = true
+    preloadedImages.push(idx)
+    preloadCount++
+    scheduleRender()
+  }
+  img.src = images[idx].url
+}
+
+for (let i = 0; i < 20; i++) {
+  preloadImage(i)
+}
+
+// ---- box state ----
+
+let boxes = []
+let nextBoxId = 0
+let spawnCountdown = 1000
+let animatedUntilTime = 0
+
+// ---- scheduler ----
+
+let scheduledRender = false
+function scheduleRender() {
+  if (scheduledRender) return
+  scheduledRender = true
+  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) {
+    scheduledRender = false
+    if (render(now)) scheduleRender()
+  })
+}
+
+// ---- spawn logic ----
+
+function getAvailableImageIdx() {
+  if (preloadedImages.length === 0) return -1
+  // find an image index not currently used by any box
+  for (let pi = 0; pi < preloadedImages.length; pi++) {
+    let idx = preloadedImages[pi]
+    let inUse = false
+    for (let bi = 0; bi < boxes.length; bi++) {
+      if (boxes[bi].imageIdx === idx) {
+        inUse = true
+        break
+      }
+    }
+    if (!inUse) return idx
+  }
+  // if all in use, allow reuse
+  return preloadedImages[Math.floor(hash11(nextBoxId + 0.77) * preloadedImages.length)]
+}
+
+function spawnBox(containerW, containerH) {
+  let idx = getAvailableImageIdx()
+  if (idx < 0) return
+
+  let img = images[idx]
+  let containerArea = containerW * containerH
+  let aesthetic = img.aesthetic_score
+  let targetArea = aesthetic ? containerArea / 7 : containerArea / 12
+  let aspect = img.width / img.height
+  let boxH = Math.sqrt(targetArea / aspect)
+  let boxW = boxH * aspect
+
+  let h = hash21(nextBoxId + 0.5)
+  let cx = containerW * 0.5 + (h.x - 0.5) * containerW * 0.15
+  let cy = containerH * 0.5 + (h.y - 0.5) * containerH * 0.15
+
+  let el = document.createElement('div')
+  el.className = 'box'
+  el.style.width = boxW + 'px'
+  el.style.height = boxH + 'px'
+  el.style.backgroundImage = 'url(' + img.url + ')'
+  document.body.appendChild(el)
+
+  boxes.push({
+    id: nextBoxId++,
+    imageIdx: idx,
+    width: boxW,
+    height: boxH,
+    centerX: cx,
+    centerY: cy,
+    vx: 0,
+    vy: 0,
+    opacitySpring: spring(1, 1, 0, 130, 21),
+    scaleSpring: spring(0, 1, 0, 130, 21),
+    enterProgress: 0,
+    exiting: false,
+    el: el,
+    enterElapsed: 0
+  })
+}
+
+// ---- render ----
+
+function render(now) {
+  let containerW = window.innerWidth
+  let containerH = window.innerHeight
+
+  if (animatedUntilTime === 0) {
+    animatedUntilTime = now
+  }
+
+  let steps = Math.floor((now - animatedUntilTime) / msPerAnimationStep)
+  if (steps > 200) steps = 200 // cap to prevent spiral of death
+  animatedUntilTime += steps * msPerAnimationStep
+
+  for (let step = 0; step < steps; step++) {
+    // spawn countdown
+    spawnCountdown -= msPerAnimationStep
+
+    if (spawnCountdown <= 0 && preloadedImages.length > 0) {
+      spawnBox(containerW, containerH)
+      // decide next spawn delay based on what was just spawned
+      let lastBox = boxes[boxes.length - 1]
+      if (lastBox) {
+        let img = images[lastBox.imageIdx]
+        if (img.aesthetic_score) {
+          spawnCountdown = 2500 + hash11(lastBox.id + 0.3) * 1000
+        } else {
+          spawnCountdown = 200 + hash11(lastBox.id + 0.3) * 1300
+        }
+      } else {
+        spawnCountdown = 1000
+      }
+    }
+
+    // update enter progress
+    for (let i = 0; i < boxes.length; i++) {
+      let box = boxes[i]
+      if (box.enterProgress < 1) {
+        box.enterElapsed += msPerAnimationStep
+        box.enterProgress = Math.min(1, box.enterElapsed / 1000)
+      }
+    }
+
+    // pairwise repulsion
+    let aspectSkew = (containerW / containerH) * 0.8
+
+    for (let i = 0; i < boxes.length; i++) {
+      let a = boxes[i]
+      if (a.exiting) continue
+
+      let ax1 = a.centerX - a.width * 0.5
+      let ay1 = a.centerY - a.height * 0.5
+      let ax2 = a.centerX + a.width * 0.5
+      let ay2 = a.centerY + a.height * 0.5
+      let selfArea = a.width * a.height
+
+      for (let j = i + 1; j < boxes.length; j++) {
+        let b = boxes[j]
+        if (b.exiting) continue
+
+        let bx1 = b.centerX - b.width * 0.5
+        let by1 = b.centerY - b.height * 0.5
+        let bx2 = b.centerX + b.width * 0.5
+        let by2 = b.centerY + b.height * 0.5
+
+        let ov = overlapArea(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2)
+        if (ov <= 0) continue
+
+        let dx = a.centerX - b.centerX
+        let dy = a.centerY - b.centerY
+        let dxSkewed = dx * aspectSkew
+        let dist = length(dxSkewed, dy)
+        if (dist < 0.001) {
+          dx = (hash11(a.id * 13.7) - 0.5) * 2
+          dy = (hash11(a.id * 17.3) - 0.5) * 2
+          dxSkewed = dx * aspectSkew
+          dist = length(dxSkewed, dy)
+        }
+        let nx = dxSkewed / dist
+        let ny = dy / dist
+
+        let forceA = remap(ov, 0, selfArea, 0, 15 * a.enterProgress)
+        let bSelfArea = b.width * b.height
+        let forceB = remap(ov, 0, bSelfArea, 0, 15 * b.enterProgress)
+
+        a.vx += nx * forceA
+        a.vy += ny * forceA
+        b.vx -= nx * forceB
+        b.vy -= ny * forceB
+      }
+    }
+
+    // position update and edge logic
+    for (let i = 0; i < boxes.length; i++) {
+      let box = boxes[i]
+
+      box.centerX += box.vx
+      box.centerY += box.vy
+      box.vx *= 0.2
+      box.vy *= 0.2
+
+      // min edge distance as fraction
+      let distLeft = box.centerX - box.width * 0.5
+      let distRight = containerW - (box.centerX + box.width * 0.5)
+      let distTop = box.centerY - box.height * 0.5
+      let distBottom = containerH - (box.centerY + box.height * 0.5)
+
+      let minEdgeDistPctX = Math.min(distLeft, distRight) / containerW
+      let minEdgeDistPctY = Math.min(distTop, distBottom) / containerH
+      let minEdgeDistPct = Math.min(minEdgeDistPctX, minEdgeDistPctY)
+
+      // scale based on edge distance
+      let rawVal = 0.9 - Math.max(0, minEdgeDistPct)
+      let scaleDest = 1 - Math.pow(Math.max(0, Math.min(1, rawVal)), 10)
+      box.scaleSpring.dest = scaleDest
+
+      // exit when too close to edge
+      if (minEdgeDistPct <= 0.05 && !box.exiting && box.enterProgress >= 1) {
+        box.exiting = true
+        box.opacitySpring.dest = 0
+      }
+
+      // spring steps
+      springStep(box.opacitySpring)
+      springStep(box.scaleSpring)
+    }
+
+    // remove dead boxes
+    for (let i = boxes.length - 1; i >= 0; i--) {
+      let box = boxes[i]
+      if (box.exiting && springMostlyDone(box.opacitySpring)) {
+        springGoToEnd(box.opacitySpring)
+        document.body.removeChild(box.el)
+        boxes.splice(i, 1)
+      }
+    }
+  }
+
+  // apply visual state
+  for (let i = 0; i < boxes.length; i++) {
+    let box = boxes[i]
+    let s = box.scaleSpring.pos
+    let o = box.opacitySpring.pos
+    let tx = box.centerX - box.width * 0.5
+    let ty = box.centerY - box.height * 0.5
+
+    box.el.style.transform = 'translate3d(' + tx + 'px,' + ty + 'px,0) scale(' + s + ')'
+    box.el.style.opacity = Math.max(0, Math.min(1, o))
+
+    let img = images[box.imageIdx]
+    if (img.aesthetic_score) {
+      box.el.style.boxShadow = '0 4px 30px rgba(255, 160, 50, 0.5), 0 0 60px rgba(255, 120, 0, 0.3)'
+    } else {
+      box.el.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.6)'
+    }
+  }
+
+  // still animating if any boxes exist or images might spawn
+  let stillAnimating = boxes.length > 0 || preloadedImages.length > 0
+  return stillAnimating
+}
+
+// kick off
+scheduleRender()
+</script>
+</body>

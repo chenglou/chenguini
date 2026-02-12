@@ -1,0 +1,302 @@
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screensaver</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at center, hsl(210, 50%, 24%), hsl(210, 50%, 4%));
+    }
+    .box {
+      position: absolute;
+      border-radius: 8px;
+      background-size: cover;
+      background-position: center;
+      will-change: transform;
+      transform-origin: center;
+    }
+  </style>
+</head>
+<body>
+<script>
+'use strict'
+
+// @cs
+// Screensaver: images spawn near center, repel each other outward, fade at edges
+//
+// use: scheduler, spring (k=130, b=21, 6ms step), midui helpers (hash11, hash21, overlap, remap, length, vec2, vec4)
+//
+// images: 20 placeholder images from picsum.photos, preloaded
+//   each has width, height, url, aesthetic_score (hash11(i) > 0.95 ? 1 : 0)
+//
+// box state: id, imageIdx, width (sized to fill containerArea/7 or /12), centerX, centerY, vx, vy,
+//   opacitySpring(1→1 enter, 1→0 exit), scaleSpring(0→1 enter), enterProgress (0→1 over 1s), exiting
+//
+// spawn: new box near center (+ hash21 nudge) every 2500-3500ms (aesthetic) or 200-1500ms (regular)
+//   only when preloaded images available, countdown decrements by msPerAnimationStep each step
+//
+// physics (per step):
+//   pairwise repulsion: force = remap(overlapArea, 0, selfArea, 0, 15 * enterProgress)
+//   direction = normalized(dx, dy), skewed by (containerW/containerH)*0.8 on x
+//   velocity += force, position += velocity, velocity *= 0.2 (damping)
+//   scale.dest = 1 - pow(0.9 - max(0, minEdgeDistPct), 10)
+//   minEdgeDistPct = min distance to any container edge as fraction of container dimension
+//   exit when minEdgeDistPct <= 0.05: opacity.dest = 0, remove when opacity reaches 0
+//
+// render: translate3d(centerX-w/2, centerY-h/2, 0) scale(s), opacity
+//   aesthetic: orange glow shadow; others: dark shadow
+// @/cs
+
+// === midui helpers (inlined from midui.ts)
+const msPerAnimationStep = 6
+function spring(pos, dest, v = 0, k = 130, b = 21) {
+  return {pos, dest: dest !== undefined ? dest : pos, v, k, b}
+}
+function springStep(config) {
+  const t = msPerAnimationStep / 1000
+  const {pos, dest, v, k, b} = config
+  const Fspring = -k * (pos - dest)
+  const Fdamper = -b * v
+  const a = Fspring + Fdamper
+  config.v = v + a * t
+  config.pos = pos + config.v * t
+}
+function springGoToEnd(config) { config.pos = config.dest; config.v = 0 }
+function springMostlyDone(s) { return Math.abs(s.v) < 0.01 && Math.abs(s.dest - s.pos) < 0.01 }
+function fract(x) { return x - Math.floor(x) }
+function hash11(p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p) }
+function hash21(p) {
+  const p3x = fract(p * 0.1031), p3y = fract(p * 0.103), p3z = fract(p * 0.0973)
+  const dot = p3x * (p3y + 33.33) + p3y * (p3z + 33.33) + p3z * (p3x + 33.33)
+  const px = p3x + dot, py = p3y + dot, pz = p3z + dot
+  return {x: fract((px + py) * pz), y: fract((px + pz) * py)}
+}
+function length(x, y) { return Math.sqrt(x * x + y * y) }
+function remap(value, oldMin, oldMax, newMin, newMax) {
+  if (oldMin === oldMax) return (newMin + newMax) / 2
+  return ((value - oldMin) / (oldMax - oldMin)) * (newMax - newMin) + newMin
+}
+function overlapArea(ax, ay, az, aw, bx, by, bz, bw) {
+  const left = Math.max(ax, bx), right = Math.min(az, bz)
+  const top = Math.max(ay, by), bottom = Math.min(aw, bw)
+  if (right > left && bottom > top) return (right - left) * (bottom - top)
+  return 0
+}
+
+// === scheduler
+let scheduledRender = false
+function scheduleRender() {
+  if (scheduledRender) return
+  scheduledRender = true
+  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) {
+    scheduledRender = false
+    if (render(now)) scheduleRender()
+  })
+}
+
+// === images
+const imageData = []
+const loadedImages = []
+for (let i = 0; i < 30; i++) {
+  const seed = i * 7 + 42
+  const w = 300 + Math.floor(hash11(i + 0.1) * 300) // [300, 600)
+  const h = 300 + Math.floor(hash11(i + 0.5) * 300)
+  imageData.push({
+    width: w,
+    height: h,
+    url: `https://picsum.photos/seed/${seed}/${w}/${h}`,
+    aesthetic_score: hash11(i) > 0.85 ? 1 : 0,
+  })
+}
+
+// preload images
+let preloadIndex = 0
+function preloadNext() {
+  if (preloadIndex >= imageData.length) return
+  const data = imageData[preloadIndex]
+  const img = new Image()
+  img.onload = () => {
+    loadedImages.push(data)
+    scheduleRender()
+    preloadIndex++
+    preloadNext()
+  }
+  img.onerror = () => {
+    preloadIndex++
+    preloadNext()
+  }
+  img.src = data.url
+}
+// preload a few at a time
+for (let i = 0; i < 5; i++) { preloadIndex = i; preloadNext() }
+preloadIndex = 5
+
+// === state
+let animatedUntilTime = null
+let nextImageIndex = 0
+let nextBoxCountdown = 0
+let nextBoxId = 0
+let boxes = []
+
+function boxHeight(box) {
+  return box.bWidth / (box.imgData.width / box.imgData.height)
+}
+
+function minEdgeDistPct(box, cw, ch) {
+  const sw = box.bWidth * box.scaleSpring.pos
+  const sh = boxHeight(box) * box.scaleSpring.pos
+  const dl = (box.centerX - sw / 2) / cw
+  const dr = (cw - (box.centerX + sw / 2)) / cw
+  const dt = (box.centerY - sh / 2) / ch
+  const db = (ch - (box.centerY + sh / 2)) / ch
+  return Math.min(dl, dr, dt, db)
+}
+
+function calcRepulsion(self, other, cw, ch) {
+  const sw = self.bWidth * self.scaleSpring.pos
+  const sh = boxHeight(self) * self.scaleSpring.pos
+  const ow = other.bWidth * other.scaleSpring.pos
+  const oh = boxHeight(other) * other.scaleSpring.pos
+
+  const area = overlapArea(
+    self.centerX - sw / 2, self.centerY - sh / 2, self.centerX + sw / 2, self.centerY + sh / 2,
+    other.centerX - ow / 2, other.centerY - oh / 2, other.centerX + ow / 2, other.centerY + oh / 2,
+  )
+
+  const dx = self.centerX - other.centerX
+  const dy = self.centerY - other.centerY
+  const dist = length(dx, dy)
+  if (dist === 0) return {x: 0, y: 0}
+
+  const skew = (cw / ch) * 0.8
+  const force = remap(area, 0, sw * sh, 0, 15 * self.enterProgress)
+  return {x: (dx / dist) * force * skew, y: (dy / dist) * force}
+}
+
+function simulate(cw, ch) {
+  // spawn new box
+  nextBoxCountdown = Math.max(0, nextBoxCountdown - msPerAnimationStep)
+  if (nextImageIndex < loadedImages.length && nextBoxCountdown === 0) {
+    const imgData = loadedImages[nextImageIndex]
+    const ar = imgData.width / imgData.height
+    const containerArea = cw * ch
+    const targetArea = containerArea / (imgData.aesthetic_score > 0 ? 7 : 12)
+    const bWidth = Math.sqrt(targetArea * ar)
+    const nudge = hash21(nextImageIndex)
+
+    boxes.push({
+      id: nextBoxId++,
+      imgData,
+      bWidth,
+      centerX: cw / 2 + nudge.x,
+      centerY: ch / 2 + nudge.y,
+      vx: 0,
+      vy: 0,
+      opacitySpring: spring(1, 1, 0, 130, 21),
+      scaleSpring: spring(0, 1, 0, 130, 21),
+      enterProgress: 0,
+      exiting: false,
+      node: null,
+    })
+
+    // create DOM node
+    const box = boxes[boxes.length - 1]
+    const node = document.createElement('div')
+    node.className = 'box'
+    node.style.width = box.bWidth + 'px'
+    node.style.height = boxHeight(box) + 'px'
+    node.style.backgroundImage = `url(${imgData.url})`
+    document.body.appendChild(node)
+    box.node = node
+
+    nextImageIndex++
+    const random = hash11(nextImageIndex)
+    nextBoxCountdown = imgData.aesthetic_score > 0 ? 2500 + random * 1000 : 200 + random * 1300
+  }
+
+  // pairwise repulsion
+  const forces = boxes.map(box => {
+    let fx = 0, fy = 0
+    for (const other of boxes) {
+      if (box !== other) {
+        const f = calcRepulsion(box, other, cw, ch)
+        fx += f.x; fy += f.y
+      }
+    }
+    return {fx, fy}
+  })
+
+  // apply forces, update springs
+  for (let i = 0; i < boxes.length; i++) {
+    const box = boxes[i]
+    box.vx += forces[i].fx
+    box.vy += forces[i].fy
+    box.centerX += box.vx
+    box.centerY += box.vy
+    box.vx *= 0.2
+    box.vy *= 0.2
+
+    const minDist = minEdgeDistPct(box, cw, ch)
+    box.scaleSpring.dest = 1 - Math.pow(0.9 - Math.max(0, minDist), 10)
+
+    springStep(box.opacitySpring)
+    springStep(box.scaleSpring)
+    if (springMostlyDone(box.opacitySpring)) springGoToEnd(box.opacitySpring)
+    if (springMostlyDone(box.scaleSpring)) springGoToEnd(box.scaleSpring)
+
+    box.enterProgress = Math.min(1, box.enterProgress + msPerAnimationStep / 1000)
+
+    if (!box.exiting && minDist <= 0.05) {
+      box.exiting = true
+      box.opacitySpring.dest = 0
+    }
+  }
+
+  // remove dead boxes
+  boxes = boxes.filter(box => {
+    if (box.exiting && box.opacitySpring.pos === 0) {
+      box.node.remove()
+      return false
+    }
+    return true
+  })
+}
+
+// === render
+function render(now) {
+  const cw = document.documentElement.clientWidth
+  const ch = document.documentElement.clientHeight
+
+  // run simulation steps
+  let newAnimatedUntilTime = animatedUntilTime ?? now
+  const steps = Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)
+  newAnimatedUntilTime += steps * msPerAnimationStep
+  for (let i = 0; i < steps; i++) simulate(cw, ch)
+
+  // render boxes
+  let stillAnimating = false
+  for (const box of boxes) {
+    const style = box.node.style
+    const bh = boxHeight(box)
+    style.transform = `translate3d(${box.centerX - box.bWidth / 2}px,${box.centerY - bh / 2}px,0) scale(${box.scaleSpring.pos})`
+    style.opacity = box.opacitySpring.pos
+    style.boxShadow = box.imgData.aesthetic_score > 0
+      ? `0 0 8px 4px rgba(255, 165, 0, 1), 0 0 40px 12px rgba(255, 165, 0, ${box.opacitySpring.pos * 0.6})`
+      : '0 4px 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 255, 255, 0.1)'
+
+    if (!springMostlyDone(box.opacitySpring) || !springMostlyDone(box.scaleSpring) || box.vx > 0.01 || box.vy > 0.01) {
+      stillAnimating = true
+    }
+  }
+
+  // always animate while there are images to show or boxes alive
+  stillAnimating = stillAnimating || boxes.length > 0 || nextImageIndex < loadedImages.length
+  animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
+
+  return stillAnimating
+}
+
+scheduleRender()
+</script>
+</body>
