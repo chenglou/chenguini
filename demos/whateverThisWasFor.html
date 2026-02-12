@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no"
+  />
+  <title>iOS Pinch Capture + Scroll</title>
+  <style>
+    html, body { margin: 0; padding: 0; font-family: -apple-system, system-ui, sans-serif; line-height: 1.5; }
+    /* Allow panning (scroll) but disable browser pinch-zoom via CSS where supported */
+    html, body, .content { touch-action: pan-x pan-y; }
+    /* Reduce rubber-banding interactions escalating to viewport */
+    html, body { overscroll-behavior: contain; }
+    /* Avoid unintended text auto-zoom adjustments */
+    html { -webkit-text-size-adjust: 100%; }
+    .content { padding: 16px; }
+    .spacer { height: 120vh; background: linear-gradient(180deg, #fafafa, #eee); border-radius: 12px; margin: 16px 0; }
+    .readout { position: sticky; top: 0; background: rgba(255,255,255,0.9); backdrop-filter: saturate(180%) blur(8px); padding: 8px 12px; border-bottom: 1px solid #ddd; font-size: 14px; z-index: 1; }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <div class="readout" id="readout">Pinch scale: 1.00</div>
+    <h1>Scroll the page. Pinch anywhere to capture scale on iOS Safari.</h1>
+    <p>Single-finger: normal scroll. Two-finger: captured pinch (page zoom disabled).</p>
+    <div class="spacer"></div>
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer sit amet placerat nunc. Aliquam erat volutpat.</p>
+    <div class="spacer"></div>
+    <p>More content below to ensure body scrolling works as expected on mobile Safari.</p>
+    <div class="spacer"></div>
+  </div>
+
+  <script>
+    (function () {
+      const readout = document.getElementById('readout');
+
+      function setScale(val) {
+        if (readout) readout.textContent = 'Pinch scale: ' + Number(val).toFixed(2);
+      }
+
+      let isPinching = false;
+      let baseDistance = null;
+
+      function distance(t1, t2) {
+        const dx = t2.clientX - t1.clientX;
+        const dy = t2.clientY - t1.clientY;
+        return Math.hypot(dx, dy);
+      }
+
+      function onPinchStart() {
+        isPinching = true;
+        setScale(1);
+      }
+
+      function onPinchChange(scale) {
+        setScale(scale);
+      }
+
+      function onPinchEnd() {
+        isPinching = false;
+        baseDistance = null;
+      }
+
+      // 1) Block native pinch-zoom via iOS gesture events (capture phase)
+      const blockGestureStart = function (e) {
+        e.preventDefault();
+        onPinchStart();
+      };
+      const blockGestureChange = function (e) {
+        e.preventDefault();
+        onPinchChange(e.scale);
+      };
+      const blockGestureEnd = function () {
+        onPinchEnd();
+      };
+
+      document.addEventListener('gesturestart', blockGestureStart, { passive: false, capture: true });
+      document.addEventListener('gesturechange', blockGestureChange, { passive: false, capture: true });
+      document.addEventListener('gestureend', blockGestureEnd, { passive: false, capture: true });
+      // Also attach to window and root element for belt-and-suspenders coverage
+      window.addEventListener('gesturestart', blockGestureStart, { passive: false, capture: true });
+      window.addEventListener('gesturechange', blockGestureChange, { passive: false, capture: true });
+      window.addEventListener('gestureend', blockGestureEnd, { passive: false, capture: true });
+      document.documentElement.addEventListener('gesturestart', blockGestureStart, { passive: false, capture: true });
+      document.documentElement.addEventListener('gesturechange', blockGestureChange, { passive: false, capture: true });
+      document.documentElement.addEventListener('gestureend', blockGestureEnd, { passive: false, capture: true });
+      if (document.body) {
+        document.body.addEventListener('gesturestart', blockGestureStart, { passive: false, capture: true });
+        document.body.addEventListener('gesturechange', blockGestureChange, { passive: false, capture: true });
+        document.body.addEventListener('gestureend', blockGestureEnd, { passive: false, capture: true });
+      }
+
+      // 2) Block at touch layer as well (capture phase) to cover edge cases and momentum scroll
+      const onTouchStartCapture = function (e) {
+        if (e.touches.length >= 2) {
+          e.preventDefault();
+          baseDistance = distance(e.touches[0], e.touches[1]);
+          onPinchStart();
+        }
+      };
+      document.addEventListener('touchstart', onTouchStartCapture, { passive: false, capture: true });
+      window.addEventListener('touchstart', onTouchStartCapture, { passive: false, capture: true });
+      document.documentElement.addEventListener('touchstart', onTouchStartCapture, { passive: false, capture: true });
+      if (document.body) document.body.addEventListener('touchstart', onTouchStartCapture, { passive: false, capture: true });
+
+      const onTouchMoveCapture = function (e) {
+        if (e.touches.length === 2 && baseDistance) {
+          e.preventDefault();
+          const d = distance(e.touches[0], e.touches[1]);
+          const scale = d / baseDistance;
+          onPinchChange(scale);
+        }
+      };
+      document.addEventListener('touchmove', onTouchMoveCapture, { passive: false, capture: true });
+      window.addEventListener('touchmove', onTouchMoveCapture, { passive: false, capture: true });
+      document.documentElement.addEventListener('touchmove', onTouchMoveCapture, { passive: false, capture: true });
+      if (document.body) document.body.addEventListener('touchmove', onTouchMoveCapture, { passive: false, capture: true });
+
+      const onTouchEndCapture = function (e) {
+        if (isPinching && e.touches.length < 2) onPinchEnd();
+      };
+      document.addEventListener('touchend', onTouchEndCapture, { passive: false, capture: true });
+      window.addEventListener('touchend', onTouchEndCapture, { passive: false, capture: true });
+      document.documentElement.addEventListener('touchend', onTouchEndCapture, { passive: false, capture: true });
+      if (document.body) document.body.addEventListener('touchend', onTouchEndCapture, { passive: false, capture: true });
+
+      const onTouchCancelCapture = function () {
+        if (isPinching) onPinchEnd();
+      };
+      document.addEventListener('touchcancel', onTouchCancelCapture, { passive: false, capture: true });
+      window.addEventListener('touchcancel', onTouchCancelCapture, { passive: false, capture: true });
+      document.documentElement.addEventListener('touchcancel', onTouchCancelCapture, { passive: false, capture: true });
+      if (document.body) document.body.addEventListener('touchcancel', onTouchCancelCapture, { passive: false, capture: true });
+
+      // 3) Guard against double-tap and trackpad-pinch (iPad with keyboard/trackpad)
+      document.addEventListener('dblclick', function (e) {
+        e.preventDefault();
+      }, { passive: false, capture: true });
+
+      document.addEventListener('wheel', function (e) {
+        if (e.ctrlKey) {
+          e.preventDefault();
+        }
+      }, { passive: false, capture: true });
+
+      // Double-tap smart-zoom suppression (iOS Safari)
+      let lastTouchEndTime = 0;
+      document.addEventListener('touchend', function (e) {
+        const now = Date.now();
+        if (e.touches.length === 0 && e.changedTouches.length === 1) {
+          if (now - lastTouchEndTime < 350) {
+            e.preventDefault();
+          }
+          lastTouchEndTime = now;
+        }
+      }, { passive: false, capture: true });
+
+      // Removed inner scroll container edge-lock to restore URL bar collapse behavior
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<!-- saved from url=(0037)https://aiddun.github.io/supernative/ -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Native-like website</title>
+    
+    <!-- Very important -->
+    <!-- Tag explination: -->
+    <!-- TODO -->
+    <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+    <!-- Change time bar color on ios -->
+    <!-- Changing this for dark mode I believe requires JS -->
+    <meta name="theme-color" content="black">
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const body = document.body;
+        // Of all the things here apple is actually likely to break, it's this, but this removes double tapping.
+        // For the installed app, if you're sure you won't be double tapping, I believe there's a WKWebView property that can be set.
+        document.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+        });
+        // The doubletap event still fires correctly elsewhere in the code, see below.
+
+        window.addEventListener("visibilitychange", () => {
+          // blur the input
+          console.log("visibilitychange");
+          document.activeElement.blur();
+        });
+
+        window.addEventListener("pagehide", () => {
+          // blur the input
+          console.log("pagehide");
+          document.activeElement.blur();
+        });
+        window.addEventListener("pageshow", () => {
+          // blur the input
+          console.log("pageshow");
+          document.activeElement.blur();
+        });
+      });
+
+      function deviceOrientation() {
+        document.activeElement.blur();
+      }
+      window.addEventListener("orientationchange", deviceOrientation);
+      deviceOrientation();
+    </script>
+    <style>
+      html,
+      body {
+        /* Prevent elastic overscroll */
+        /* If you want elastic overscroll, add an internal scrollable container and it will automatically be elastic */
+        /* overscroll-behavior: none; */
+        height: 100dvh;
+      }
+      body {
+        touch-action: none;
+      }
+      /* for both body and main */
+      body,
+      main {
+        /* touch-action: manipulation no longer works */
+        /* To prevent body scroll, fit all elements with in 100dvh  */
+        /* Bottom browser nav bar won't collapse if you never scroll on body, but just in case use dvh instead of svh */
+        height: 100dvh;
+        overflow: hidden;
+
+        /* optional, just for test styling */
+        margin: 0;
+        gap: 0;
+      }
+      /* see <script> for final crucial code */
+
+      /* fit all elements in main with flexbox */
+      main {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      main * {
+        flex-shrink: 0;
+        margin: 0;
+      }
+
+      .small {
+        width: 100vw;
+        height: 50vh;
+        overflow-y: scroll;
+        border: 1px solid red;
+        touch-action: pan-y;
+        flex-grow: 1;
+
+        overscroll-behavior: initial;
+
+        /* to prevent all scrolling when focused on an input, scrollable container must be overscroll-behavior: none */
+        /* this is another top feature apple could break */
+        /* this hurts the experience, so we can toggle it only when focused on an input */
+      }
+
+      .big {
+        height: 2000px;
+        width: 100%;
+      }
+
+      #sticky-text-input {
+        position: sticky;
+        bottom: 40px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h3>
+        This is a simple site to demonstrate mobile-like touch manipulation in
+        browsers.
+      </h3>
+
+      <h3>Here is increasingly smaller text to test double tapping on:</h3>
+      <p style="font-size: 17px">All sized text seems to work.</p>
+      <p style="font-size: 12.5px">All sized text seems to work.</p>
+      <p style="font-size: 6.25px">All sized text seems to work.</p>
+      <p style="font-size: 3.125px">All sized text seems to work.</p>
+      <br>
+
+      <input type="text" placeholder="This is a text input. See how you cannot scroll">
+
+      <div style="
+          width: 100px;
+          height: 100px;
+          background-color: red;
+          font-size: 27px;
+        " id="double-tap-button">
+        Double tap me
+      </div>
+      <p id="output"></p>
+
+      <script>
+        const button = document.querySelector("#double-tap-button");
+        let tapCount = 0;
+        button.addEventListener("dblclick", (e) => {
+          tapCount++;
+          output.textContent = `Double tapped ${tapCount} times. (and resized!)`;
+        });
+      </script>
+
+      <p id="num_of_fingers_touching"></p>
+      <script>
+        document.addEventListener("touchstart", (e) => {
+          num_of_fingers_touching.textContent = `Touching with ${e.touches.length} fingers`;
+        });
+        document.addEventListener("touchmove", (e) => {
+          num_of_fingers_touching.textContent = `Touching with ${e.touches.length} fingers`;
+        });
+        document.addEventListener("touchend", (e) => {
+          num_of_fingers_touching.textContent = `Touching with ${e.touches.length} fingers`;
+        });
+      </script>
+
+      <h2>Here is a scrollable container:</h2>
+      See how it does not go past the address bar. This is changable, but is
+      done by making main and body 100dvh. body alone at 100dvh will not work
+      because Safari.
+
+      <input type="text" placeholder="This is a text input below the keyboard. You still cannot scroll" id="text-input-below-keyboard">
+      <div class="small">
+        <div class="big" style="display: flex; flex-direction: column">
+          <div style="width: 100%; aspect-ratio: 4/1; background-color: red"></div>
+          <div style="width: 100%; aspect-ratio: 4/1; background-color: blue"></div>
+          <div style="width: 100%; aspect-ratio: 4/1; background-color: green"></div>
+          <div style="width: 100%; aspect-ratio: 4/1; background-color: yellow"></div>
+          <div style="width: 100%; aspect-ratio: 4/1; background-color: purple"></div>
+        </div>
+      </div>
+
+      <input type="text" placeholder="This is a sticky text input. It will not scroll" id="sticky-text-input">
+
+      <script>
+        const text_input_below_keyboard = document.querySelector(
+          "#text-input-below-keyboard"
+        );
+        const small = document.querySelector(".small");
+        text_input_below_keyboard.addEventListener("focus", () => {
+          small.style.overscrollBehavior = "none";
+        });
+        text_input_below_keyboard.addEventListener("blur", () => {
+          small.style.overscrollBehavior = "initial";
+        });
+      </script>
+    </main>
+  
+
+</body></html>
