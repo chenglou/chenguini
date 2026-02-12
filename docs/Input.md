@@ -80,6 +80,8 @@ Pointer coordinates are rounded/truncated to integers on iOS Safari. This, along
 
 From some of the above points, there's no pointer event that works cross-browser that can replace mouse & touch events.
 
+- Font size on inputs must be >= 16px, otherwise iOS Safari auto-zooms the viewport on focus
+
 TODO: good pattern, to document better:
 
 ```ts
