@@ -15,3 +15,5 @@ Experimental AI-native UI framework. We're exploring how to build interactive UI
 - `@cs` / `@/cs` headers are compact pseudocode specs describing the code below them. They sit inside `<script>` tags or at the top of `.ts` files.
 - Render loop follows a consistent structure: process events → batched DOM reads → state transitions → layout → physics step → batched DOM writes → state cleanup. `render(now)` returns bool (still animating?).
 - Spring physics are decoupled from framerate: track `animatedUntilTime`, compute `steps = floor((now - animatedUntilTime) / msPerAnimationStep)`, run that many physics steps per frame.
+
+Architecture diagram ![IMG_6937](https://github.com/user-attachments/assets/caee340e-cc75-4611-9d81-bc31aca0457b)

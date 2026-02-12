@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MegaMagicAlex Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; }
+  canvas { position: fixed; top: 0; left: 0; z-index: 0; }
+  #grid { position: fixed; top: 0; left: 0; z-index: 1; pointer-events: none; }
+  #grid img {
+    position: absolute;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="grid"></div>
+<script>
+// MegaMagicAlex — alex's WebGL2 2D global illumination
+
+function magicSetup(canvas) {
+  var gl = canvas.getContext('webgl2');
+  var vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
+  var vertexBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+  var vertexShaderSource = `#version 300 es
+    in vec2 position;
+    out vec2 vuv;
+    void main() {
+      vuv = position * 0.5 + 0.5;
+      gl_Position = vec4(position, 0.0, 1.0);
+    }
+  `;
+  var vertexShader = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vertexShader, vertexShaderSource);
+  gl.compileShader(vertexShader);
+  if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+    console.error('Vertex shader failed to compile: \n' + gl.getShaderInfoLog(vertexShader));
+  }
+  function make_fullscreen_program(fragmentShaderSource) {
+    var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fragmentShader, '#version 300 es\n' + fragmentShaderSource);
+    gl.compileShader(fragmentShader);
+    if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+      console.error('Fragment shader failed to compile: \n' + gl.getShaderInfoLog(fragmentShader));
+    }
+    var shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+      console.error('Shader program failed to link: \n' + gl.getProgramInfoLog(shaderProgram));
+    }
+    gl.useProgram(shaderProgram);
+    var positionLocation = gl.getAttribLocation(shaderProgram, 'position');
+    gl.enableVertexAttribArray(positionLocation);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    return shaderProgram;
+  }
+  var mipblurprog = make_fullscreen_program(`
+    precision mediump float;
+    uniform vec2 canvasSize;
+    uniform sampler2D minimapTexture;
+    uniform int minimapLevel;
+    in vec2 vuv;
+    out vec4 color;
+    void main() {
+      vec2 uv = vuv;
+      vec2 o = vec2(0.75)/canvasSize;
+      vec2 p = o*1.6;
+      color=(
+        textureLod(minimapTexture, uv + vec2( o.x,  o.y), float(minimapLevel)) +
+        textureLod(minimapTexture, uv + vec2(-o.x,  o.y), float(minimapLevel)) +
+        textureLod(minimapTexture, uv + vec2( o.x, -o.y), float(minimapLevel)) +
+        textureLod(minimapTexture, uv + vec2(-o.x, -o.y), float(minimapLevel)) +
+        (textureLod(minimapTexture, uv + vec2( p.x, 0.), float(minimapLevel)) +
+        textureLod(minimapTexture, uv + vec2(-p.x, 0.), float(minimapLevel)) +
+        textureLod(minimapTexture, uv + vec2( p.x, -p.y), float(minimapLevel)) +
+        textureLod(minimapTexture, uv + vec2( p.x,  p.y), float(minimapLevel))) * 0.5
+      ) * (1./6.);
+    }
+  `);
+  var prog = make_fullscreen_program(`
+    precision mediump float;
+    uniform vec2 canvasSize;
+    uniform vec2 cursorPosition;
+    uniform sampler2D minimapTexture;
+    out vec4 color;
+    void main() {
+      vec2 css = gl_FragCoord.xy;
+      css.y=canvasSize.y-css.y;
+      vec2 uv = css / canvasSize;
+      float skyshadow =1.;
+      float density = 0.35;
+      vec3 skybounce = vec3(0.);
+      for (float tap = 0.; tap <= 3.; tap += 0.25) {
+        density *= 0.75;
+        skyshadow*=1.-density*textureLod(minimapTexture, uv+vec2(0.,tap*-0.012), tap).w;
+        skybounce+=density*pow(textureLod(minimapTexture, uv+vec2(0.,tap*0.008), tap).xyz, vec3(1.2));
+      }
+      vec3 skycol = vec3(0.95,0.92,0.88) * 0.7;
+      vec3 c = (skyshadow + skybounce.xyz) * skycol;
+
+      vec2 mouserel=(cursorPosition - css) / canvasSize.x;
+      float mousebright = 0.07/ (dot(mouserel,mouserel)+0.075);
+      float mouseshadow = mousebright;
+      density = 0.15;
+      vec2 mouseuv = (cursorPosition) / canvasSize;
+      for (float tap = 0.; tap <= 3.; tap += 0.125) {
+        density *= 0.95;
+        mouseshadow*=1.-density*textureLod(minimapTexture, mix(uv, mouseuv, vec2(tap/3.)), tap).w;
+      }
+      vec2 refpos;
+      refpos.x = mix(uv.x, mouseuv.x, 0.05);
+      refpos.y = mix(uv.y, mouseuv.y, -0.05);
+      vec3 mousebounce = 2. * mouseshadow * mousebright * mousebright * pow(textureLod(minimapTexture, refpos , 2.).xyz, vec3(1.2));
+      c += (mousebounce + mouseshadow) * vec3(1.,0.75,0.5);
+      c*=0.7;
+      c+= 0.08*(pow(textureLod(minimapTexture, uv + vec2(0.,0.015) , 3.).xyz, vec3(1.2)) + pow(textureLod(minimapTexture, uv + vec2(0.,-0.015) , 3.).xyz, vec3(1.2)));
+      c+= 0.12*(pow(textureLod(minimapTexture, uv + vec2(0.,0.03) , 4.).xyz, vec3(1.2)) + pow(textureLod(minimapTexture, uv + vec2(0.,-0.03) , 4.).xyz, vec3(1.2)));
+      c+= 0.15*(pow(textureLod(minimapTexture, uv + vec2(0.,0.06) , 5.).xyz, vec3(1.2)) + pow(textureLod(minimapTexture, uv + vec2(0.,-0.06) , 5.).xyz, vec3(1.2)));
+      color=vec4(pow(c,vec3(1./2.2)),1.);
+    }
+  `);
+
+  var minimap = document.createElement('canvas');
+  var minimap2d = minimap.getContext('2d');
+  var scale = 0.5;
+  var minimapTexture = gl.createTexture();
+
+  function redrawCanvas(rects) {
+    var dpr = 0.5;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+
+    minimap.width = window.innerWidth * scale;
+    minimap.height = window.innerHeight * scale;
+    minimap2d.clearRect(0, 0, minimap.width, minimap.height);
+    rects.forEach(function(rect) {
+      var x = rect.x * scale + 1;
+      var y = rect.y * scale + 1;
+      var sizeX = rect.sizeX * scale - 2;
+      var sizeY = rect.sizeY * scale - 2;
+      var borderRadius = rect.borderRadius * scale;
+      minimap2d.beginPath();
+      minimap2d.moveTo(x + borderRadius, y);
+      minimap2d.arcTo(x + sizeX, y, x + sizeX, y + borderRadius, borderRadius);
+      minimap2d.arcTo(x + sizeX, y + sizeY, x + sizeX - borderRadius, y + sizeY, borderRadius);
+      minimap2d.arcTo(x, y + sizeY, x, y + sizeY - borderRadius, borderRadius);
+      minimap2d.arcTo(x, y, x + borderRadius, y, borderRadius);
+      minimap2d.closePath();
+      if (rect.image) {
+        minimap2d.save();
+        minimap2d.clip();
+        minimap2d.drawImage(rect.image, x, y, sizeX, sizeY);
+        minimap2d.restore();
+      } else {
+        minimap2d.fillStyle = rect.backgroundColor;
+        minimap2d.fill();
+      }
+    });
+    gl.bindTexture(gl.TEXTURE_2D, minimapTexture);
+    var maxmip = 6;
+    var imageData = minimap2d.getImageData(0, 0, minimap.width, minimap.height);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, maxmip);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.generateMipmap(gl.TEXTURE_2D);
+
+    var extraTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, extraTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 1);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, minimap.width >> 1, minimap.height >> 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    var fbo = gl.createFramebuffer();
+    gl.useProgram(mipblurprog);
+    var canvasSizeLocation = gl.getUniformLocation(mipblurprog, 'canvasSize');
+    var minimapTextureLocation = gl.getUniformLocation(mipblurprog, 'minimapTexture');
+    var minimapLevelLocation = gl.getUniformLocation(mipblurprog, 'minimapLevel');
+    for (var mip = 1; mip <= maxmip; ++mip) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, extraTexture, 0);
+      var mipwidth = (minimap.width >> mip) || 1;
+      var mipheight = (minimap.height >> mip) || 1;
+      gl.viewport(0, 0, mipwidth, mipheight);
+      gl.uniform2f(canvasSizeLocation, mipwidth, mipheight);
+      gl.uniform1i(minimapTextureLocation, 0);
+      gl.uniform1i(minimapLevelLocation, mip - 1);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, minimapTexture);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+      gl.bindTexture(gl.TEXTURE_2D, minimapTexture);
+      gl.copyTexSubImage2D(gl.TEXTURE_2D, mip, 0, 0, 0, 0, mipwidth, mipheight);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+  }
+
+  var canvasSizeLocation = gl.getUniformLocation(prog, 'canvasSize');
+  var cursorPositionLocation = gl.getUniformLocation(prog, 'cursorPosition');
+  var minimapTextureLocation = gl.getUniformLocation(prog, 'minimapTexture');
+
+  function magicAnimate(pointerX, pointerY, rects) {
+    redrawCanvas(rects);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(1.0, 0.5, 0.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(prog);
+    gl.uniform2f(canvasSizeLocation, canvas.width, canvas.height);
+    gl.uniform2f(cursorPositionLocation, pointerX * 0.5, pointerY * 0.5);
+    gl.uniform1i(minimapTextureLocation, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, minimapTexture);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+  return magicAnimate;
+}
+
+// --- Demo setup ---
+var canvas = document.getElementById('canvas');
+var magicAnimate = magicSetup(canvas);
+var mouseX = window.innerWidth / 2;
+var mouseY = window.innerHeight / 2;
+
+document.addEventListener('mousemove', function(e) {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+// Small thumbnails for the shader (color/occlusion source), big ones for display
+var thumbs = [];
+var IMAGE_COUNT = 20;
+var grid = document.getElementById('grid');
+var domImages = [];
+
+for (var i = 0; i < IMAGE_COUNT; i++) {
+  var thumb = new Image();
+  thumb.crossOrigin = 'anonymous';
+  thumb.src = 'https://picsum.photos/seed/' + (i + 10) + '/128/128';
+  thumbs.push(thumb);
+
+  var domImg = document.createElement('img');
+  domImg.src = 'https://picsum.photos/seed/' + (i + 10) + '/400/400';
+  grid.appendChild(domImg);
+  domImages.push(domImg);
+}
+
+function layoutGrid() {
+  var w = window.innerWidth;
+  var h = window.innerHeight;
+  var cols = 5;
+  var rows = 4;
+  var gap = 24;
+  var marginX = 60;
+  var marginY = 60;
+  var cellW = (w - marginX * 2 - gap * (cols - 1)) / cols;
+  var cellH = (h - marginY * 2 - gap * (rows - 1)) / rows;
+
+  var rects = [];
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < cols; col++) {
+      var idx = row * cols + col;
+      var x = marginX + col * (cellW + gap);
+      var y = marginY + row * (cellH + gap);
+
+      // position DOM image
+      var el = domImages[idx];
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      el.style.width = cellW + 'px';
+      el.style.height = cellH + 'px';
+
+      // rect for shader
+      var t = thumbs[idx];
+      rects.push({
+        image: (t && t.complete && t.naturalWidth) ? t : null,
+        backgroundColor: '#333',
+        borderRadius: 8,
+        x: x,
+        y: y,
+        sizeX: cellW,
+        sizeY: cellH,
+      });
+    }
+  }
+  return rects;
+}
+
+var rects = layoutGrid();
+window.addEventListener('resize', function() { rects = layoutGrid(); });
+
+function loop() {
+  rects = layoutGrid();
+  magicAnimate(mouseX, mouseY, rects);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
