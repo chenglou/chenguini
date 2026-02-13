@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Scroll Anchor Bug Repro</title>
+<!--
+  SCROLL ANCHOR BUG REPRO
+  =======================
+
+  Bug: when items arrive asynchronously (e.g. server push, cross-tab sync)
+  while the user is scrolled down, visible items shift downward instead of
+  staying in place. Synchronous updates (all items in one setState) work fine.
+
+  Root cause: programmatic scrollTo (from anchor adjustment) fires a browser
+  scroll event. React 18 batches that scroll event's setState with the next
+  data setState. In the batched render, onScrolled=true (from the scroll
+  event), so the code picks a new anchor instead of adjusting. The new items'
+  shift goes uncompensated.
+
+  Fix (two parts, both independently necessary):
+
+    Part 1: value comparison instead of onScrolled flag
+      Replace the boolean onScrolled flag with a value comparison:
+      userScrolled = (scrollTop !== storedScrollTop). storedScrollTop is the
+      read-back value from last render's useLayoutEffect (after any scrollTo).
+      If our scrollTo set scrollTop to X and we stored X, the next render sees
+      scrollTop=X === storedScrollTop=X → userScrolled=false → adjustment runs.
+      This eliminates the _isProgrammaticScroll flag, its prevScrollTop guard,
+      and the onScrolled flag entirely. Truncation (Scrolling.md points 3-4)
+      is handled naturally by storing the read-back value.
+
+    Part 2: scrollAnchor.prevY = y
+      Updates prevY immediately after computing the adjustment. Without this,
+      if another render fires before prevY is refreshed (e.g. rapid async
+      updates), the delta is double-counted.
+
+  How to use:
+    1. Click "Scroll to 700" on both panels
+    2. Click "Simulate async (1+2)" on both panels
+    3. BUGGY: items shift down relative to the red reference line
+       FIXED: items stay in place
+    4. "Add 3 at once" works in both (synchronous path, single render)
+
+  How the deterministic async simulation works:
+    The button adds item 1 via setState (triggering render -> scrollTo ->
+    scroll event). Items 2+3 are queued in pendingAsyncRef and delivered
+    inside the scroll event handler via setItems, guaranteeing they trigger
+    a render in the same React batch. In the buggy panel, onScrolled=true
+    corrupts the batched render. In the fixed panel, userScrolled is computed
+    from values and correctly evaluates to false.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; background: #1a1a1a; color: #eee; }
+  .layout { display: flex; height: 100vh; }
+  .panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+  }
+  .panel:first-child { border-right: 2px solid #444; }
+  .panel h2 { font-size: 14px; margin-bottom: 4px; }
+  .subtitle { font-size: 11px; color: #888; margin-bottom: 8px; line-height: 1.4; }
+  .controls { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .controls button {
+    padding: 6px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    cursor: pointer;
+    background: #333;
+    color: #eee;
+    border: 1px solid #555;
+    border-radius: 4px;
+  }
+  .controls button:hover { background: #444; }
+  .controls button.primary { background: #2980b9; border-color: #3498db; }
+  .controls button.primary:hover { background: #3498db; }
+  .scroll-wrapper { flex: 1; position: relative; min-height: 0; }
+  .scroll-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow-y: scroll;
+    border: 2px solid #555;
+    background: #111;
+  }
+  .item {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 12px;
+    color: white;
+    font-weight: bold;
+    border-radius: 4px;
+  }
+  .header {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    display: flex;
+    align-items: flex-end;
+    font-size: 11px;
+    color: #999;
+    border-bottom: 1px solid #333;
+    padding-bottom: 4px;
+  }
+  .ref-line {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: rgba(255, 60, 60, 0.4);
+    pointer-events: none;
+    z-index: 10;
+  }
+  .ref-label {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-100%);
+    font-size: 9px;
+    color: rgba(255, 60, 60, 0.6);
+    pointer-events: none;
+    z-index: 10;
+  }
+  .info { font-size: 11px; color: #888; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+<script type="text/babel">
+
+const { useState, useRef, useLayoutEffect } = React;
+
+// Layout constants
+const ITEM_HEIGHT = 100;
+const HEADER_HEIGHT = 24;
+const HEADER_GAP_FIRST = 0;
+const HEADER_GAP_REST = 32;
+const HEADER_GAP_BOTTOM = 8;
+const ITEM_GAP = 8;
+
+const TARGET_SCROLL = 700;
+
+const COLORS = [
+  '#c0392b', '#2980b9', '#27ae60', '#8e44ad',
+  '#d35400', '#16a085', '#2c3e50', '#f39c12',
+];
+
+function ScrollDemo({ buggy }) {
+  const counterRef = useRef(0);
+  const prefix = buggy ? 'B' : 'F';
+
+  function makeItem(day) {
+    const n = counterRef.current++;
+    return { id: prefix + n, day, label: '#' + n, color: COLORS[n % COLORS.length] };
+  }
+
+  function makeInitialItems() {
+    const items = [];
+    for (let i = 0; i < 8; i++) items.push(makeItem('Today'));
+    for (let i = 0; i < 1; i++) items.push(makeItem('Yesterday'));
+    for (let i = 0; i < 8; i++) items.push(makeItem('2 Days Ago'));
+    return items;
+  }
+
+  const [items, setItems] = useState(makeInitialItems);
+  const containerRef = useRef(null);
+  const [, forceUpdate] = useState({});
+
+  // Scroll anchor state
+  const onScrolledRef = useRef(false);        // BUGGY: boolean flag
+  const storedScrollTopRef = useRef(0);       // FIXED: read-back value from last scrollTo
+  const scrollAnchorRef = useRef(null);       // { id, prevY }
+  const scrollTopRef = useRef(0);
+  const pendingAsyncRef = useRef([]);
+
+  // ── Scroll handler ──
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    function handleScroll() {
+      // Deliver pending async items. In both buggy and fixed paths, these
+      // arrive via setItems which triggers a render in the same React batch.
+      if (pendingAsyncRef.current.length > 0) {
+        const pending = pendingAsyncRef.current;
+        pendingAsyncRef.current = [];
+        setItems(prev => [...pending, ...prev]);
+      }
+
+      if (buggy) {
+        // BUG: onScrolled=true for ALL scroll events, including programmatic.
+        // When React 18 batches this with data setState, the render picks a
+        // new anchor (no adjustment) while items shifted. Items jump.
+        onScrolledRef.current = true;
+        forceUpdate({});
+      } else {
+        // FIXED: only re-render if scrollTop actually changed from what we
+        // stored. Programmatic scrollTo produces the same value we stored
+        // (read-back from last useLayoutEffect) → skip. User scroll produces
+        // a different value → forceUpdate.
+        // If we skipped but setItems ran above, that already triggers a render.
+        if (el.scrollTop !== storedScrollTopRef.current) {
+          forceUpdate({});
+        }
+      }
+    }
+
+    el.addEventListener('scroll', handleScroll);
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [buggy]);
+
+  // Sync scrollTop from DOM at the start of every render
+  scrollTopRef.current = containerRef.current?.scrollTop ?? scrollTopRef.current;
+
+  // FIXED: detect user scroll via value comparison, not boolean flag.
+  // If scrollTop matches storedScrollTop, it's our own scrollTo (or no change).
+  // If it differs, something external changed it (user scroll, momentum, etc.)
+  const userScrolled = buggy
+    ? onScrolledRef.current
+    : (scrollTopRef.current !== storedScrollTopRef.current);
+
+  // ── Layout computation ──
+  const elements = [];
+  let y = 0;
+  let anchorScrollAdjustment = null;
+  let newScrollAnchor = null;
+  let isFirstSession = true;
+  let idx = 0;
+
+  while (idx < items.length) {
+    const sessionDay = items[idx].day;
+    const gapTop = isFirstSession ? HEADER_GAP_FIRST : HEADER_GAP_REST;
+    const headerY = y + gapTop;
+    y += gapTop + HEADER_HEIGHT + HEADER_GAP_BOTTOM;
+
+    elements.push(
+      <div key={'h-' + sessionDay + '-' + idx} className="header"
+        style={{ top: headerY, height: HEADER_HEIGHT }}>
+        {sessionDay}
+      </div>
+    );
+
+    let firstInSession = true;
+    while (idx < items.length && items[idx].day === sessionDay) {
+      const item = items[idx];
+      if (!firstInSession) y += ITEM_GAP;
+      firstInSession = false;
+
+      // Anchor picking: user scrolled, pick first item below scrollTop
+      if (userScrolled && newScrollAnchor == null && y > scrollTopRef.current) {
+        newScrollAnchor = { id: item.id, prevY: y };
+      }
+
+      // Anchor adjustment: no user scroll, compensate for content shift
+      if (!userScrolled && scrollAnchorRef.current != null
+        && item.id === scrollAnchorRef.current.id && scrollTopRef.current > 40) {
+        const adj = scrollTopRef.current + y - scrollAnchorRef.current.prevY;
+        if (adj !== scrollTopRef.current) {
+          anchorScrollAdjustment = adj;
+        }
+        // Part 2: update prevY immediately to prevent double-counting
+        // across rapid renders (needed in both flag and value approaches).
+        if (!buggy) {
+          scrollAnchorRef.current.prevY = y;
+        }
+      }
+
+      elements.push(
+        <div key={item.id} className="item"
+          style={{ top: y, height: ITEM_HEIGHT, background: item.color }}>
+          {item.label} &mdash; {item.day}
+        </div>
+      );
+
+      y += ITEM_HEIGHT;
+      idx++;
+    }
+    isFirstSession = false;
+  }
+
+  const totalHeight = y;
+
+  // Apply scroll adjustment and store read-back value
+  useLayoutEffect(() => {
+    if (anchorScrollAdjustment != null) {
+      containerRef.current?.scrollTo({ top: anchorScrollAdjustment, behavior: 'instant' });
+    }
+    // FIXED: always store the read-back scrollTop. This is what the next
+    // render compares against to detect user scroll. Storing the read-back
+    // (not the requested value) handles browser truncation naturally.
+    if (!buggy && containerRef.current != null) {
+      storedScrollTopRef.current = containerRef.current.scrollTop;
+    }
+  });
+
+  // Update anchor, reset buggy flag
+  if (newScrollAnchor != null) scrollAnchorRef.current = newScrollAnchor;
+  if (buggy) onScrolledRef.current = false;
+
+  // ── Actions ──
+  function scrollToTarget() {
+    containerRef.current?.scrollTo({ top: TARGET_SCROLL, behavior: 'instant' });
+  }
+
+  function simulateAsync() {
+    const a = makeItem('Today');
+    const b = makeItem('Today');
+    const c = makeItem('Today');
+    pendingAsyncRef.current = [b, c];
+    setItems(prev => [a, ...prev]);
+  }
+
+  function addAllAtOnce() {
+    const a = makeItem('Today');
+    const b = makeItem('Today');
+    const c = makeItem('Today');
+    setItems(prev => [a, b, c, ...prev]);
+  }
+
+  function reset() {
+    counterRef.current = 0;
+    scrollAnchorRef.current = null;
+    scrollTopRef.current = 0;
+    onScrolledRef.current = false;
+    storedScrollTopRef.current = 0;
+    pendingAsyncRef.current = [];
+    setItems(makeInitialItems());
+    setTimeout(() => containerRef.current?.scrollTo({ top: 0, behavior: 'instant' }), 0);
+  }
+
+  return (
+    <div className="panel">
+      <h2>{buggy ? 'BUGGY' : 'FIXED'}</h2>
+      <div className="subtitle">
+        {buggy
+          ? 'scrollTo fires scroll event -> onScrolled=true -> batched with data update -> anchor adjustment skipped -> items shift'
+          : 'value comparison: scrollTop === storedScrollTop -> userScrolled=false -> anchor adjustment runs -> items stay put'}
+      </div>
+      <div className="controls">
+        <button onClick={scrollToTarget}>1. Scroll to {TARGET_SCROLL}</button>
+        <button className="primary" onClick={simulateAsync}>2. Simulate async (1+2)</button>
+        <button onClick={addAllAtOnce}>Add 3 at once (no bug)</button>
+        <button onClick={reset}>Reset</button>
+      </div>
+      <div className="scroll-wrapper">
+        <div ref={containerRef} className="scroll-container">
+          <div style={{ height: totalHeight, position: 'relative' }}>
+            {elements}
+          </div>
+        </div>
+        <div className="ref-line" />
+        <div className="ref-label">reference line</div>
+      </div>
+      <div className="info">
+        scrollTop: {Math.round(scrollTopRef.current)} |
+        anchor: {scrollAnchorRef.current?.id ?? 'none'} (prevY: {scrollAnchorRef.current ? Math.round(scrollAnchorRef.current.prevY) : '-'}) |
+        items: {items.length}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div className="layout">
+      <ScrollDemo buggy={true} />
+      <ScrollDemo buggy={false} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

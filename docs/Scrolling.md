@@ -37,6 +37,34 @@ Despite all this, some effects are only possible through programmatic manipulati
 - Scroll anchoring, where we keep a certain element stable while resizing container, when things above and below potentially change size and jitter said element around otherwise. `overflow-anchor` isn't yet a satisfying solution (no Safari support, etc.).
 - Rendering to canvas, where you're reading `scrollTop`from a transparent DOM container somewhere else in order not to recreate your own scrolling logic. Keep in mind the `scrollTop` quirks above. You can try keeping an old & new `scrollTop` value and interpolate between them into a smoother one.
 
+## Scroll Anchoring
+
+When content above the viewport changes (new items prepended, elements resizing), the visible items shift. Scroll anchoring compensates by adjusting `scrollTop` by the delta, keeping visible content stable.
+
+The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scroll/scroll-anchor-vanilla.html`](../demos/scroll/scroll-anchor-vanilla.html)):
+
+1. Read `scrollTop` once at the start of each render/frame.
+2. Compare to the stored value from last frame. If different → user scrolled → pick a new anchor (first item below `scrollTop`). If same → data changed → keep the old anchor and compute the delta.
+3. Compute layout. When the anchor item is encountered, `adjustedScrollTop = scrollTop + (currentY - anchor.prevY)`.
+4. After all DOM writes, `scrollTo(adjustedScrollTop)` if it changed.
+5. **Read back** `container.scrollTop` and store _that_ value (not the requested value). Browser truncation (point 3 above) would otherwise cause a false "user scrolled" detection next frame.
+
+This requires no flags or workarounds because each frame processes all accumulated state changes independently — `scrollTo` from frame N is fully resolved by frame N+1.
+
+Remaining limitation: continuous resize with fractional layout values causes sub-pixel anchor jitter from `scrollTop` truncation accumulating over frames (point 3 footnote). This is a fundamental browser limitation.
+
+### React 18+ Pitfall
+
+React 18's automatic batching can merge a scroll event's `setState` with unrelated data `setState` into one render. If your scroll handler sets an `onScrolled` flag to distinguish "user scrolled" from "data changed," the batched render sees `onScrolled = true` _and_ new data simultaneously — skipping anchor adjustment while items shifted. Demo: [`demos/scroll/scroll-anchor-react.html`](../demos/scroll/scroll-anchor-react.html).
+
+The same value-comparison pattern from step 2 above works under React, avoiding the flag entirely:
+
+- **`storedScrollTop` ref**: in the scroll handler, only `forceUpdate` if `scrollTop !== storedScrollTop`. Programmatic `scrollTo` produces the same value we stored → handler skips → no extra render. User scroll produces a different value → `forceUpdate`. Even if React batches a data `setState` with a skipped scroll event, the render computes `userScrolled = scrollTop !== storedScrollTop` → `false` → anchor adjustment runs correctly.
+- **`storedScrollTop` read-back**: in `useLayoutEffect`, always store `container.scrollTop` after any `scrollTo` (same as step 5 — the read-back, not the requested value). This naturally handles browser truncation (points 3–4).
+- **`scrollAnchor.prevY = y`**: update `prevY` immediately after computing the adjustment. Without this, if another render fires before `prevY` is refreshed (e.g. rapid data updates), the delta is double-counted.
+
+None of these adaptations exist in a manual render loop architecture because events don't carry state; they just schedule renders.
+
 ## Recreate Apple Scroll Physics
 
 **Again, highly disrecommended**. But if you're gonna try (don't), might as well try properly.
