@@ -1,0 +1,304 @@
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PiP Corner Snap (Two-Spring)</title>
+  <style>
+    body {
+      font: 14px system-ui;
+      user-select: none;
+      -webkit-user-select: none;
+      background-color: #1a1a2e;
+      overflow: hidden;
+      margin: 0;
+      height: 100vh;
+    }
+    .pip {
+      position: absolute;
+      width: 120px;
+      height: 80px;
+      border-radius: 12px;
+      background: #e94560;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-weight: 600;
+      font-size: 13px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      cursor: grab;
+    }
+    .pip.dragging { cursor: grabbing; }
+    .corner-marker {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      transform: translate(-50%, -50%);
+    }
+    .rest-marker {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(100,200,255,0.85);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: none;
+    }
+    #info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div id="info">
+  Two-spring corner snap. Drag and flick the card toward a corner.<br>
+  Decay rest = <span style="color:rgba(100,200,255,0.85)">blue dot</span> &middot;
+  Corners = <span style="color:rgba(255,255,255,0.5)">white dots</span>
+</div>
+<script>
+'use strict'
+
+// === scheduler
+let scheduledRender = false
+function scheduleRender() {
+  if (scheduledRender) return
+  scheduledRender = true
+  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) {
+    scheduledRender = false
+    if (render(now)) scheduleRender()
+  })
+}
+
+// === spring physics (same as demo_drag)
+const msPerAnimationStep = 4
+function spring(pos, v = 0, k = 290, b = 24) {
+  return {pos, dest: pos, v, k, b}
+}
+function springStep(config) {
+  const t = msPerAnimationStep / 1000
+  const {pos, dest, v, k, b} = config
+  const Fspring = -k * (pos - dest)
+  const Fdamper = -b * v
+  const a = Fspring + Fdamper
+  const newV = v + a * t
+  const newPos = pos + newV * t
+  config.pos = newPos; config.v = newV
+}
+function springGoToEnd(config) {
+  config.pos = config.dest; config.v = 0
+}
+
+// === exponential decay: calculate where a flick with given velocity would rest
+// v(t) = v0 * e^(-friction * t), position integrates to v0/friction * (1 - e^(-friction*t))
+// at rest (t→∞): displacement = v0 / friction
+const decayFriction = 4.5 // tunable
+function decayRestPos(pos, velocity) {
+  return pos + velocity / decayFriction
+}
+
+// === layout
+const pipW = 120, pipH = 80, cornerPad = 20
+function getCorners() {
+  const w = document.documentElement.clientWidth
+  const h = document.documentElement.clientHeight
+  return [
+    {x: cornerPad, y: cornerPad},                       // top-left
+    {x: w - pipW - cornerPad, y: cornerPad},             // top-right
+    {x: cornerPad, y: h - pipH - cornerPad},             // bottom-left
+    {x: w - pipW - cornerPad, y: h - pipH - cornerPad},  // bottom-right
+  ]
+}
+function nearestCorner(x, y) {
+  const corners = getCorners()
+  let best = corners[0], bestDist = Infinity
+  for (let c of corners) {
+    const d = (c.x - x) ** 2 + (c.y - y) ** 2
+    if (d < bestDist) { bestDist = d; best = c }
+  }
+  return best
+}
+
+// === state
+let animatedUntilTime = null
+let mode = 'idle' // 'idle' | 'dragging'
+
+// The two-spring system:
+// spring_1: current_pos → rest_pos (carries flick velocity)
+// spring_2: rest_pos → corner
+// final_pos = spring_1 + (spring_2 - rest_pos)
+let spring1x = spring(0)
+let spring1y = spring(0)
+let spring2x = spring(0)
+let spring2y = spring(0)
+let restPosX = 0, restPosY = 0
+
+// drag state
+let dragOffsetX = 0, dragOffsetY = 0
+let dragPosX = 0, dragPosY = 0
+let pointerHistory = [] // {x, y, time}
+
+// events
+let events = { mouseup: null, touchend: null, mousemove: null, touchmove: null, pointerdown: null }
+
+// DOM
+const pipNode = document.createElement('div')
+pipNode.className = 'pip'
+pipNode.textContent = 'PiP'
+document.body.appendChild(pipNode)
+
+const restMarker = document.createElement('div')
+restMarker.className = 'rest-marker'
+document.body.appendChild(restMarker)
+
+// corner markers
+for (let c of getCorners()) {
+  const m = document.createElement('div')
+  m.className = 'corner-marker'
+  m.style.left = (c.x + pipW / 2) + 'px'
+  m.style.top = (c.y + pipH / 2) + 'px'
+  document.body.appendChild(m)
+}
+
+// initialize at bottom-left corner
+const initCorner = getCorners()[2] // bottom-left
+spring1x.pos = spring1x.dest = initCorner.x
+spring1y.pos = spring1y.dest = initCorner.y
+spring2x.pos = spring2x.dest = initCorner.x
+spring2y.pos = spring2y.dest = initCorner.y
+restPosX = initCorner.x
+restPosY = initCorner.y
+
+// === events
+window.addEventListener("mouseup", (e) => {events.mouseup = e; scheduleRender()})
+window.addEventListener("touchend", (e) => {events.touchend = e; scheduleRender()})
+window.addEventListener("mousemove", (e) => {events.mousemove = e; scheduleRender()})
+window.addEventListener("touchmove", (e) => {events.touchmove = e; scheduleRender()})
+window.addEventListener('pointerdown', (e) => {events.pointerdown = e; scheduleRender()})
+
+// === hit test against current rendered position
+function currentPos() {
+  if (mode === 'dragging') return {x: dragPosX, y: dragPosY}
+  return {x: spring1x.pos + (spring2x.pos - restPosX), y: spring1y.pos + (spring2y.pos - restPosY)}
+}
+function hitTest(px, py) {
+  const {x, y} = currentPos()
+  return px >= x && px < x + pipW && py >= y && py < y + pipH
+}
+
+function triggerSnap(fromX, fromY, vx, vy) {
+  restMarker.style.display = 'block'
+
+  // calculate decay rest position
+  restPosX = decayRestPos(fromX, vx)
+  restPosY = decayRestPos(fromY, vy)
+
+  // which corner?
+  const corner = nearestCorner(restPosX, restPosY)
+
+  // spring_1: from current position to rest_pos, with flick velocity
+  spring1x.pos = fromX; spring1x.dest = restPosX; spring1x.v = vx
+  spring1y.pos = fromY; spring1y.dest = restPosY; spring1y.v = vy
+
+  // spring_2: from rest_pos to corner
+  spring2x.pos = restPosX; spring2x.dest = corner.x; spring2x.v = 0
+  spring2y.pos = restPosY; spring2y.dest = corner.y; spring2y.v = 0
+
+  // show rest marker
+  restMarker.style.left = (restPosX + pipW / 2) + 'px'
+  restMarker.style.top = (restPosY + pipH / 2) + 'px'
+
+  animatedUntilTime = null
+}
+
+function render(now) {
+  // === step 0: process events
+  let pointerX, pointerY
+
+  if (events.mousemove) { pointerX = events.mousemove.pageX; pointerY = events.mousemove.pageY }
+  if (events.touchmove) { pointerX = events.touchmove.touches[0].pageX; pointerY = events.touchmove.touches[0].pageY }
+  if (events.pointerdown) { pointerX = events.pointerdown.pageX; pointerY = events.pointerdown.pageY }
+
+  // pointer down
+  if (events.pointerdown && hitTest(pointerX, pointerY)) {
+    const cur = currentPos() // must read before setting mode to 'dragging'
+    mode = 'dragging'
+    pipNode.classList.add('dragging')
+    dragOffsetX = pointerX - cur.x
+    dragOffsetY = pointerY - cur.y
+    dragPosX = cur.x
+    dragPosY = cur.y
+    pointerHistory = [{x: pointerX, y: pointerY, time: now}]
+  }
+
+  // pointer move while dragging
+  if (mode === 'dragging' && (events.mousemove || events.touchmove)) {
+    dragPosX = pointerX - dragOffsetX
+    dragPosY = pointerY - dragOffsetY
+    pointerHistory.push({x: pointerX, y: pointerY, time: now})
+    if (pointerHistory.length > 20) pointerHistory.shift()
+  }
+
+  // pointer up while dragging → snap to nearest corner
+  if (mode === 'dragging' && (events.mouseup || events.touchend)) {
+    pipNode.classList.remove('dragging')
+    mode = 'idle'
+
+    // calculate release velocity from last ~100ms of pointer history
+    let vx = 0, vy = 0
+    if (pointerHistory.length >= 2) {
+      let i = pointerHistory.length - 1
+      while (i > 0 && now - pointerHistory[i - 1].time <= 100) i--
+      const dt = now - pointerHistory[i].time
+      if (dt > 0) {
+        const last = pointerHistory[pointerHistory.length - 1]
+        vx = (last.x - pointerHistory[i].x) / dt * 1000
+        vy = (last.y - pointerHistory[i].y) / dt * 1000
+      }
+    }
+
+    triggerSnap(dragPosX, dragPosY, vx, vy)
+  }
+
+  // === animation
+  let stillAnimating = false
+
+  if (mode !== 'dragging') {
+    let newAnimatedUntilTime = animatedUntilTime ?? now
+    const steps = Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)
+    newAnimatedUntilTime += steps * msPerAnimationStep
+
+    const allSprings = [spring1x, spring1y, spring2x, spring2y]
+    for (let s of allSprings) {
+      for (let i = 0; i < steps; i++) springStep(s)
+      if (Math.abs(s.v) < 0.01 && Math.abs(s.dest - s.pos) < 0.01) springGoToEnd(s)
+      else stillAnimating = true
+    }
+    animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
+  }
+
+  // === render
+  const {x: renderX, y: renderY} = currentPos()
+  pipNode.style.transform = `translate3d(${renderX}px,${renderY}px,0)`
+
+  // cursor
+  if (mode !== 'dragging') {
+    document.body.style.cursor = (pointerX !== undefined && hitTest(pointerX, pointerY)) ? 'grab' : 'auto'
+  } else {
+    document.body.style.cursor = 'grabbing'
+  }
+
+  // === clear events
+  events.mouseup = events.touchend = events.mousemove = events.touchmove = events.pointerdown = null
+
+  return mode === 'dragging' || stillAnimating
+}
+
+scheduleRender()
+</script>
+</body>

@@ -20,3 +20,24 @@ data structure dictate access patterns and control flow, and since animations mi
 send future frames to gpu in case CPU janks
 
 "animate your way to glory" article. Decouple physical clock from logical clock.
+
+## Exponential Decay
+
+Exponential decay nice properties (Taher)
+
+
+## Springs
+
+We usually end a spring animation once it achieves a certain small velocity and position threshold (distance isn't enough! The spring might be oscillating).
+
+Imagine a scroll view with an image that you can tap to enlarge into a detail image view. When you dismiss, the image bounces back to its original place in the parent scroll view. If, at that time, you keep scrolling the scroll view up and down non-stop, the image will in theory bounce back and forth forever as you jitter the scroll view. iOS springboard and other places use a concept called *spring tightening* to fix this. They gradually "tighten" the spring, either through tweaking the spring constants, or by modeling the tightening itself as another spring. This way, the image itself bounces tighter and tighter til rest, even if you're still jittering the scroll view.
+
+This is a bit overkill. And in reality, this is often a mismanagement of the image's (conceptual) coordinate system. The image's position should be relative to the scroll view container's, i.e. no matter where we scroll, the image's y is at, say, 12px. And then when it springs from zoomed in view back to the scroll view, it goes back to its local coordinate of 12px and doesn't care about the scroll view's y movement at all. The reason why iOS had to employ spring tightening is, among other reasons, because they lift the image out of its local coordinates for animation. They're undoing some component hierarchy's default influence on the layout numbers, when the layout numbers should have been decoupled from the hierarchy.
+
+iOS FaceTime and Picture-in-Picture lets you flick a view that always ends up snapping nicely to some fixed corner. This uses two springs running simultaneously. First, exponential decay is used to calculate `rest_pos` — where the flick would naturally come to rest. Which corner to snap to is determined by `rest_pos`. Then:
+
+- `spring_1(t)`: starts at `current_pos` (with the flick's initial velocity), targets `rest_pos`.
+- `spring_2(t)`: starts at `rest_pos`, targets `corner`.
+- The final position is (speculatively) `spring_1(t) + (spring_2(t) - rest_pos)`.
+
+At t=0 this gives `current_pos + 0 = current_pos`. At t=∞ this gives `rest_pos + (corner - rest_pos) = corner`. Early on, spring_1 dominates and the motion follows the flick's momentum. Spring_2's correction starts at zero displacement and gradually steers toward the corner, so there's no jolt. Using a spring rather than a pure decay for the first component lets the motion overshoot `rest_pos` on hard flicks, which feels more physical. Since two damped springs are both solutions to second-order linear ODEs, their sum is too, so there might be an equivalent single-spring formulation with modified initial conditions. See [demo_pip_snap](../demos/demo_pip_snap/index.html).
