@@ -1,0 +1,2 @@
+- screen saver demo, when we leave tab unfocused then come back and focus it. It plays the animation a lot because I suspect it's not jumping over lots of frames because of a large time delta but I'm not sure.
+- Actually describe vibeui and do a pass over the demos to make sure they respect it
