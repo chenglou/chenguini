@@ -65,6 +65,12 @@ The same value-comparison pattern from step 2 above works under React, avoiding 
 
 None of these adaptations exist in a manual render loop architecture because events don't carry state; they just schedule renders.
 
+### Less Preferred Alternatives
+
+- **CSS `overflow-anchor`**: native, but lacks Safari support.
+- **Padding adjustment**: instead of `scrollTo`, reduce a preallocated top spacer (e.g. padding-top) by the delta. Content stays put, `scrollTop` doesn't change, no scroll event fires — sidesteps the entire detection problem. Downside: scrollbar thumb visually jumps, and the accumulated padding offset complicates virtualization.
+- **ResizeObserver above the anchor**: observe height changes of content above the anchor element, adjust `scrollTop` in the callback. More precise when existing elements resize unpredictably, but unnecessary when items have deterministic heights and layout is recomputed every frame.
+
 ## Recreate Apple Scroll Physics
 
 **Again, highly disrecommended**. But if you're gonna try (don't), might as well try properly.
