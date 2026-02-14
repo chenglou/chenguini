@@ -688,7 +688,7 @@ function render(now) {
       prompt.style.top = `${d.sizeX.pos / d.ar}px` // right below img's sizeY
 
       if (i === newFocused) {
-        node.style.zIndex = data.length + 999 // guaranteed above everything
+        node.style.zIndex = data.length + 1 // guaranteed above everything
         prompt.style.overflowY = 'auto'
         prompt.style.height = `${prompt1DSizeY - promptPaddingBottom}px`
         prompt.style.lineClamp = prompt.style.webkitLineClamp = 999
