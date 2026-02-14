@@ -74,14 +74,25 @@ tooltip.placeholder = 'Set goal...'
 document.body.appendChild(canvas)
 document.body.appendChild(tooltip)
 
+// === scheduler
+let scheduledRender = false
+function scheduleRender() {
+  if (scheduledRender) return
+  scheduledRender = true
+  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender() {
+    scheduledRender = false
+    render()
+  })
+}
+
 // === events
 // pointermove doesn't work on android, pointerdown isn't fired on Safari on the first left click after dismissing context menus, mousedown doesn't trigger properly on mobile, pointerup isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event. Tldr there's no pointer event that works cross-browser that can replace mouse & touch events.
-window.addEventListener('resize', () => render())
-window.addEventListener('click', (e) => {events.click = e; render()})
-tooltip.addEventListener('input', (e) => {events.input = e; render()})
-window.addEventListener("mouseup", (e) => {events.mouseup = e; render()})
-window.addEventListener('mousemove', (e) => {events.mousemove = e; render()})
-window.addEventListener('pointerdown', (e) => {events.pointerdown = e; render()})
+window.addEventListener('resize', () => scheduleRender())
+window.addEventListener('click', (e) => {events.click = e; scheduleRender()})
+tooltip.addEventListener('input', (e) => {events.input = e; scheduleRender()})
+window.addEventListener("mouseup", (e) => {events.mouseup = e; scheduleRender()})
+window.addEventListener('mousemove', (e) => {events.mousemove = e; scheduleRender()})
+window.addEventListener('pointerdown', (e) => {events.pointerdown = e; scheduleRender()})
 
 // === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either). Use the dynamic area here for once
 function hitTest(blockSize, countX, countY, gridLeft, gridTop, gridFinalSizeX, gridFinalSizeY, pointer) {
@@ -244,7 +255,7 @@ function render() {
   events.click = events.input = events.mouseup = events.mousemove = events.pointerdown = null
 }
 
-render()
+scheduleRender()
 /*
 TODOs:
 - drag today dot
