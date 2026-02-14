@@ -16,4 +16,5 @@ Experimental AI-native UI framework. We're exploring how to build interactive UI
 - Render loop follows a consistent structure: process events → batched DOM reads → state transitions → layout → physics step → batched DOM writes → state cleanup. `render(now)` returns bool (still animating?).
 - Spring physics are decoupled from framerate: track `animatedUntilTime`, compute `steps = floor((now - animatedUntilTime) / msPerAnimationStep)`, run that many physics steps per frame.
 
-Architecture diagram ![IMG_6937](https://github.com/user-attachments/assets/caee340e-cc75-4611-9d81-bc31aca0457b)
+Stuff we're gonna try:
+function name/hash then during spec changes have llm grep for callsites and decide whether to re-expand the definition. Wait just hash tags
