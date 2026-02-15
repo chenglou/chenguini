@@ -23,8 +23,10 @@ send future frames to gpu in case CPU janks
 
 ## Exponential Decay
 
-Exponential decay nice properties (Taher)
-
+Springs are often overrated. Exp decays are simple, with great properties:
+- No overshoot bounce. Smoothly eases out to a resting position that's analytically computable ahead of time
+- Interruptible without transition discontinuity
+- Closed-form. `x(t) = x0 * e^(-kt)` plug in any t, get the exact answer. No stepping loop, no accumulated numerical error, can skip ahead to any point in time. FPS-independent! (the naive velocity *= 0.99 per frame gives 0.99^60 ≈ 0.55 at 60fps but 0.99^30 ≈ 0.74 at 30fps)
 
 ## Springs
 
