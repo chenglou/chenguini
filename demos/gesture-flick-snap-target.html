@@ -24,9 +24,7 @@
       font-weight: 600;
       font-size: 13px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      cursor: grab;
     }
-    .pip.dragging { cursor: grabbing; }
     .corner-marker {
       position: absolute;
       width: 16px;
@@ -43,7 +41,6 @@
       background: rgba(100,200,255,0.85);
       transform: translate(-50%, -50%);
       pointer-events: none;
-      display: none;
     }
     #info {
       position: absolute;
@@ -104,9 +101,7 @@ function decayRestPos(pos, velocity) {
 
 // === layout
 const pipW = 120, pipH = 80, cornerPad = 20
-function getCorners() {
-  const w = document.documentElement.clientWidth
-  const h = document.documentElement.clientHeight
+function getCorners(w, h) {
   return [
     {x: cornerPad, y: cornerPad},                       // top-left
     {x: w - pipW - cornerPad, y: cornerPad},             // top-right
@@ -114,8 +109,8 @@ function getCorners() {
     {x: w - pipW - cornerPad, y: h - pipH - cornerPad},  // bottom-right
   ]
 }
-function nearestCorner(x, y) {
-  const corners = getCorners()
+function nearestCorner(x, y, w, h) {
+  const corners = getCorners(w, h)
   let best = corners[0], bestDist = Infinity
   for (let c of corners) {
     const d = (c.x - x) ** 2 + (c.y - y) ** 2
@@ -127,6 +122,7 @@ function nearestCorner(x, y) {
 // === state
 let animatedUntilTime = null
 let mode = 'idle' // 'idle' | 'dragging'
+let showRestMarker = false
 
 // The two-spring system:
 // spring_1: current_pos → rest_pos (carries flick velocity)
@@ -157,16 +153,18 @@ restMarker.className = 'rest-marker'
 document.body.appendChild(restMarker)
 
 // corner markers
-for (let c of getCorners()) {
-  const m = document.createElement('div')
-  m.className = 'corner-marker'
-  m.style.left = (c.x + pipW / 2) + 'px'
-  m.style.top = (c.y + pipH / 2) + 'px'
-  document.body.appendChild(m)
+{ const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight
+  for (let c of getCorners(w, h)) {
+    const m = document.createElement('div')
+    m.className = 'corner-marker'
+    m.style.left = (c.x + pipW / 2) + 'px'
+    m.style.top = (c.y + pipH / 2) + 'px'
+    document.body.appendChild(m)
+  }
 }
 
 // initialize at bottom-left corner
-const initCorner = getCorners()[2] // bottom-left
+const initCorner = getCorners(document.documentElement.clientWidth, document.documentElement.clientHeight)[2] // bottom-left
 spring1x.pos = spring1x.dest = initCorner.x
 spring1y.pos = spring1y.dest = initCorner.y
 spring2x.pos = spring2x.dest = initCorner.x
@@ -191,15 +189,15 @@ function hitTest(px, py) {
   return px >= x && px < x + pipW && py >= y && py < y + pipH
 }
 
-function triggerSnap(fromX, fromY, vx, vy) {
-  restMarker.style.display = 'block'
+function triggerSnap(fromX, fromY, vx, vy, w, h) {
+  showRestMarker = true
 
   // calculate decay rest position
   restPosX = decayRestPos(fromX, vx)
   restPosY = decayRestPos(fromY, vy)
 
   // which corner?
-  const corner = nearestCorner(restPosX, restPosY)
+  const corner = nearestCorner(restPosX, restPosY, w, h)
 
   // spring_1: from current position to rest_pos, with flick velocity
   spring1x.pos = fromX; spring1x.dest = restPosX; spring1x.v = vx
@@ -209,14 +207,14 @@ function triggerSnap(fromX, fromY, vx, vy) {
   spring2x.pos = restPosX; spring2x.dest = corner.x; spring2x.v = 0
   spring2y.pos = restPosY; spring2y.dest = corner.y; spring2y.v = 0
 
-  // show rest marker
-  restMarker.style.left = (restPosX + pipW / 2) + 'px'
-  restMarker.style.top = (restPosY + pipH / 2) + 'px'
-
   animatedUntilTime = null
 }
 
 function render(now) {
+  // === DOM reads
+  const windowW = document.documentElement.clientWidth
+  const windowH = document.documentElement.clientHeight
+
   // === step 0: process events
   let pointerX, pointerY
 
@@ -228,7 +226,6 @@ function render(now) {
   if (events.pointerdown && hitTest(pointerX, pointerY)) {
     const cur = currentPos() // must read before setting mode to 'dragging'
     mode = 'dragging'
-    pipNode.classList.add('dragging')
     dragOffsetX = pointerX - cur.x
     dragOffsetY = pointerY - cur.y
     dragPosX = cur.x
@@ -246,7 +243,6 @@ function render(now) {
 
   // pointer up while dragging → snap to nearest corner
   if (mode === 'dragging' && (events.mouseup || events.touchend)) {
-    pipNode.classList.remove('dragging')
     mode = 'idle'
 
     // calculate release velocity from last ~100ms of pointer history
@@ -262,7 +258,7 @@ function render(now) {
       }
     }
 
-    triggerSnap(dragPosX, dragPosY, vx, vy)
+    triggerSnap(dragPosX, dragPosY, vx, vy, windowW, windowH)
   }
 
   // === animation
@@ -286,12 +282,16 @@ function render(now) {
   const {x: renderX, y: renderY} = currentPos()
   pipNode.style.transform = `translate3d(${renderX}px,${renderY}px,0)`
 
+  // rest marker
+  restMarker.style.display = showRestMarker ? 'block' : 'none'
+  restMarker.style.left = (restPosX + pipW / 2) + 'px'
+  restMarker.style.top = (restPosY + pipH / 2) + 'px'
+
   // cursor
-  if (mode !== 'dragging') {
-    document.body.style.cursor = (pointerX !== undefined && hitTest(pointerX, pointerY)) ? 'grab' : 'auto'
-  } else {
-    document.body.style.cursor = 'grabbing'
-  }
+  const cursor = mode === 'dragging' ? 'grabbing'
+    : (pointerX !== undefined && hitTest(pointerX, pointerY)) ? 'grab' : 'auto'
+  document.body.style.cursor = cursor
+  pipNode.style.cursor = cursor
 
   // === clear events
   events.mouseup = events.touchend = events.mousemove = events.touchmove = events.pointerdown = null
