@@ -71,7 +71,6 @@ For developers:
       background-repeat: no-repeat; /* just in case of floating point whatever */
     }
     .box img {
-      display: block; /* prevent inline-block from adding whitespaces... */
       width: 100%;
     }
     .prompt {
@@ -527,13 +526,10 @@ function render(now) {
     : inputCode === 'ArrowRight' ? Math.min(data.length - 1, focused + 1)
     : focused
   // pointer
+  let selectTarget = null
   if (clickedTarget != null) { // clicked
     if (clickedTarget.tagName === 'FIGCAPTION') { // select the whole prompt
-      let selection = window.getSelection()
-      let range = document.createRange()
-      range.selectNodeContents(clickedTarget)
-      selection.removeAllRanges()
-      selection.addRange(range)
+      selectTarget = clickedTarget
     } else if (focused == null) { // in 2D grid mode. Find the box the pointer's on
       newFocused = hitTest2DMode(data, pointerXLocal, pointerYLocal) ?? newFocused
     } else { // 1D mode
@@ -692,7 +688,7 @@ function render(now) {
         prompt.style.overflowY = 'auto'
         prompt.style.height = `${prompt1DSizeY - promptPaddingBottom}px`
         prompt.style.lineClamp = prompt.style.webkitLineClamp = 999
-        img.style.display = 'block'
+        img.style.display = 'block' // not 'inline' (img's default), which adds whitespace below
         let src = `https://cdn.midjourney.com/${d.id}.webp`
         if (!stillAnimating && img.src !== src) img.src = src // load the full res image
       } else {
@@ -706,6 +702,13 @@ function render(now) {
     } else if (node.parentNode != null) document.body.removeChild(node) // if previously present, remove
   }
 
+  if (selectTarget != null) {
+    let selection = window.getSelection()
+    let range = document.createRange()
+    range.selectNodeContents(selectTarget)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
   document.body.style.cursor = cursor
   document.body.style.overflowY = newFocused == null ? 'auto' : 'hidden'
   dummyPlaceholder.style.height = `${rowsTop.at(-1)}px` // Chrome has race conditon if scrollTo is called before setting a longer dummy height
