@@ -16,6 +16,7 @@ Render:
     Animation tick
     Commit state changes
   Occlusion & DOM writes (batched, same reason)
+  Side effects (scrollTo, pushState, focus, selection, localStorage, etc.)
   schedule next render (e.g. if animating)
 ```
 Only events and render's final step can schedule a next render

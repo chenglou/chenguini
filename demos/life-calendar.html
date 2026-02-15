@@ -240,18 +240,17 @@ function render() {
     tooltip.disabled = false
     tooltip.value = newCustomDotValue == null ? customDotValue : newCustomDotValue
   }
-  tooltip.focus()
-
-  // === step 6: update state & prepare for next frame
-  if (customDot !== newCustomDot) {
-    localStorage.setItem('customDot', newCustomDot) // TODO: validate (e.g. out of range)
-    customDot = newCustomDot
-  }
-  if (newCustomDotValue != null && customDotValue !== newCustomDotValue) {
-    localStorage.setItem('customDotValue', newCustomDotValue) // TODO: validate (e.g. out of range)
-    customDotValue = newCustomDotValue
-  }
+  // === commit state
+  const customDotChanged = customDot !== newCustomDot
+  const customDotValueChanged = newCustomDotValue != null && customDotValue !== newCustomDotValue
+  if (customDotChanged) customDot = newCustomDot
+  if (customDotValueChanged) customDotValue = newCustomDotValue
   events.click = events.input = events.mouseup = events.mousemove = events.pointerdown = null
+
+  // === side effects
+  tooltip.focus()
+  if (customDotChanged) localStorage.setItem('customDot', newCustomDot) // TODO: validate (e.g. out of range)
+  if (customDotValueChanged) localStorage.setItem('customDotValue', newCustomDotValue) // TODO: validate (e.g. out of range)
 }
 
 scheduleRender()

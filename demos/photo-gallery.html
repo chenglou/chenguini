@@ -481,9 +481,25 @@ function hitTest1DMode(data, focused, windowSizeX, pointerX) {
 }
 
 function render(now) {
-  // === step 0: process events
+  // === DOM reads
+  const newWindowSizeX = document.documentElement.clientWidth // excludes scroll bar & invariant under safari pinch zoom
+  const windowSizeY = document.documentElement.clientHeight // same
+  // this way, when pinch zooming in, we don't occlude away rows outside of the view; if we did, when we zoom out again we wouldn't see those occluded rows until we release our fingers. During safari pinch, no event is triggered so we couldn't have updated the occlusion in real time
+  const animationDisabled = reducedMotion.matches
+  const currentScrollY = isSafari ? document.body.scrollTop : window.scrollY
+  const currentScrollX = isSafari ? document.body.scrollLeft : window.scrollX
+  const hashImgId = window.location.hash.slice(1)
+
+  let focused = null; for (let i = 0; i < data.length; i++) if (data[i].id === hashImgId) focused = i
+
+  // === handle inputs
   // keydown
   const inputCode = events.keydown == null ? null : events.keydown.code
+
+  if (debug) {
+    if (inputCode === 'KeyA') debugTimestamp += 1000 / 60
+    now = debugTimestamp
+  }
 
   // click
   let clickedTarget = null
@@ -499,25 +515,9 @@ function render(now) {
     // btw, pointer can exceed document bounds, e.g. dragging reports back out-of-bound, legal negative values
   }
 
-  if (debug) {
-    if (inputCode === 'KeyA') debugTimestamp += 1000 / 60
-    now = debugTimestamp
-  }
-
-  // === step 1: batched DOM reads (to avoid accidental DOM read & write interleaving)
-  const newWindowSizeX = document.documentElement.clientWidth // excludes scroll bar & invariant under safari pinch zoom
-  const windowSizeY = document.documentElement.clientHeight // same
-  // this way, when pinch zooming in, we don't occlude away rows outside of the view; if we did, when we zoom out again we wouldn't see those occluded rows until we release our fingers. During safari pinch, no event is triggered so we couldn't have updated the occlusion in real time
-  const animationDisabled = reducedMotion.matches
-  const currentScrollY = isSafari ? document.body.scrollTop : window.scrollY
-  const currentScrollX = isSafari ? document.body.scrollLeft : window.scrollX
-  const hashImgId = window.location.hash.slice(1)
-
-  let focused = null; for (let i = 0; i < data.length; i++) if (data[i].id === hashImgId) focused = i
   // don't forget top & bottom safari UI chrome sizes when vertically occluding, since they're transluscent so we can't over-occlude by ignoring them
   const pointerXLocal = pointer.x +/*toLocal*/currentScrollX, pointerYLocal = pointer.y +/*toLocal*/currentScrollY
 
-  // === step 2: handle inputs-related state change
   // keys
   let newFocused =
     inputCode === 'Escape' ? null
@@ -537,7 +537,7 @@ function render(now) {
     }
   }
 
-  // === step 3: calculate new layout & cursor
+  // === layout & cursor
   const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(newWindowSizeX)
   let boxes2DSizeX = [], boxes2DSizeY = [], rowsTop = [windowPaddingTop] // length: number of rows + 1
   { // first pass over data to set final 2D dimensions and row height (for vertical centering in 2D & total scrollbar height)
@@ -648,7 +648,7 @@ function render(now) {
   // ensure that no matter how the scrolling is abruptly adjusted, the boxes on the screen don't suddenly jump too. When going 1D->2D mode where the dismissed image might be far from the initial one, or when resizing causes layout shifts, the boxes now stay unaffected!
   for (let {y} of data) y.pos += adjustedScrollTop - currentScrollY
 
-  // === step 4: run animation
+  // === animation
   let newAnimatedUntilTime = animatedUntilTime ?? now
   const steps = Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep) // run x spring steps. Decouple physics simulation from framerate!
   newAnimatedUntilTime += steps * msPerAnimationStep
@@ -662,7 +662,14 @@ function render(now) {
     })
   }
 
-  // === step 5: render. Batch DOM writes
+  // === commit state
+  events.keydown = events.click = events.mousemove = null
+  animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
+  anchor = newAnchor
+  windowSizeX = newWindowSizeX
+  scrollY = adjustedScrollTop
+
+  // === DOM writes
   const browserUIMaxSizeTop = 100, browserUIMaxSizeBottom = 150 // browsers UI like Safari are transluscent. Random conservative numbers
   for (let i = 0; i < data.length; i++) {
     let d = data[i]
@@ -702,6 +709,11 @@ function render(now) {
     } else if (node.parentNode != null) document.body.removeChild(node) // if previously present, remove
   }
 
+  document.body.style.cursor = cursor
+  document.body.style.overflowY = newFocused == null ? 'auto' : 'hidden'
+  dummyPlaceholder.style.height = `${rowsTop.at(-1)}px` // Chrome has race conditon if scrollTo is called before setting a longer dummy height
+
+  // === side effects
   if (selectTarget != null) {
     let selection = window.getSelection()
     let range = document.createRange()
@@ -709,12 +721,6 @@ function render(now) {
     selection.removeAllRanges()
     selection.addRange(range)
   }
-  document.body.style.cursor = cursor
-  document.body.style.overflowY = newFocused == null ? 'auto' : 'hidden'
-  dummyPlaceholder.style.height = `${rowsTop.at(-1)}px` // Chrome has race conditon if scrollTo is called before setting a longer dummy height
-
-  // === step 6: update state & prepare for next frame
-  // if (adjustedScrollTop !== currentScrollTop) window.scrollTo({top: adjustedScrollTop}) // will trigger scrolling, thus next frame's render
   if (adjustedScrollTop !== currentScrollY) {
     // see comment about isSafari above
     (isSafari ? document.body : window).scrollTo({top: adjustedScrollTop}) // will trigger scrolling, thus next frame's render
@@ -722,11 +728,6 @@ function render(now) {
   if (newFocused !== focused) {
     window.history.pushState(null, '', `${window.location.pathname}${window.location.search}${newFocused == null ? '' : '#' + data[newFocused].id}`)
   }
-  events.keydown = events.click = events.mousemove = null
-  animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
-  anchor = newAnchor
-  windowSizeX = newWindowSizeX
-  scrollY = adjustedScrollTop
 
   return stillAnimating
 }
