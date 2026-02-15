@@ -16,6 +16,7 @@ Essentially:
 
 - Calling `rAF` inside event callbacks (both browser and react events) schedules the `rAF` callback to the _same_ frame as the event that happened.
 - `rAF` inside another `rAF` is executed next frame. This can recurse.
+- `rAF` called before the browser's first paint joins that first frame.
 
 ## Gotchas
 
