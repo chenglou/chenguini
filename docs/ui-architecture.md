@@ -19,11 +19,10 @@ Render:
   Side effects (scrollTo, pushState, focus, selection, localStorage, etc.)
   schedule next render (e.g. if animating)
 ```
+
 Only events and render's final step can schedule a next render
 
 A React app might not be able to follow this, but when the need arises (heavy interactivity), this can still be adopted within components.
-
-Care about latency over throughput. Fewer branches
 
 ## DOM Interleaving
 Repeated DOM read & write is catastrophic for performance (https://gist.github.com/paulirish/5d52fb081b3570c81e3a). It's not always avoidable (especially when there's need for text measurement as part of layout logic before render), but keep to them a strict minimum.
@@ -31,7 +30,8 @@ For easier reasoning & testing, pass the read DOM values to helper functions ins
 
 ## DOM Writes
 React did it right with its idempotent JSX. Treat the DOM writes section of the render loop as essentially JSX as much as possible. For example, avoid partial mutations like `node.classList.add('foo')` and `node.classList.remove('foo')`. Assign the entire classes string at once. Use ternary, and when if-else are needed ensure they touch the DOM structure the same way:
-```
+
+```ts
 // good:
 if (condition) {
   node.style.display = 'block'
@@ -72,7 +72,8 @@ Benefits of a single state: serializable, clonable, rewindable (for debugging), 
 ## Pseudo-Random
 Avoid Math.random() and other non-deterministic functions (Date.now() counts too, but that's a separate topic). Use a seeded pseudo-random, and call it a hash, for intent clarity.
 Strong recommendation: use Wellons lowbias32 improved, and specialize per argument count:
-```
+
+```ts
 function hash(n) {
   n = Math.imul((n >>> 16) ^ n, 0x21f0aaad);
   n = Math.imul((n >>> 15) ^ n, 0x735a2d97);
@@ -89,3 +90,11 @@ function hashN(args) {
   return (((n >>> 15) ^ n) >>> 0) / 0x100000000;
 }
 ```
+
+## Layout
+
+JS-based layout & positioning isn't as scary as you'd think. It JS animations, easy occlusion culling (virtualization in web speak), more interesting layouts, etc. For example, for images, a demo here can check the area of each image (instead of just width or height), and adjust it to be more pleasant, e.g. same-ish size relative to other neighbor images.
+
+## Branching (TODO)
+
+Care about latency over throughput. Fewer branches
