@@ -10,31 +10,45 @@ We don't use rules that:
 - drastically slow down checks. We don't use hook rules for example. Even on oxlint
 - are just stylistic nits. And we take an honest look at ourselves to determine what's actually semantically important vs what's just engineering theater
 
-Concretely, for TS, we enable:
-- strict
-- noUncheckedIndexedAccess
-- noImplicitReturns
-- noImplicitOverride
-- noUnusedLocals
-- noUnusedParameters
-- exactOptionalPropertyTypes
-- allowUnreachableCode
-- noFallthroughCasesInSwitch
-- noPropertyAccessFromIndexSignature
+Concretely, for TS (see tsconfig.json), we enable:
 
-For linting, we enable:
-- no-duplicate-case
-- @typescript-eslint/prefer-ts-expect-error
-- no-unreachable
-- no-unused-expressions
-- @typescript-eslint/no-unsafe-assignment
-- @typescript-eslint/no-unsafe-return
-- @typescript-eslint/await-thenable
-- @typescript-eslint/no-unnecessary-type-assertion
-- @typescript-eslint/prefer-nullish-coalescing (with ignorePrimitives for boolean to be true)
-- @typescript-eslint/strict-boolean-expressions (with allowNullableBoolean true and allowString false)
-- @typescript-eslint/switch-exhaustiveness-check (with allowDefaultCaseForExhaustiveSwitch false, considerDefaultExhaustiveForUnions true and requireDefaultForNonUnion true)
-- @typescript-eslint/no-unnecessary-condition (with allowConstantLoopConditions true)
-- @typescript-eslint/no-base-to-string
+```jsonc
+"strict": true,
+"noUncheckedIndexedAccess": true,
+"noImplicitReturns": true,
+"noImplicitOverride": true,
+"noUnusedLocals": true,
+"noUnusedParameters": true,
+"exactOptionalPropertyTypes": true,
+"allowUnreachableCode": true, // we allow this because our editor settings' uses "source.fixAll", which fixes everything on save. But then temporarily dead code gets removed during iteration, which sucks. So we replace this with oxlint's "no-unreachable" rule, which isn't auto-fixed
+"noFallthroughCasesInSwitch": true,
+"noPropertyAccessFromIndexSignature": true, // life-saver
+```
+
+For linting (see .oxlintrc.json), we use oxlint + tsgolint. Key rules:
+
+```jsonc
+"prefer-ts-expect-error": "error",
+"no-unnecessary-type-assertion": "error",
+"no-unreachable": "error", // we use this instead of typescript's "allowUnreachableCode" (see tsconfig)
+"@typescript-eslint/no-unsafe-assignment": "error",
+"@typescript-eslint/no-unsafe-return": "error",
+"@typescript-eslint/prefer-nullish-coalescing": ["error", {
+  "ignorePrimitives": { "boolean": true },
+}],
+"@typescript-eslint/strict-boolean-expressions": ["error", {
+  "allowNullableBoolean": true,
+  "allowString": false, // disable `!myString` and `!myNullableString`
+}],
+"@typescript-eslint/switch-exhaustiveness-check": ["error", {
+  "allowDefaultCaseForExhaustiveSwitch": false,
+  "considerDefaultExhaustiveForUnions": true,
+  "requireDefaultForNonUnion": true,
+}],
+"@typescript-eslint/no-unnecessary-condition": ["error", {
+  "allowConstantLoopConditions": true,
+}],
+"@typescript-eslint/no-base-to-string": "error", // enabled by default in oxlint. Prevents showing string [object Object]. This also lets us construct IDs from strings, without letting these IDs be subject to string manipulations
+```
 
 Some of these configs for preventing extra checks (e.g. erroring on checking a value is null when it can't be) are crucial to shrink the codebase back when a feature's cleaned away. See `types-and-data-modeling.md` on the section for handling nulls for example.
