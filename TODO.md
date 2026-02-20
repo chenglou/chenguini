@@ -1,4 +1,3 @@
-- screen saver demo, when we leave tab unfocused then come back and focus it. It plays the animation a lot because I suspect it's not jumping over lots of frames because of a large time delta but I'm not sure.
 - Actually describe vibeui and do a pass over the demos to make sure they respect it
 - fuse docs maybe?
 - bring over a proper claude.md
@@ -8,4 +7,3 @@
 - bring over actual mj guidelines
 - safari pointer down up whatever in nicer-hacker-news and MobileCreationView and other demos
 - how to make ui verifiable more without browser
-- screensaver doesn't have catchup
