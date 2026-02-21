@@ -14,7 +14,7 @@ Paul Irish has a good article on the life time of a frame, and where `rAF` happe
 
 Essentially:
 
-- Calling `rAF` inside event callbacks (both browser and react events) schedules the `rAF` callback to the _same_ frame as the event that happened.
+- Calling `rAF` inside event callbacks (both browser and react events) schedules the `rAF` callback to the *same* frame as the event that happened.
 - `rAF` inside another `rAF` is executed next frame. This can recurse.
 - `rAF` called before the browser's first paint joins that first frame.
 
@@ -24,7 +24,7 @@ Essentially:
 
 Specifically for React:
 
-- As of React 18, all `setState`s are batched (https://github.com/reactwg/react-18/discussions/21).
-- Calling `setState` inside a `rAF` inside an event handler makes the state update happen on the _next_ frame. [Demo](https://tinyurl.com/4yz8nes8). [Source](https://github.com/facebook/react/issues/31634#issuecomment-2500890102).
+- As of React 18, all `setState`s are batched: https://github.com/reactwg/react-18/discussions/21
+- Calling `setState` inside a `rAF` inside an event handler makes the state update happen on the *next* frame. [Demo](https://tinyurl.com/4yz8nes8). [Source](https://github.com/facebook/react/issues/31634#issuecomment-2500890102).
 
 [Extra in-depth article on iOS game frame timing](https://web.archive.org/web/20210513101414/https://www.gamasutra.com/blogs/KwasiMensah/20110211/88949/Game_Loops_on_IOS.php) if you're interested. Generally applicable elsewhere.
