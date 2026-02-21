@@ -178,49 +178,53 @@ if (isSafari) {
 
 // === state. Plus one in the URL's hash
 const debug = false // toggle this for manually stepping through animation frames (press key A)
-let debugTimestamp = 0
-let animatedUntilTime = null
-let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-let anchor = 0 // keep a box stable during resize layout shifts
-let windowSizeX = document.documentElement.clientWidth
-let scrollY = isSafari ? document.body.scrollTop : window.scrollY
-let pointer = {x: -Infinity, y: -Infinity} // btw, on page load, there's no way to render a first cursor state =(
-let events = { keydown: null, click: null, mousemove: null }
-let data; {
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+
+let st; {
+  const windowSizeX = document.documentElement.clientWidth
   const windowSizeY = document.documentElement.clientHeight
   const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
   const imgMaxSizeY = boxMaxSizeX + 100 // TODO: adjust this better
-  data = photoGalleryData.map((d, i) => {
-    const ar = d.w / d.h
-    const sizeX = Math.min(d.w, boxMaxSizeX, imgMaxSizeY * ar)
-    const sizeY = sizeX / ar + promptSizeY
-    // upon zooming into 1D mode (big image), swapping out an img src for a higher-res one would cause a flash of blank image in certain cases. Instead, we put the low-res image as a background-image on the container, then the high-res image as a real img on top. Hand-rolled double buffering...
-    let node = document.createElement('div')
-        node.className = 'box'
-        // node.tabIndex = i + 1 // uncomment when dismiss focus isn't this ugly blue hue anymore
-        node.style.backgroundImage = `url(https://cdn.midjourney.com/${d.id}_384_N.webp)` // 128 is the next smallest. Too small for retina screens
-    let img = document.createElement('img')
-        // img.decoding = 'async' // this sucks. It's slower _and_ still janks the UI. No point
-    let promptNode = document.createElement('figcaption')
-        promptNode.className = 'prompt'
-        promptNode.textContent = d.prompt
-    node.append(img, promptNode)
-    return {
-      id: d.id,
-      naturalSizeX: d.w,
-      ar, // aspect ratio
-      sizeX: spring(sizeX),
-      sizeY: spring(sizeY), // image + prompt
-      x: spring(Math.floor(i / cols) * -windowSizeX - windowSizeX), // unfold from lower left. More visible on long screens
-      y: spring(windowSizeY + Math.floor(i / cols) * imgMaxSizeY),
-      scale: spring(1),
-      fxFactor: spring(20), // for brightness and blur
-      node,
-    }
-  })
+  st = {
+    debugTimestamp: 0,
+    animatedUntilTime: null,
+    anchor: 0, // keep a box stable during resize layout shifts
+    windowSizeX,
+    scrollY: isSafari ? document.body.scrollTop : window.scrollY,
+    pointer: {x: -Infinity, y: -Infinity}, // btw, on page load, there's no way to render a first cursor state =(
+    events: { keydown: null, click: null, mousemove: null },
+    data: photoGalleryData.map((d, i) => {
+      const ar = d.w / d.h
+      const sizeX = Math.min(d.w, boxMaxSizeX, imgMaxSizeY * ar)
+      const sizeY = sizeX / ar + promptSizeY
+      // upon zooming into 1D mode (big image), swapping out an img src for a higher-res one would cause a flash of blank image in certain cases. Instead, we put the low-res image as a background-image on the container, then the high-res image as a real img on top. Hand-rolled double buffering...
+      let node = document.createElement('div')
+          node.className = 'box'
+          // node.tabIndex = i + 1 // uncomment when dismiss focus isn't this ugly blue hue anymore
+          node.style.backgroundImage = `url(https://cdn.midjourney.com/${d.id}_384_N.webp)` // 128 is the next smallest. Too small for retina screens
+      let img = document.createElement('img')
+          // img.decoding = 'async' // this sucks. It's slower _and_ still janks the UI. No point
+      let promptNode = document.createElement('figcaption')
+          promptNode.className = 'prompt'
+          promptNode.textContent = d.prompt
+      node.append(img, promptNode)
+      return {
+        id: d.id,
+        naturalSizeX: d.w,
+        ar, // aspect ratio
+        sizeX: spring(sizeX),
+        sizeY: spring(sizeY), // image + prompt
+        x: spring(Math.floor(i / cols) * -windowSizeX - windowSizeX), // unfold from lower left. More visible on long screens
+        y: spring(windowSizeY + Math.floor(i / cols) * imgMaxSizeY),
+        scale: spring(1),
+        fxFactor: spring(20), // for brightness and blur
+        node,
+      }
+    }),
+  }
 }
 function springForEach(f) { // no spring ownership struggle between the spring library above vs consumer; un-inversion of control!
-  for (let d of data) {
+  for (let d of st.data) {
     f(d.sizeX); f(d.sizeY); f(d.x); f(d.y); f(d.scale); f(d.fxFactor) // no different than [a, b, c].forEach(f)
   }
 }
@@ -230,9 +234,9 @@ function springForEach(f) { // no spring ownership struggle between the spring l
 window.addEventListener('resize', () => scheduleRender())
 window.addEventListener('scroll', () => scheduleRender(), true) // capture is needed for iPad Safari...
 window.addEventListener('popstate', () => scheduleRender())
-window.addEventListener('keydown', (e) => {events.keydown = e; scheduleRender()})
-window.addEventListener('click', (e) => {events.click = e; scheduleRender()})
-window.addEventListener('mousemove', (e) => {events.mousemove = e; scheduleRender()})
+window.addEventListener('keydown', (e) => {st.events.keydown = e; scheduleRender()})
+window.addEventListener('click', (e) => {st.events.click = e; scheduleRender()})
+window.addEventListener('mousemove', (e) => {st.events.mousemove = e; scheduleRender()})
 
 // === static DOM initialization. Just 1 in this app. The more you have here the more your app looks like a PDF document. Minimize
 let dummyPlaceholder = document.createElement('div')
@@ -269,33 +273,34 @@ function render(now) {
   const currentScrollX = isSafari ? document.body.scrollLeft : window.scrollX
   const hashImgId = window.location.hash.slice(1)
 
+  const data = st.data
   let focused = null; for (let i = 0; i < data.length; i++) if (data[i].id === hashImgId) focused = i
 
   // === handle inputs
   // keydown
-  const inputCode = events.keydown == null ? null : events.keydown.code
+  const inputCode = st.events.keydown == null ? null : st.events.keydown.code
 
   if (debug) {
-    if (inputCode === 'KeyA') debugTimestamp += 1000 / 60
-    now = debugTimestamp
+    if (inputCode === 'KeyA') st.debugTimestamp += 1000 / 60
+    now = st.debugTimestamp
   }
 
   // click
   let clickedTarget = null
-  if (events.click != null) {
+  if (st.events.click != null) {
     // needed to update coords even when we already track mousemove. E.g. in Chrome, right click context menu, move elsewhere, then click to dismiss. BAM, mousemove triggers with stale/wrong (??) coordinates... Click again without moving, and now you're clicking on the wrong thing
-    clickedTarget = events.click.target
-    pointer.x = events.click.clientX; pointer.y = events.click.clientY
+    clickedTarget = st.events.click.target
+    st.pointer.x = st.events.click.clientX; st.pointer.y = st.events.click.clientY
   }
   // mousemove
-  if (events.mousemove != null) {
+  if (st.events.mousemove != null) {
     // we only use clientX/Y, not pageX/Y, because we want to ignore scrolling. See comment around isSafari above; we either scroll body or window depending on the browser, so pageX/Y might be meaningless (if Safari)
-    pointer.x = events.mousemove.clientX; pointer.y = events.mousemove.clientY
+    st.pointer.x = st.events.mousemove.clientX; st.pointer.y = st.events.mousemove.clientY
     // btw, pointer can exceed document bounds, e.g. dragging reports back out-of-bound, legal negative values
   }
 
   // don't forget top & bottom safari UI chrome sizes when vertically occluding, since they're transluscent so we can't over-occlude by ignoring them
-  const pointerXLocal = pointer.x +/*toLocal*/currentScrollX, pointerYLocal = pointer.y +/*toLocal*/currentScrollY
+  const pointerXLocal = st.pointer.x +/*toLocal*/currentScrollX, pointerYLocal = st.pointer.y +/*toLocal*/currentScrollY
 
   // keys
   let newFocused =
@@ -339,7 +344,7 @@ function render(now) {
     }
   }
   let cursor
-  let newAnchor = anchor
+  let newAnchor = st.anchor
   let adjustedScrollTop = currentScrollY
   const hoverMagnetFactor = 40
   if (newFocused == null) { // 2D mode
@@ -374,9 +379,9 @@ function render(now) {
       scale.dest = 1.02
     }
     // if layout shifted, keep the boxes near the same place to prevent annoying layout jumps while viewing
-    const anchorY = data[anchor].y.dest - gapTopPeek
-    if (newWindowSizeX !== windowSizeX) adjustedScrollTop = Math.max(0, anchorY) // resized; maintain position!
-    if (adjustedScrollTop !== scrollY && Math.abs(anchorY -/*toLocal*/adjustedScrollTop) > windowSizeY / 10) { // find new anchor if the current one moved too much
+    const anchorY = data[st.anchor].y.dest - gapTopPeek
+    if (newWindowSizeX !== st.windowSizeX) adjustedScrollTop = Math.max(0, anchorY) // resized; maintain position!
+    if (adjustedScrollTop !== st.scrollY && Math.abs(anchorY -/*toLocal*/adjustedScrollTop) > windowSizeY / 10) { // find new anchor if the current one moved too much
       for (newAnchor = 0; newAnchor < data.length; newAnchor += cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
         let d = data[newAnchor]
         // find 1st box whose bottom exceeds 20% of window height
@@ -428,7 +433,7 @@ function render(now) {
   for (let {y} of data) y.pos += adjustedScrollTop - currentScrollY
 
   // === animation
-  let newAnimatedUntilTime = animatedUntilTime ?? now
+  let newAnimatedUntilTime = st.animatedUntilTime ?? now
   const steps = Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep) // run x spring steps. Decouple physics simulation from framerate!
   newAnimatedUntilTime += steps * msPerAnimationStep
   let stillAnimating = false
@@ -442,11 +447,11 @@ function render(now) {
   }
 
   // === commit state
-  events.keydown = events.click = events.mousemove = null
-  animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
-  anchor = newAnchor
-  windowSizeX = newWindowSizeX
-  scrollY = adjustedScrollTop
+  st.events.keydown = st.events.click = st.events.mousemove = null
+  st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
+  st.anchor = newAnchor
+  st.windowSizeX = newWindowSizeX
+  st.scrollY = adjustedScrollTop
 
   // === DOM writes
   const browserUIMaxSizeTop = 100, browserUIMaxSizeBottom = 150 // browsers UI like Safari are transluscent. Random conservative numbers
