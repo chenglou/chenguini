@@ -7,3 +7,4 @@
 - bring over actual mj guidelines
 - safari pointer down up whatever in nicer-hacker-news and MobileCreationView and other demos
 - how to make ui verifiable more without browser
+- debug control, time, rewind, etc.
