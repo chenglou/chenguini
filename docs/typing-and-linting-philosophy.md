@@ -10,7 +10,7 @@ We don't use rules that:
 - drastically slow down checks. We don't use hook rules for example. Even on oxlint
 - are just stylistic nits. And we take an honest look at ourselves to determine what's actually semantically important vs what's just engineering theater
 
-Concretely, for TS (see tsconfig.json), we enable:
+Concretely, for TS config, we enable:
 
 ```jsonc
 "strict": true,
@@ -25,9 +25,10 @@ Concretely, for TS (see tsconfig.json), we enable:
 "noPropertyAccessFromIndexSignature": true, // life-saver
 ```
 
-For linting (see .oxlintrc.json), we use oxlint + tsgolint. Key rules:
+For linting config, we prefer oxlint + tsgolint for AI verification loop perf. But the recs below work for eslint too:
 
 ```jsonc
+"plugins": ["typescript", "oxc"], // no need to turn on other things. Others might be noisy for AI
 "prefer-ts-expect-error": "error",
 "no-unnecessary-type-assertion": "error",
 "no-unreachable": "error", // we use this instead of typescript's "allowUnreachableCode" (see tsconfig)
@@ -48,7 +49,7 @@ For linting (see .oxlintrc.json), we use oxlint + tsgolint. Key rules:
 "@typescript-eslint/no-unnecessary-condition": ["error", {
   "allowConstantLoopConditions": true,
 }],
-"@typescript-eslint/no-base-to-string": "error", // enabled by default in oxlint. Prevents showing string [object Object]. This also lets us construct IDs from strings, without letting these IDs be subject to string manipulations
+// "@typescript-eslint/no-base-to-string": "error", // enabled by default in oxlint. Prevents showing string [object Object]. This also lets us construct IDs from strings, without letting these IDs be subject to string manipulations
 ```
 
 Some of these configs for preventing extra checks (e.g. erroring on checking a value is null when it can't be) are crucial to shrink the codebase back when a feature's cleaned away. See `types-and-data-modeling.md` on the section for handling nulls for example.
