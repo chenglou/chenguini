@@ -10,7 +10,7 @@ We don't use rules that:
 - drastically slow down checks. We don't use hook rules for example. Even on oxlint
 - are just stylistic nits. And we take an honest look at ourselves to determine what's actually semantically important vs what's just engineering theater
 
-Concretely, for TS config, we enable:
+Concretely, for TS config (use `@typescript/native-preview`. Faster):
 
 ```jsonc
 "strict": true,
@@ -25,7 +25,7 @@ Concretely, for TS config, we enable:
 "noPropertyAccessFromIndexSignature": true, // life-saver
 ```
 
-For linting config, we prefer oxlint + tsgolint for AI verification loop perf. But the recs below work for eslint too:
+For linting, we prefer oxlint + tsgolint npm packages for AI verification loop perf. But the recs below work for eslint too:
 
 ```jsonc
 "plugins": ["typescript", "oxc"], // no need to turn on other things. Others might be noisy for AI
@@ -53,3 +53,11 @@ For linting config, we prefer oxlint + tsgolint for AI verification loop perf. B
 ```
 
 Some of these configs for preventing extra checks (e.g. erroring on checking a value is null when it can't be) are crucial to shrink the codebase back when a feature's cleaned away. See `types-and-data-modeling.md` on the section for handling nulls for example.
+
+Alias in package.json as:
+
+```jsonc
+"scripts": {
+  "check": "tsgo && oxlint --type-aware yourSourceFolder",
+}
+```
