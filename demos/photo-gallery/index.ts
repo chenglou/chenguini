@@ -1,4 +1,4 @@
-<!--
+/*
 ## Features
 - **Non-disruptive, interruptible transitions**. Animations don't block your ability to interact with the UI.
 - **Optionally reduced motion for accessibility**.
@@ -29,82 +29,9 @@ For developers:
 - **Fun debug mode with manual frame stepping**.
 - **Guaranteed minimum render count**. Renders are batched per frame. Also no multi-frames cascading rerenders from wrongly ordered state changes.
 - **Minimal DOM nodes**. A clean, wrapper-divs-free inspector experience.
--->
+*/
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="My Midjourney AI Art">
-  <title>My Midjourney AI Art</title>
-  <meta property="og:image" content="https://cdn.midjourney.com/28df4066-dc0c-4741-a3da-3120c0b547c1/grid_0_384_N.webp"/>
-  <meta property="og:description" content="Gallery of art generated through Midjourney AI" />
-  <style>
-    html {
-      /* inline background noise. No network request & failure & white flash at page load */
-      background-image: url(data:image/png;base64,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);
-      background-color: rgb(1 5 19);
-    }
-    body {
-      overflow-x: hidden; /* 1D mode places images horizontally and exceeds viewport width */
-      margin: 0;
-    }
-    #github-icon {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      transition: transform 0.2s ease-out;
-    }
-    #github-icon:hover {
-      transform: scale(1.1);
-    }
-    .box {
-      position: absolute;
-      overflow: hidden;
-      background-color: rgb(34, 36, 53);
-      border-radius: 16px;
-      box-shadow:
-        0 0px 2px 0 rgba(255, 255, 255, 0.2), /* shadow acting as border. Won't affect layout inside or outside */
-        0 4px 28px 0 rgba(0, 0, 0, 0.4); /* actual shadow */
-      background-size: 100%; /* low-res image added as background-image in JS later. Saves 1 DOM node */
-      background-repeat: no-repeat; /* just in case of floating point whatever */
-    }
-    .box img {
-      width: 100%;
-    }
-    .prompt {
-      position: absolute; /* rest near bottom even when image isn't loaded yet */
-      width: 100%;
-      box-sizing: border-box;
-      padding: 8px 12px 0px 12px;
-      font-family: "DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; /* same as midjourney's */
-      color: rgb(192, 198, 205);
-      font-size: 14px;
-      cursor: text; /* overrides document's cursor when needed (see JS code below) */
-      /* for programmatic multiline clamping */
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-    }
-    .prompt:before {
-      content: '❝';
-      color: rgb(122, 126, 130);
-      padding-right: 2px;
-    }
-  </style>
-</head>
-
-<body>
-
-<a href="https://github.com/chenglou/chenglou.github.io" target="_blank" id="github-icon">
-  <svg width="32" viewbox="0 0 98 96"> <!-- from https://github.com/logos, added viewbox, removed original width & height (aka resized) -->
-    <path fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z" fill="#fff"/>
-  </svg>
-</a>
-
-<script src="photo-gallery-data.js"></script>
-<script>
-'use strict'
+import {photoGalleryData} from './data'
 
 // === generic scheduler & its debugger
 let scheduledRender = false
@@ -121,10 +48,19 @@ function scheduleRender() {
 // 4ms/step for the spring animation's step. Typically 4 steps for 60fps (16.6ms/frame) and 2 for 120fps (8.3ms/frame). Frame time delta varies, so not always true
 // could use 8ms instead, but 120fps' 8.3ms/frame means the computation might not fit in the remaining 0.3ms, which means sometime the simulation step wouldn't even run once, giving the illusion of jank
 const msPerAnimationStep = 4
-function spring(pos, v = 0, k = 290, b = 30) {
+
+type Spring = {
+  pos: number
+  dest: number
+  v: number
+  k: number
+  b: number
+}
+
+function spring(pos: number, v = 0, k = 290, b = 30): Spring {
   return {pos, dest: pos, v, k, b} // k = stiffness, b = damping. Try https://chenglou.me/react-motion/demos/demo5-spring-parameters-chooser/
 }
-function springStep(config) {
+function springStep(config: Spring) {
   // https://blog.maximeheckel.com/posts/the-physics-behind-spring-animations/
   // this seems inspired by https://github.com/chenglou/react-motion/blob/9e3ce95bacaa9a1b259f969870a21c727232cc68/src/stepper.js
   const t = msPerAnimationStep / 1000 // convert to seconds for the physics equation
@@ -138,13 +74,13 @@ function springStep(config) {
 
   config.pos = newPos; config.v = newV
 }
-function springGoToEnd(config) {
+function springGoToEnd(config: Spring) {
   config.pos = config.dest
   config.v = 0
 }
 
 // === generic helpers
-function clamp(min, v, max) {
+function clamp(min: number, v: number, max: number) {
   return v > max ? max : v < min ? min : v
 }
 
@@ -158,7 +94,7 @@ const windowPaddingTop = 40
 const gapTopPeek = 40 // used when programmatically scrolling and wanting to show some gap at the top of a row
 const hitArea1DSizeX = 100 // left and right click region in 1D mode
 
-function colsBoxMaxSizeXF(containerSizeX) {
+function colsBoxMaxSizeXF(containerSizeX: number) {
   const boxMinSizeX = 220 // Make sure that on mobile, this min width is big enough not to show 2 images per row. Also, this won't be respected if view's tiny
   const cols = clamp(1, Math.floor((containerSizeX - boxesGapX) / (boxMinSizeX + boxesGapX)), 7) // half of boxesGapX for container's left and right gap
   const boxMaxSizeX = (containerSizeX - boxesGapX - cols * boxesGapX) / cols
@@ -180,7 +116,31 @@ if (isSafari) {
 const debug = false // toggle this for manually stepping through animation frames (press key A)
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
-let st; {
+type BoxData = {
+  id: string
+  naturalSizeX: number
+  ar: number // aspect ratio
+  sizeX: Spring
+  sizeY: Spring
+  x: Spring
+  y: Spring
+  scale: Spring
+  fxFactor: Spring
+  node: HTMLDivElement
+}
+
+type State = {
+  debugTimestamp: number
+  animatedUntilTime: number | null
+  anchor: number
+  windowSizeX: number
+  scrollY: number
+  pointer: {x: number; y: number}
+  events: {keydown: KeyboardEvent | null; click: MouseEvent | null; mousemove: MouseEvent | null}
+  data: BoxData[]
+}
+
+let st: State; {
   const windowSizeX = document.documentElement.clientWidth
   const windowSizeY = document.documentElement.clientHeight
   const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
@@ -198,20 +158,20 @@ let st; {
       const sizeX = Math.min(d.w, boxMaxSizeX, imgMaxSizeY * ar)
       const sizeY = sizeX / ar + promptSizeY
       // upon zooming into 1D mode (big image), swapping out an img src for a higher-res one would cause a flash of blank image in certain cases. Instead, we put the low-res image as a background-image on the container, then the high-res image as a real img on top. Hand-rolled double buffering...
-      let node = document.createElement('div')
-          node.className = 'box'
-          // node.tabIndex = i + 1 // uncomment when dismiss focus isn't this ugly blue hue anymore
-          node.style.backgroundImage = `url(https://cdn.midjourney.com/${d.id}_384_N.webp)` // 128 is the next smallest. Too small for retina screens
-      let img = document.createElement('img')
-          // img.decoding = 'async' // this sucks. It's slower _and_ still janks the UI. No point
-      let promptNode = document.createElement('figcaption')
-          promptNode.className = 'prompt'
-          promptNode.textContent = d.prompt
+      const node = document.createElement('div')
+      node.className = 'box'
+      // node.tabIndex = i + 1 // uncomment when dismiss focus isn't this ugly blue hue anymore
+      node.style.backgroundImage = `url(https://cdn.midjourney.com/${d.id}_384_N.webp)` // 128 is the next smallest. Too small for retina screens
+      const img = document.createElement('img')
+      // img.decoding = 'async' // this sucks. It's slower _and_ still janks the UI. No point
+      const promptNode = document.createElement('figcaption')
+      promptNode.className = 'prompt'
+      promptNode.textContent = d.prompt
       node.append(img, promptNode)
       return {
         id: d.id,
         naturalSizeX: d.w,
-        ar, // aspect ratio
+        ar,
         sizeX: spring(sizeX),
         sizeY: spring(sizeY), // image + prompt
         x: spring(Math.floor(i / cols) * -windowSizeX - windowSizeX), // unfold from lower left. More visible on long screens
@@ -223,8 +183,8 @@ let st; {
     }),
   }
 }
-function springForEach(f) { // no spring ownership struggle between the spring library above vs consumer; un-inversion of control!
-  for (let d of st.data) {
+function springForEach(f: (s: Spring) => void) { // no spring ownership struggle between the spring library above vs consumer; un-inversion of control!
+  for (const d of st.data) {
     f(d.sizeX); f(d.sizeY); f(d.x); f(d.y); f(d.scale); f(d.fxFactor) // no different than [a, b, c].forEach(f)
   }
 }
@@ -239,31 +199,32 @@ window.addEventListener('click', (e) => {st.events.click = e; scheduleRender()})
 window.addEventListener('mousemove', (e) => {st.events.mousemove = e; scheduleRender()})
 
 // === static DOM initialization. Just 1 in this app. The more you have here the more your app looks like a PDF document. Minimize
-let dummyPlaceholder = document.createElement('div')
+const dummyPlaceholder = document.createElement('div')
 dummyPlaceholder.style.position = 'absolute'
 dummyPlaceholder.style.width = '1px' // make it tiny in case it affects compositing... sigh lamport.azurewebsites.net/pubs/future-of-computing.pdf
 document.body.append(dummyPlaceholder)
+// oxlint-disable-next-line no-unnecessary-condition
 if (debug) {
   document.documentElement.style.background = 'repeating-linear-gradient(#e66465 0px, #9198e5 300px)'
   document.documentElement.style.height = '100%'
 }
 
 // === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either)
-function hitTest2DMode(data, pointerX, pointerY) {
+function hitTest2DMode(data: BoxData[], pointerX: number, pointerY: number) {
   for (let i = 0; i < data.length; i++) {
-    let {x, y, sizeX, sizeY} = data[i]
+    const {x, y, sizeX, sizeY} = data[i]!
     if (x.dest <= pointerX && pointerX < x.dest + sizeX.dest && y.dest <= pointerY && pointerY < y.dest + sizeY.dest) return i // pointer on this box
   }
   return null
 }
-function hitTest1DMode(data, focused, windowSizeX, pointerX) {
+function hitTest1DMode(data: BoxData[], focused: number, windowSizeX: number, pointerX: number) {
   // allow spamming clicks without accidentally clicking on an empty region on left/right side or newly focused image during transition (and dismiss 1D mode)
-  return focused > 0 && 0 <= pointerX /* might be -Infinity */ && pointerX <= hitArea1DSizeX ? Math.max(0, focused - 1) // left
+  return focused > 0 && pointerX >= 0 /* might be -Infinity */ && pointerX <= hitArea1DSizeX ? Math.max(0, focused - 1) // left
     : focused < data.length - 1 && pointerX >= windowSizeX - hitArea1DSizeX ? Math.min(data.length - 1, focused + 1) // right
     : null
 }
 
-function render(now) {
+function render(now: number) {
   // === DOM reads
   const newWindowSizeX = document.documentElement.clientWidth // excludes scroll bar & invariant under safari pinch zoom
   const windowSizeY = document.documentElement.clientHeight // same
@@ -274,19 +235,20 @@ function render(now) {
   const hashImgId = window.location.hash.slice(1)
 
   const data = st.data
-  let focused = null; for (let i = 0; i < data.length; i++) if (data[i].id === hashImgId) focused = i
+  let focused: number | null = null; for (let i = 0; i < data.length; i++) if (data[i]!.id === hashImgId) focused = i
 
   // === handle inputs
   // keydown
   const inputCode = st.events.keydown == null ? null : st.events.keydown.code
 
+  // oxlint-disable-next-line no-unnecessary-condition
   if (debug) {
     if (inputCode === 'KeyA') st.debugTimestamp += 1000 / 60
     now = st.debugTimestamp
   }
 
   // click
-  let clickedTarget = null
+  let clickedTarget: EventTarget | null = null
   if (st.events.click != null) {
     // needed to update coords even when we already track mousemove. E.g. in Chrome, right click context menu, move elsewhere, then click to dismiss. BAM, mousemove triggers with stale/wrong (??) coordinates... Click again without moving, and now you're clicking on the wrong thing
     clickedTarget = st.events.click.target
@@ -303,16 +265,16 @@ function render(now) {
   const pointerXLocal = st.pointer.x +/*toLocal*/currentScrollX, pointerYLocal = st.pointer.y +/*toLocal*/currentScrollY
 
   // keys
-  let newFocused =
+  let newFocused: number | null =
     inputCode === 'Escape' ? null
-    : (inputCode === 'ArrowLeft' || inputCode === 'ArrowRight') && focused == null ? 0
+    : focused == null ? (inputCode === 'ArrowLeft' || inputCode === 'ArrowRight') ? 0 : focused
     : inputCode === 'ArrowLeft' ? Math.max(0, focused - 1)
     : inputCode === 'ArrowRight' ? Math.min(data.length - 1, focused + 1)
     : focused
   // pointer
-  let selectTarget = null
+  let selectTarget: HTMLElement | null = null
   if (clickedTarget != null) { // clicked
-    if (clickedTarget.tagName === 'FIGCAPTION') { // select the whole prompt
+    if (clickedTarget instanceof HTMLElement && clickedTarget.tagName === 'FIGCAPTION') { // select the whole prompt
       selectTarget = clickedTarget
     } else if (focused == null) { // in 2D grid mode. Find the box the pointer's on
       newFocused = hitTest2DMode(data, pointerXLocal, pointerYLocal) ?? newFocused
@@ -323,48 +285,49 @@ function render(now) {
 
   // === layout & cursor
   const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(newWindowSizeX)
-  let boxes2DSizeX = [], boxes2DSizeY = [], rowsTop = [windowPaddingTop] // length: number of rows + 1
+  const boxes2DSizeX: number[] = [], boxes2DSizeY: number[] = [], rowsTop: number[] = [windowPaddingTop] // length: number of rows + 1
   { // first pass over data to set final 2D dimensions and row height (for vertical centering in 2D & total scrollbar height)
     let rowMaxSizeY = 0
     for (let i = 0; i < data.length; i++) {
-      let d = data[i]
+      const d = data[i]!
+      const {naturalSizeX, ar} = d
       const imgMaxSizeY =
-        d.ar === 1 ? boxMaxSizeX * 0.85 // square aspect ratio area too big. Shrink it
-        : d.ar < 1 ? boxMaxSizeX * 1.05 // vertical images look a bit small. Grow it
+        ar === 1 ? boxMaxSizeX * 0.85 // square aspect ratio area too big. Shrink it
+        : ar < 1 ? boxMaxSizeX * 1.05 // vertical images look a bit small. Grow it
         : boxMaxSizeX
-      const sizeX = Math.min(d.naturalSizeX, boxMaxSizeX, imgMaxSizeY * d.ar)
-      const sizeY = sizeX / d.ar + promptSizeY
+      const sizeX = Math.min(naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
+      const sizeY = sizeX / ar + promptSizeY
       boxes2DSizeX.push(sizeX)
       boxes2DSizeY.push(sizeY)
       rowMaxSizeY = Math.max(rowMaxSizeY, sizeY)
       if (i % cols === cols - 1 || i === data.length - 1) { // last box of the row or last box ever
-        rowsTop.push(rowsTop.at(-1) + rowMaxSizeY + boxesGapY)
+        rowsTop.push(rowsTop.at(-1)! + rowMaxSizeY + boxesGapY)
         rowMaxSizeY = 0
       }
     }
   }
-  let cursor
+  let cursor: string
   let newAnchor = st.anchor
   let adjustedScrollTop = currentScrollY
   const hoverMagnetFactor = 40
   if (newFocused == null) { // 2D mode
     if (focused != null) { // just dismissed 1D mode
-      const focusedTop = rowsTop[Math.floor(focused / cols)]
+      const focusedTop = rowsTop[Math.floor(focused / cols)]!
       // if the dismissed box isn't fully shown, scroll to it (later after the render code block)
-      if (focusedTop <= currentScrollY || focusedTop + boxes2DSizeY[focused] >= currentScrollY + windowSizeY) {
+      if (focusedTop <= currentScrollY || focusedTop + boxes2DSizeY[focused]! >= currentScrollY + windowSizeY) {
         adjustedScrollTop = focusedTop - boxesGapY - gapTopPeek // Peek a little higher to show the previous row
       }
     }
 
     for (let i = 0; i < data.length; i++) { // calculate boxes positions
-      let d = data[i]
-      const sizeX = boxes2DSizeX[i], sizeY = boxes2DSizeY[i]
+      const d = data[i]!
+      const sizeX = boxes2DSizeX[i]!, sizeY = boxes2DSizeY[i]!
       const currentRow = Math.floor(i / cols)
-      const rowMaxSizeY = rowsTop[currentRow + 1] - boxesGapY - rowsTop[currentRow] // this is restoring the rowMaxSizeY info above, kinda weird
+      const rowMaxSizeY = rowsTop[currentRow + 1]! - boxesGapY - rowsTop[currentRow]! // this is restoring the rowMaxSizeY info above, kinda weird
       d.sizeX.dest = sizeX
       d.sizeY.dest = sizeY
       d.x.dest = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - sizeX) / 2 // center horizontally
-      d.y.dest = rowsTop[currentRow] + (rowMaxSizeY - sizeY) / 2
+      d.y.dest = rowsTop[currentRow]! + (rowMaxSizeY - sizeY) / 2
       d.scale.dest = 1
       d.fxFactor.dest = 1
     }
@@ -373,17 +336,17 @@ function render(now) {
     if (hit == null) cursor = 'auto'
     else { // hovering over a box. Adjust position
       cursor = 'zoom-in'
-      let {x, y, sizeX, sizeY, scale} = data[hit]
+      const {x, y, sizeX, sizeY, scale} = data[hit]!
       x.dest += (pointerXLocal - (x.dest + sizeX.dest / 2)) / hoverMagnetFactor
       y.dest += (pointerYLocal - (y.dest + sizeY.dest / 2)) / hoverMagnetFactor
       scale.dest = 1.02
     }
     // if layout shifted, keep the boxes near the same place to prevent annoying layout jumps while viewing
-    const anchorY = data[st.anchor].y.dest - gapTopPeek
+    const anchorY = data[st.anchor]!.y.dest - gapTopPeek
     if (newWindowSizeX !== st.windowSizeX) adjustedScrollTop = Math.max(0, anchorY) // resized; maintain position!
     if (adjustedScrollTop !== st.scrollY && Math.abs(anchorY -/*toLocal*/adjustedScrollTop) > windowSizeY / 10) { // find new anchor if the current one moved too much
       for (newAnchor = 0; newAnchor < data.length; newAnchor += cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
-        let d = data[newAnchor]
+        const d = data[newAnchor]!
         // find 1st box whose bottom exceeds 20% of window height
         if (d.y.dest + d.sizeY.dest -/*toLocal*/adjustedScrollTop > windowSizeY / 5) break
       }
@@ -394,8 +357,9 @@ function render(now) {
 
     let currentLeft = hitArea1DSizeX + boxes1DGapX // start from the right edge of the left box and...
     for (let i = newFocused - 1; i >= 0; i--) { // ...iterate til we get the left edge of the very first box
-      let d = data[i]
-      const imgSizeX = Math.min(d.naturalSizeX, box1DMaxSizeX, img1DSizeY * d.ar) * 0.7
+      const d = data[i]!
+      const {naturalSizeX, ar} = d
+      const imgSizeX = Math.min(naturalSizeX, box1DMaxSizeX, img1DSizeY * ar) * 0.7
       currentLeft -= imgSizeX + boxes1DGapX
     }
 
@@ -404,9 +368,10 @@ function render(now) {
       : inputCode === 'ArrowRight' && focused === data.length - 1 ? -2 * 1000
       : 0
     for (let i = 0; i < data.length; i++) { // calculate boxes positions
-      let d = data[i]
-      const imgSizeX = Math.min(d.naturalSizeX, box1DMaxSizeX, img1DSizeY * d.ar) * (i === newFocused ? 1 : 0.7)
-      const boxSizeY = imgSizeX / d.ar + prompt1DSizeY
+      const d = data[i]!
+      const {naturalSizeX, ar} = d
+      const imgSizeX = Math.min(naturalSizeX, box1DMaxSizeX, img1DSizeY * ar) * (i === newFocused ? 1 : 0.7)
+      const boxSizeY = imgSizeX / ar + prompt1DSizeY
       d.sizeX.dest = imgSizeX
       d.sizeY.dest = boxSizeY
       d.y.dest = Math.max(windowPaddingTop, (windowSizeY - boxSizeY) / 2) +/*toLocal*/adjustedScrollTop
@@ -422,7 +387,7 @@ function render(now) {
     if (hit == null) cursor = 'zoom-out'
     else { // hovering on left or right image
       cursor = 'zoom-in'
-      let {x, y, sizeX, sizeY, scale, fxFactor} = data[hit]
+      const {x, y, sizeX, sizeY, scale, fxFactor} = data[hit]!
       x.dest += (pointerXLocal - (x.dest + sizeX.dest / 2)) / hoverMagnetFactor
       y.dest += (pointerYLocal - (y.dest + sizeY.dest / 2)) / hoverMagnetFactor
       scale.dest = 1.02
@@ -430,7 +395,7 @@ function render(now) {
     }
   }
   // ensure that no matter how the scrolling is abruptly adjusted, the boxes on the screen don't suddenly jump too. When going 1D->2D mode where the dismissed image might be far from the initial one, or when resizing causes layout shifts, the boxes now stay unaffected!
-  for (let {y} of data) y.pos += adjustedScrollTop - currentScrollY
+  for (const {y} of data) y.pos += adjustedScrollTop - currentScrollY
 
   // === animation
   let newAnimatedUntilTime = st.animatedUntilTime ?? now
@@ -448,7 +413,7 @@ function render(now) {
 
   // === commit state
   st.events.keydown = st.events.click = st.events.mousemove = null
-  st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
+  st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null // oxlint-disable-line no-unnecessary-condition
   st.anchor = newAnchor
   st.windowSizeX = newWindowSizeX
   st.scrollY = adjustedScrollTop
@@ -456,8 +421,9 @@ function render(now) {
   // === DOM writes
   const browserUIMaxSizeTop = 100, browserUIMaxSizeBottom = 150 // browsers UI like Safari are transluscent. Random conservative numbers
   for (let i = 0; i < data.length; i++) {
-    let d = data[i]
-    let {node} = d, img = node.children[0], prompt = node.children[1]
+    const d = data[i]!
+    const {node} = d
+    const img = node.children[0] as HTMLImageElement, prompt = node.children[1] as HTMLElement
     if ( // occlusion culling, aka only draw what's visible on screen (aka "virtualization")
       d.y.pos -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
       d.y.pos + d.sizeY.pos -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
@@ -468,25 +434,27 @@ function render(now) {
       node.style.height = `${d.sizeY.pos}px`
       node.style.transform = `translate3d(${d.x.pos}px,${d.y.pos}px,0) scale(${d.scale.pos})` // safari now anti-aliases for hover, but then zoom in janks on big displays...
       // we can't afford fxFactor & blur for all pics; too expensive for Safari & Chrome. E.g. when zomming out of a photo, keep scrolling; Chrome stops render on Studio Display
-      node.style.filter = newFocused != null && i === newFocused - 1 || i === newFocused || i === newFocused + 1
+      node.style.filter = newFocused != null && (i === newFocused - 1 || i === newFocused || i === newFocused + 1)
         ? `brightness(${d.fxFactor.pos * 100}%) blur(${Math.max(0, 6 - d.fxFactor.pos * 6)}px)` // blur these 3 only
         : `brightness(${d.fxFactor.pos * 100}%)` // blur of unrelated pics is too fast during transition from/to 1D mode to be seen anyway
-      if (debug) node.style.outline = i === newAnchor ? '2px solid rgba(255, 255, 0, 0.8)' : 'none'
+      if (debug) node.style.outline = i === newAnchor ? '2px solid rgba(255, 255, 0, 0.8)' : 'none' // oxlint-disable-line no-unnecessary-condition
       prompt.style.top = `${d.sizeX.pos / d.ar}px` // right below img's sizeY
 
       if (i === newFocused) {
-        node.style.zIndex = data.length + 1 // guaranteed above everything
+        node.style.zIndex = String(data.length + 1) // guaranteed above everything
         prompt.style.overflowY = 'auto'
         prompt.style.height = `${prompt1DSizeY - promptPaddingBottom}px`
-        prompt.style.lineClamp = prompt.style.webkitLineClamp = 999
+        prompt.style.setProperty('line-clamp', '999')
+        prompt.style.webkitLineClamp = '999'
         img.style.display = 'block' // not 'inline' (img's default), which adds whitespace below
-        let src = `https://cdn.midjourney.com/${d.id}.webp`
-        if (!stillAnimating && img.src !== src) img.src = src // load the full res image
+        const src = `https://cdn.midjourney.com/${d.id}.webp`
+        if (!stillAnimating && img.src !== src) img.src = src // oxlint-disable-line no-unnecessary-condition -- load the full res image
       } else {
-        node.style.zIndex = i + 1 // simple proper z-index management
+        node.style.zIndex = String(i + 1) // simple proper z-index management
         prompt.style.overflowY = 'hidden'
         prompt.style.height = `${promptSizeY - promptPaddingBottom}px`
-        prompt.style.lineClamp = prompt.style.webkitLineClamp = 2
+        prompt.style.setProperty('line-clamp', '2')
+        prompt.style.webkitLineClamp = '2'
         img.style.display = 'none' // hide full res image for perf (yes it makes a difference, even on M1, with Studio Display)
       }
       if (node.parentNode == null) document.body.appendChild(node) // if previously absent, add
@@ -495,29 +463,25 @@ function render(now) {
 
   document.body.style.cursor = cursor
   document.body.style.overflowY = newFocused == null ? 'auto' : 'hidden'
-  dummyPlaceholder.style.height = `${rowsTop.at(-1)}px` // Chrome has race conditon if scrollTo is called before setting a longer dummy height
+  dummyPlaceholder.style.height = `${rowsTop.at(-1)!}px` // Chrome has race conditon if scrollTo is called before setting a longer dummy height
 
   // === side effects
   if (selectTarget != null) {
-    let selection = window.getSelection()
-    let range = document.createRange()
+    const selection = window.getSelection()
+    const range = document.createRange()
     range.selectNodeContents(selectTarget)
-    selection.removeAllRanges()
-    selection.addRange(range)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
   }
   if (adjustedScrollTop !== currentScrollY) {
     // see comment about isSafari above
-    (isSafari ? document.body : window).scrollTo({top: adjustedScrollTop}) // will trigger scrolling, thus next frame's render
+    ;(isSafari ? document.body : window).scrollTo({top: adjustedScrollTop}) // will trigger scrolling, thus next frame's render
   }
   if (newFocused !== focused) {
-    window.history.pushState(null, '', `${window.location.pathname}${window.location.search}${newFocused == null ? '' : '#' + data[newFocused].id}`)
+    window.history.pushState(null, '', `${window.location.pathname}${window.location.search}${newFocused == null ? '' : '#' + data[newFocused]!.id}`)
   }
 
   return stillAnimating
 }
 
 scheduleRender()
-</script>
-</body>
-
-</html>

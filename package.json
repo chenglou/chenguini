@@ -1,0 +1,12 @@
+{
+  "name": "vibescript",
+  "private": true,
+  "scripts": {
+    "check": "tsgo && oxlint --type-aware demos/photo-gallery"
+  },
+  "devDependencies": {
+    "oxlint": "latest",
+    "oxlint-tsgolint": "latest",
+    "@typescript/native-preview": "latest"
+  }
+}

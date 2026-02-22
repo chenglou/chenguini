@@ -1,7 +1,14 @@
-const photoGalleryData = [
-  {id: 'd228330c-7364-497b-994f-a37467ae436a/0_0', w:  2048, h: 2048 , prompt: `Miniature watermelon delicately balanced on fingertip`},
-  {id: '7b5301ca-ef01-44bd-8bcc-4473c945aaaf/0_0', w:  1792, h: 2688 , prompt: `Hourglass heart, liquid, grand canyon background, fleeting, ephemerality of time`},
-  {id: '96ff81dd-fa46-43c0-b681-35b7cd8eb700/0_0', w:  1792, h: 2688 , prompt: `A phone held extremely close against an xray of a skeleton sitting on a sofa, side by side view`},
+export type PhotoData = {
+  id: string
+  w: number
+  h: number
+  prompt: string
+}
+
+export const photoGalleryData: PhotoData[] = [
+  {id: 'd228330c-7364-497b-994f-a37467ae436a/0_0', w:  2048, h: 2048 , prompt: `Miniature watermelon delicately balanced on fingertip`},
+  {id: '7b5301ca-ef01-44bd-8bcc-4473c945aaaf/0_0', w:  1792, h: 2688 , prompt: `Hourglass heart, liquid, grand canyon background, fleeting, ephemerality of time`},
+  {id: '96ff81dd-fa46-43c0-b681-35b7cd8eb700/0_0', w:  1792, h: 2688 , prompt: `A phone held extremely close against an xray of a skeleton sitting on a sofa, side by side view`},
   {id: 'd9fb18cf-a37e-4b1a-b10e-678855722fa3/0_0', w: 1632, h: 2912, prompt: `Japanese girl, very detailed, close up, sharp skin, kodak camera`},
   {id: '077ddfbf-4f1a-437f-909e-073ec48beae0/0_0', w: 1344, h: 896, prompt: `Eclipse in a tiny keychain bottle, dangling around a walking woman's purse, dynamic pose, macro photography`},
   {id: 'e1d06d80-68ca-4081-9ca2-73f5ba7333cc/0_3', w: 1536, h: 768, prompt: `Tetris monuments in lord of the rings setting`},
