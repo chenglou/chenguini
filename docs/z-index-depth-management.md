@@ -61,15 +61,14 @@ When elements within a component need to stack relative to each other and DOM or
 let d = 1
 const below = d++
 const above = d++
-<div style={{ isolation: 'isolate' }}>
-  <header style={{ position: 'relative', zIndex: above }}>header</header>
-  <main style={{ position: 'relative', zIndex: below }}>content</main>
+<div style={{ isolation: 'isolate' }}> {/* second highest */}
+  <header style={{ position: 'relative', zIndex: above }}>header</header> {/* third highest */}
+  <main style={{ position: 'relative', zIndex: below }}>content</main> {/* lowest */}
 </div>
+<div>sibling</div> {/* highest — isolation prevents header's z-index from escaping */}
 ```
 
 (It's also ok to directly use constants like `1` and `2` instead of `d++` _locally_ for convenience, since nothing escapes and cross-pollutes).
-
-**[Interactive demo](z-index-depth-management-demo.html)** — visualize `isolation: isolate` in action.
 
 **Note**: hopefully it's clear that the global `Z.ts` is just the same as how we manage component-local stacking context values, except it's at the "root" and doesn't belong to a specific root component.
 
