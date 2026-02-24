@@ -1,38 +1,9 @@
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Story of Your Life</title>
-  <style>
-    body {
-      background-color: #22272e;
-      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
-    }
-    canvas {
-      position: absolute;
-    }
-    #tooltip {
-      position: absolute;
-      display: none;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px 0 black;
-      padding: 8px 16px;
-      color: #ffffff;
-      background-color: #6e7681;
-      white-space: nowrap;
-      font-size: 14px;
-      border: none;
-      outline: none;
-      width: 220px;
-      text-align: center;
-    }
-    #tooltip::placeholder {
-      color: #bbbbbb;
-    }
-  </style>
-</head>
-<body>
-<script>
-'use strict'
+/*
+TODOs:
+- drag today dot
+- tooltip
+- gl?
+*/
 
 const life = Math.floor(75 * 365.25)
 const today = new Date().getDay() // sunday = 0
@@ -40,7 +11,7 @@ const age = Math.floor((31 * 365.25 + 6 * 30.5 - 10) / 7) * 7 + today - 1 // rou
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 // === generic helpers
-function hash(n) { // random for a seed value n. For fun coloring, debugging, etc
+function hash(n: number) { // random for a seed value n. For fun coloring, debugging, etc
   n = Math.imul((n >>> 16) ^ n, 0x21f0aaad);
   n = Math.imul((n >>> 15) ^ n, 0x735a2d97);
   return (((n >>> 15) ^ n) >>> 0) / 0x100000000;
@@ -48,8 +19,10 @@ function hash(n) { // random for a seed value n. For fun coloring, debugging, et
 
 // === constant layout metrics. The rest is dynamic
 const gridGap = 8
-const leftBlockRadius = [99, 0, 0, 99], rightBlockRadius = [0, 99, 99, 0], pillRadius = [99, 99, 99, 99]
-function radius(i) {
+const leftBlockRadius: [number, number, number, number] = [99, 0, 0, 99]
+const rightBlockRadius: [number, number, number, number] = [0, 99, 99, 0]
+const pillRadius: [number, number, number, number] = [99, 99, 99, 99]
+function radius(i: number): [number, number, number, number] | 0 {
   if (i % 7 === 0) return leftBlockRadius
   if (i % 7 === 6) return rightBlockRadius
   return 0
@@ -57,16 +30,31 @@ function radius(i) {
 
 // === state
 const customDot_ = localStorage.getItem('customDot')
-let customDot = customDot_ == null ? null : parseInt(customDot_)
-let customDotValue = localStorage.getItem('customDotValue')
-/** @type 'down' | 'up' | 'firstDown' */
-let pointerState = 'up'
-let pointer = {x: -Infinity, y: -Infinity} // btw, on page load, there's no way to render a first cursor state =(,
-let events = {click: null, input: null, mouseup: null, mousemove: null, pointerdown: null}
-let canvas = document.createElement('canvas')
-let ctx = canvas.getContext('2d')
+type State = {
+  customDot: number | null
+  customDotValue: string | null
+  pointerState: 'down' | 'up' | 'firstDown'
+  pointer: {x: number; y: number}
+  events: {
+    click: MouseEvent | null
+    input: Event | null
+    mouseup: MouseEvent | null
+    mousemove: MouseEvent | null
+    pointerdown: PointerEvent | null
+  }
+}
 
-let tooltip = document.createElement('input')
+const st: State = {
+  customDot: customDot_ == null ? null : parseInt(customDot_),
+  customDotValue: localStorage.getItem('customDotValue'),
+  pointerState: 'up',
+  pointer: {x: -Infinity, y: -Infinity}, // btw, on page load, there's no way to render a first cursor state =(
+  events: {click: null, input: null, mouseup: null, mousemove: null, pointerdown: null},
+}
+const canvas = document.createElement('canvas')
+const ctx = canvas.getContext('2d')!
+
+const tooltip = document.createElement('input')
 tooltip.id = 'tooltip'
 tooltip.placeholder = 'Set goal...'
 
@@ -87,14 +75,14 @@ function scheduleRender() {
 // === events
 // pointermove doesn't work on android, pointerdown isn't fired on Safari on the first left click after dismissing context menus, mousedown doesn't trigger properly on mobile, pointerup isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event. Tldr there's no pointer event that works cross-browser that can replace mouse & touch events.
 window.addEventListener('resize', () => scheduleRender())
-window.addEventListener('click', (e) => {events.click = e; scheduleRender()})
-tooltip.addEventListener('input', (e) => {events.input = e; scheduleRender()})
-window.addEventListener("mouseup", (e) => {events.mouseup = e; scheduleRender()})
-window.addEventListener('mousemove', (e) => {events.mousemove = e; scheduleRender()})
-window.addEventListener('pointerdown', (e) => {events.pointerdown = e; scheduleRender()})
+window.addEventListener('click', (e) => {st.events.click = e; scheduleRender()})
+tooltip.addEventListener('input', (e) => {st.events.input = e; scheduleRender()})
+window.addEventListener("mouseup", (e) => {st.events.mouseup = e; scheduleRender()})
+window.addEventListener('mousemove', (e) => {st.events.mousemove = e; scheduleRender()})
+window.addEventListener('pointerdown', (e) => {st.events.pointerdown = e; scheduleRender()})
 
 // === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either). Use the dynamic area here for once
-function hitTest(blockSize, countX, countY, gridLeft, gridTop, gridFinalSizeX, gridFinalSizeY, pointer) {
+function hitTest(blockSize: number, countX: number, _countY: number, gridLeft: number, gridTop: number, gridFinalSizeX: number, gridFinalSizeY: number, pointer: {x: number; y: number}) {
   const px = pointer.x-/*toLocal*/gridLeft
   const py = pointer.y-/*toLocal*/gridTop
   if (px < 0 || px > gridFinalSizeX || py < 0 || py > gridFinalSizeY) return null
@@ -105,26 +93,26 @@ function render() {
   // === step 0: process events
   // click
   let clicked = false
-  if (events.click != null) {
+  if (st.events.click != null) {
     clicked = true
     // needed to update coords even when we already track mousemove. E.g. in Chrome, right click context menu, move elsewhere, then click to dismiss. BAM, mousemove triggers with stale/wrong (??) coordinates... Click again without moving, and now you're clicking on the wrong thing
-    pointer.x = events.click.pageX - window.scrollX; pointer.y = events.click.pageY - window.scrollY
+    st.pointer.x = st.events.click.pageX - window.scrollX; st.pointer.y = st.events.click.pageY - window.scrollY
   }
   // input
-  const newCustomDotValue = events.input == null ? null : events.input.target.value
+  const newCustomDotValue = st.events.input == null ? null : (st.events.input.target as HTMLInputElement).value
   // mouseup
-  if (events.mouseup != null) pointerState = 'up'
+  if (st.events.mouseup != null) st.pointerState = 'up'
   // mousemove
-  if (events.mousemove != null) {
+  if (st.events.mousemove != null) {
     // when scrolling (which might schedule a render), a container's mousemove doesn't trigger, so the pointer's local coordinates are stale
     // this means we should only use pointer's global coordinates, which is always right (thus the subtraction of scroll)
-    pointer.x = events.mousemove.pageX -/*toGlobal*/window.scrollX; pointer.y = events.mousemove.pageY -/*toGlobal*/window.scrollY
+    st.pointer.x = st.events.mousemove.pageX -/*toGlobal*/window.scrollX; st.pointer.y = st.events.mousemove.pageY -/*toGlobal*/window.scrollY
     // btw, pointer can exceed document bounds, e.g. dragging reports back out-of-bound, legal negative values
   }
   // pointerdown
-  if (events.pointerdown != null) {
-    pointerState = 'firstDown'
-    pointer.x = events.pointerdown.pageX - window.scrollX; pointer.y = events.pointerdown.pageY - window.scrollY
+  if (st.events.pointerdown != null) {
+    st.pointerState = 'firstDown'
+    st.pointer.x = st.events.pointerdown.pageX - window.scrollX; st.pointer.y = st.events.pointerdown.pageY - window.scrollY
   }
 
   // === step 1: batched DOM reads (to avoid accidental DOM read & write interleaving)
@@ -144,11 +132,11 @@ function render() {
   const gridTop = (windowSizeY - gridFinalSizeY) / 2 // center
 
   // === step 2: handle inputs-related state change
-  const hover = hitTest(blockSize, countX, countY, gridLeft, gridTop, gridFinalSizeX, gridFinalSizeY, pointer)
+  const hover = hitTest(blockSize, countX, countY, gridLeft, gridTop, gridFinalSizeX, gridFinalSizeY, st.pointer)
   const newCustomDot =
-    clicked && hover === customDot ? null
+    clicked && hover === st.customDot ? null
     : clicked ? hover
-    : customDot
+    : st.customDot
   const cursor =
     hover == null ? 'auto'
     : hover === age || hover === newCustomDot ? 'move'
@@ -158,10 +146,10 @@ function render() {
   // no blurry canvas: coderwall.com/p/vmkk6a/how-to-make-the-canvas-not-look-like-crap-on-retina
   canvas.width = gridFinalSizeX * devicePixelRatio // different than canvas.style.width. Btw this clears the canvas as well
   canvas.height = gridFinalSizeY * devicePixelRatio
-  canvas.style.width = gridFinalSizeX
-  canvas.style.height = gridFinalSizeY
-  canvas.style.left = gridLeft
-  canvas.style.top = gridTop
+  canvas.style.width = `${gridFinalSizeX}px`
+  canvas.style.height = `${gridFinalSizeY}px`
+  canvas.style.left = `${gridLeft}px`
+  canvas.style.top = `${gridTop}px`
   ctx.scale(devicePixelRatio, devicePixelRatio)
   ctx.clearRect(0, 0, gridFinalSizeX, gridFinalSizeY)
 
@@ -195,7 +183,7 @@ function render() {
     ctx.stroke()
   }
 
-  function drawOneDot(i) {
+  function drawOneDot(i: number) {
     const x = i % countX * blockSize
     const y = Math.floor(i / countX) * blockSize
     ctx.beginPath()
@@ -225,12 +213,12 @@ function render() {
   }
 
   document.body.style.cursor = cursor
-  tooltip.style.left = pointer.x - 110
-  tooltip.style.top = pointer.y - 36
+  tooltip.style.left = `${st.pointer.x - 110}px`
+  tooltip.style.top = `${st.pointer.y - 36}px`
   if (hover === age) {
     tooltip.style.display = 'block'
     tooltip.disabled = true
-    tooltip.value = `You're ${Math.floor(age / 365.25)}, born in ${months[Math.floor(age % 365.25 / 30)]}`
+    tooltip.value = `You're ${Math.floor(age / 365.25)}, born in ${months[Math.floor(age % 365.25 / 30)]!}`
   } else if (hover === life - 1) {
     tooltip.style.display = 'block'
     tooltip.disabled = true
@@ -238,27 +226,19 @@ function render() {
   } else {
     tooltip.style.display = hover != null && hover === newCustomDot ? 'block' : 'none'
     tooltip.disabled = false
-    tooltip.value = newCustomDotValue == null ? customDotValue : newCustomDotValue
+    tooltip.value = newCustomDotValue ?? st.customDotValue ?? ''
   }
   // === commit state
-  const customDotChanged = customDot !== newCustomDot
-  const customDotValueChanged = newCustomDotValue != null && customDotValue !== newCustomDotValue
-  if (customDotChanged) customDot = newCustomDot
-  if (customDotValueChanged) customDotValue = newCustomDotValue
-  events.click = events.input = events.mouseup = events.mousemove = events.pointerdown = null
+  const customDotChanged = st.customDot !== newCustomDot
+  const customDotValueChanged = newCustomDotValue != null && st.customDotValue !== newCustomDotValue
+  if (customDotChanged) st.customDot = newCustomDot
+  if (customDotValueChanged) st.customDotValue = newCustomDotValue
+  st.events.click = st.events.input = st.events.mouseup = st.events.mousemove = st.events.pointerdown = null
 
   // === side effects
   tooltip.focus()
-  if (customDotChanged) localStorage.setItem('customDot', newCustomDot) // TODO: validate (e.g. out of range)
-  if (customDotValueChanged) localStorage.setItem('customDotValue', newCustomDotValue) // TODO: validate (e.g. out of range)
+  if (customDotChanged) localStorage.setItem('customDot', String(newCustomDot)) // TODO: validate (e.g. out of range)
+  if (customDotValueChanged) localStorage.setItem('customDotValue', String(newCustomDotValue)) // TODO: validate (e.g. out of range)
 }
 
 scheduleRender()
-/*
-TODOs:
-- drag today dot
-- tooltip
-- gl?
-*/
-</script>
-</body>
