@@ -1,0 +1,62 @@
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PiP Corner Snap (Two-Spring)</title>
+  <style>
+    body {
+      font: 14px system-ui;
+      user-select: none;
+      -webkit-user-select: none;
+      background-color: #1a1a2e;
+      overflow: hidden;
+      margin: 0;
+      height: 100vh;
+    }
+    .pip {
+      position: absolute;
+      width: 120px;
+      height: 80px;
+      border-radius: 12px;
+      background: #e94560;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-weight: 600;
+      font-size: 13px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .corner-marker {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      transform: translate(-50%, -50%);
+    }
+    .rest-marker {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(100,200,255,0.85);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div id="info">
+  Two-spring corner snap. Drag and flick the card toward a corner.<br>
+  Decay rest = <span style="color:rgba(100,200,255,0.85)">blue dot</span> &middot;
+  Corners = <span style="color:rgba(255,255,255,0.5)">white dots</span>
+</div>
+<script src="./index.ts" type="module"></script>
+</body>

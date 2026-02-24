@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Shadow Test - 2D Path Tracer</title>
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  canvas {
+    margin: 0;
+    padding: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 0;
+  }
+  .styled-div {
+    position: absolute;
+    border-radius: 10px;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    color: white;
+    padding: 10px;
+    margin: 10px;
+    z-index: 1;
+    pointer-events: none;
+  }
+  #grid img {
+    position: absolute;
+    object-fit: cover;
+    border-radius: 10px;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- Mix of colorful divs and images -->
+<div class="styled-div" style="width:200px;height:280px;background:#e74c3c;top:40px;left:60px;"></div>
+<div class="styled-div" style="padding:0;width:180px;height:180px;top:50px;left:340px;background-size:cover;background-image:url('https://picsum.photos/seed/21/384/384');"></div>
+<div class="styled-div" style="width:240px;height:160px;background:#2ecc71;top:60px;left:620px;"></div>
+<div class="styled-div" style="padding:0;width:160px;height:260px;top:40px;left:960px;background-size:cover;background-image:url('https://picsum.photos/seed/23/320/520');"></div>
+<div class="styled-div" style="width:220px;height:200px;background:#9b59b6;top:380px;left:60px;"></div>
+<div class="styled-div" style="padding:0;width:280px;height:160px;top:300px;left:380px;background-size:cover;background-image:url('https://picsum.photos/seed/25/560/320');"></div>
+<div class="styled-div" style="width:200px;height:220px;background:#e67e22;top:280px;left:760px;"></div>
+<div class="styled-div" style="padding:0;width:260px;height:180px;top:540px;left:240px;background-size:cover;background-image:url('https://picsum.photos/seed/28/520/360');"></div>
+<div class="styled-div" style="width:200px;height:200px;background:#0984e3;top:520px;left:600px;"></div>
+
+<script src="./index.ts" type="module"></script>
+</body>
+</html>

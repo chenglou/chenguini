@@ -18,5 +18,5 @@
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true
   },
-  "include": ["demos/photo-gallery/**/*.ts", "demos/life-calendar/**/*.ts"],
+  "include": ["demos/photo-gallery/**/*.ts", "demos/life-calendar/**/*.ts", "demos/draggable-cards/**/*.ts", "demos/shadow-test-demo/**/*.ts", "demos/gesture-flick-snap-target/**/*.ts"],
 }
