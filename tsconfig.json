@@ -19,5 +19,5 @@
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true
   },
-  "include": ["demos/photo-gallery/**/*.ts", "demos/life-calendar/**/*.ts", "demos/draggable-cards/**/*.ts", "demos/global-illumination-pathtracer/**/*.ts", "demos/global-illumination-fast-approx/**/*.ts", "demos/gesture-flick-snap-target/**/*.ts", "demos/predictive-keyframes/**/*.ts", "demos/mobile-test-standalone/**/*.ts", "demos/scroll-anchor-vanilla/**/*.ts"],
+  "include": ["demos/photo-gallery/**/*.ts", "demos/life-calendar/**/*.ts", "demos/draggable-cards/**/*.ts", "demos/global-illumination-pathtracer/**/*.ts", "demos/global-illumination-fast-approx/**/*.ts", "demos/gesture-flick-snap-target/**/*.ts", "demos/predictive-keyframes/**/*.ts", "demos/mobile-test-standalone/**/*.ts", "demos/scroll-anchor/**/*.ts"],
 }
