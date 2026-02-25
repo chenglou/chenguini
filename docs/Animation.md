@@ -19,7 +19,9 @@ data structure dictate access patterns and control flow, and since animations mi
 
 ## Pitfalls
 
-- Do NOT use `will-change` casually. This is blind premature optimization that can cause issues. But exceptionally, when `boxShadow` + `scale()` animation happens together, `will-change: transform` is required. Without it, `scale()` changes trigger box-shadow repaints, and the compositing layer promote/demote churn causes flicker. [Mozilla 790239](https://bugzilla.mozilla.org/show_bug.cgi?id=790239), [Mozilla 1122885](https://bugzilla.mozilla.org/show_bug.cgi?id=1122885).
+- **Do NOT add `will-change: transform` (or any `will-change`) to animated elements by default.** This is blind premature optimization that promotes elements to their own compositing layer, consuming GPU memory, causes text rendering differences, and interfering with stacking contexts. **Don't add it to CSS classes applied to many elements** (e.g. grid items) — each one gets its own layer. Exceptions:
+  - When `boxShadow` + `scale()` animation happens together, `will-change: transform` may be required to avoid flicker from compositing layer promote/demote churn. [Mozilla 790239](https://bugzilla.mozilla.org/show_bug.cgi?id=790239), [Mozilla 1122885](https://bugzilla.mozilla.org/show_bug.cgi?id=1122885).
+  - When using WebAnimations API (predictive keyframes pattern) where elements are explicitly handed to the compositor — `will-change: transform` is appropriate since the compositor is doing the rendering anyway.
 
 ## Springs
 
