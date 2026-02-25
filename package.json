@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start": "bun ./demos/*/index.html",
-    "check": "tsgo && oxlint --type-aware demos/photo-gallery demos/life-calendar demos/draggable-cards demos/global-illumination-pathtracer demos/global-illumination-fast-approx demos/gesture-flick-snap-target demos/predictive-keyframes"
+    "check": "tsgo && oxlint --type-aware demos/photo-gallery demos/life-calendar demos/draggable-cards demos/global-illumination-pathtracer demos/global-illumination-fast-approx demos/gesture-flick-snap-target demos/predictive-keyframes demos/mobile-test-standalone"
   },
   "devDependencies": {
     "oxlint": "latest",
