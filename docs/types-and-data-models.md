@@ -1,6 +1,7 @@
 Highly value asking about & modeling data structures and access patterns first and foremost when iterating. Don't be afraid to change data structure if a new feature requires remodeling. Don't just tackle things on incrementally.
 
 Prefer type and union over interface and enum.
+Aggressively prefer switch over if/else, when possible (e.g. union values). Get those proper branch coverages
 
 Parse & validate your data as early as possible. Don't pass down half-validated data then do ad-hoc checks in downstream call sites. For example, don't half-parse a route's payload then re-transform & check some of its fields in call sites later.
 
