@@ -2,7 +2,7 @@
   "name": "vibescript",
   "private": true,
   "scripts": {
-    "check": "tsgo && oxlint --type-aware demos/photo-gallery demos/life-calendar demos/draggable-cards demos/global-illumination-pathtracer demos/global-illumination-fast-approx demos/gesture-flick-snap-target"
+    "check": "tsgo && oxlint --type-aware demos/photo-gallery demos/life-calendar demos/draggable-cards demos/global-illumination-pathtracer demos/global-illumination-fast-approx demos/gesture-flick-snap-target demos/predictive-keyframes"
   },
   "devDependencies": {
     "oxlint": "latest",

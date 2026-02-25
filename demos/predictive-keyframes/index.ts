@@ -1,76 +1,80 @@
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Screensaver (Vanilla JS + Predictive Keyframes)</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    .box:hover { filter: brightness(0.9); }
-  </style>
-</head>
-<body>
-<script>
-'use strict'
-
 // === helpers ===
 
 const msPerAnimationStep = 6
 
 // Wellons lowbias32 (from ui-architecture.md)
-function hash(n) {
+function hash(n: number) {
   n = n | 0
   n = Math.imul((n >>> 16) ^ n, 0x21f0aaad)
   n = Math.imul((n >>> 15) ^ n, 0x735a2d97)
   return (((n >>> 15) ^ n) >>> 0) / 0x100000000
 }
 
-function hash21(p) {
+function hash21(p: number) {
   return { x: hash(p | 0), y: hash(((p | 0) + 0x9e3779b9) | 0) }
 }
 
-function spring(pos, dest, v, k, b) {
-  return { pos: pos, dest: dest, v: v || 0, k: k || 130, b: b || 21 }
+type SpringConfig = {
+  pos: number
+  dest: number
+  v: number
+  k: number
+  b: number
 }
 
-function springStep(s) {
-  let t = msPerAnimationStep / 1000
-  let Fspring = -s.k * (s.pos - s.dest)
-  let Fdamper = -s.b * s.v
-  let a = Fspring + Fdamper
+function spring(pos: number, dest: number, v = 0, k = 130, b = 21): SpringConfig {
+  return { pos, dest, v, k, b }
+}
+
+function springStep(s: SpringConfig) {
+  const t = msPerAnimationStep / 1000
+  const Fspring = -s.k * (s.pos - s.dest)
+  const Fdamper = -s.b * s.v
+  const a = Fspring + Fdamper
   s.v += a * t
   s.pos += s.v * t
 }
 
-function springGoToEnd(s) { s.pos = s.dest; s.v = 0 }
-function springMostlyDone(s) { return Math.abs(s.v) < 0.01 && Math.abs(s.dest - s.pos) < 0.01 }
+function springGoToEnd(s: SpringConfig) { s.pos = s.dest; s.v = 0 }
+function springMostlyDone(s: SpringConfig) { return Math.abs(s.v) < 0.01 && Math.abs(s.dest - s.pos) < 0.01 }
 
-function length(x, y) { return Math.sqrt(x * x + y * y) }
+function length(x: number, y: number) { return Math.sqrt(x * x + y * y) }
 
-function remap(value, oldMin, oldMax, newMin, newMax) {
+function remap(value: number, oldMin: number, oldMax: number, newMin: number, newMax: number) {
   if (oldMin === oldMax) return (newMin + newMax) / 2
   return ((value - oldMin) / (oldMax - oldMin)) * (newMax - newMin) + newMin
 }
 
-function overlapArea(a, b) {
-  let left = Math.max(a.x, b.x), right = Math.min(a.z, b.z)
-  let top = Math.max(a.y, b.y), bottom = Math.min(a.w, b.w)
+type AABB = { x: number; y: number; z: number; w: number }
+
+function overlapArea(a: AABB, b: AABB) {
+  const left = Math.max(a.x, b.x), right = Math.min(a.z, b.z)
+  const top = Math.max(a.y, b.y), bottom = Math.min(a.w, b.w)
   if (right > left && bottom > top) return (right - left) * (bottom - top)
   return 0
 }
 
-function boxHeight(width, job) { return width / (job.width / job.height) }
+type ImageJob = {
+  width: number
+  height: number
+  url: string
+  aesthetic_score: number
+}
+
+function boxHeight(width: number, job: ImageJob) { return width / (job.width / job.height) }
 
 // === Initialization ===
 
 // Image data
-let images = []
+const images: ImageJob[] = []
 let nextSeed = 0
 
-function generateImageData(count) {
-  let batch = []
+function generateImageData(count: number): ImageJob[] {
+  const batch: ImageJob[] = []
   for (let i = 0; i < count; i++) {
-    let s = nextSeed++
-    let w = 300 + Math.floor(hash(s * 2) * 300)
-    let h = 300 + Math.floor(hash(s * 2 + 1) * 300)
+    const s = nextSeed++
+    const w = 300 + Math.floor(hash(s * 2) * 300)
+    const h = 300 + Math.floor(hash(s * 2 + 1) * 300)
     batch.push({
       width: w, height: h,
       url: 'https://picsum.photos/seed/' + (s * 7 + 42) + '/' + w + '/' + h,
@@ -85,12 +89,12 @@ let preloading = false
 function scheduleFetch() {
   if (preloading) return
   preloading = true
-  let batch = generateImageData(30)
+  const batch = generateImageData(30)
   let next = 0
   function preloadOne() {
     if (next >= batch.length) { preloading = false; return }
-    let data = batch[next++]
-    let img = new Image()
+    const data = batch[next++]!
+    const img = new Image()
     img.onload = function() {
       img.decode()
         .then(function() { images.push(data); scheduleRender(); preloadOne() })
@@ -104,50 +108,74 @@ function scheduleFetch() {
 scheduleFetch()
 
 // State
-let world = { nextImageIndex: 0, boxes: [], nextBoxCountdown: 0 }
+type Box = {
+  job: ImageJob
+  id: number
+  width: number
+  centerX: number
+  centerY: number
+  vx: number
+  vy: number
+  opacitySpring: SpringConfig
+  scaleSpring: SpringConfig
+  enterProgress: number
+  exiting: boolean
+}
+
+type World = {
+  nextImageIndex: number
+  boxes: Box[]
+  nextBoxCountdown: number
+}
+
+let world: World = { nextImageIndex: 0, boxes: [], nextBoxCountdown: 0 }
 let animatedUntilTime = 0
-let boxNodes = new Map() // id -> { node, animation }
+
+type BoxNodeEntry = { node: HTMLDivElement; animation: Animation | null }
+let boxNodes = new Map<number, BoxNodeEntry>()
 
 // Static DOM
-let container = document.createElement('div')
+const container = document.createElement('div')
 container.style.cssText = 'position:relative;overflow:clip;width:100vw;height:100vh;background:radial-gradient(circle at center, hsl(210, 50%, 24%), hsl(210, 50%, 4%))'
 document.body.appendChild(container)
 
-let loadingEl = document.createElement('div')
+const loadingEl = document.createElement('div')
 loadingEl.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#d1d5db;font-size:1.25rem'
 loadingEl.textContent = 'Loading images...'
 container.appendChild(loadingEl)
 
 // === Simulation ===
 
-function cloneBox(box) {
+function cloneBox(box: Box): Box {
   return { ...box, opacitySpring: { ...box.opacitySpring }, scaleSpring: { ...box.scaleSpring } }
 }
 
-function calculateRepulsion(self, other, containerWH) {
-  let sw = self.width * self.scaleSpring.pos
-  let sh = boxHeight(sw, self.job)
-  let ow = other.width * other.scaleSpring.pos
-  let oh = boxHeight(ow, other.job)
+type Vec2 = { x: number; y: number }
 
-  let ov = overlapArea(
+function calculateRepulsion(self: Box, other: Box, containerWH: Vec2): Vec2 {
+  const sw = self.width * self.scaleSpring.pos
+  const sh = boxHeight(sw, self.job)
+  const ow = other.width * other.scaleSpring.pos
+  const oh = boxHeight(ow, other.job)
+
+  const ov = overlapArea(
     { x: self.centerX - sw / 2, y: self.centerY - sh / 2, z: self.centerX + sw / 2, w: self.centerY + sh / 2 },
     { x: other.centerX - ow / 2, y: other.centerY - oh / 2, z: other.centerX + ow / 2, w: other.centerY + oh / 2 },
   )
 
-  let dx = self.centerX - other.centerX
-  let dy = self.centerY - other.centerY
-  let dist = length(dx, dy)
+  const dx = self.centerX - other.centerX
+  const dy = self.centerY - other.centerY
+  const dist = length(dx, dy)
   if (dist === 0) return { x: 0, y: 0 }
 
-  let skew = (containerWH.x / containerWH.y) * 0.8
-  let force = remap(ov, 0, sw * sh, 0, 15 * self.enterProgress)
+  const skew = (containerWH.x / containerWH.y) * 0.8
+  const force = remap(ov, 0, sw * sh, 0, 15 * self.enterProgress)
   return { x: (dx / dist) * force * skew, y: (dy / dist) * force }
 }
 
-function minEdgeDistPct(box, containerWH) {
-  let sw = box.width * box.scaleSpring.pos
-  let sh = boxHeight(sw, box.job)
+function minEdgeDistPct(box: Box, containerWH: Vec2) {
+  const sw = box.width * box.scaleSpring.pos
+  const sh = boxHeight(sw, box.job)
   return Math.min(
     (box.centerX - sw / 2) / containerWH.x,
     (containerWH.x - (box.centerX + sw / 2)) / containerWH.x,
@@ -156,22 +184,22 @@ function minEdgeDistPct(box, containerWH) {
   )
 }
 
-function simulate(w, containerWH) {
-  let nw = {
+function simulate(w: World, containerWH: Vec2): World {
+  const nw: World = {
     nextImageIndex: w.nextImageIndex,
     boxes: w.boxes.map(cloneBox),
     nextBoxCountdown: Math.max(0, w.nextBoxCountdown - msPerAnimationStep),
   }
 
   if (nw.nextImageIndex < images.length && nw.nextBoxCountdown === 0) {
-    let job = images[nw.nextImageIndex]
-    let ar = job.width / job.height
-    let targetArea = (containerWH.x * containerWH.y) / (job.aesthetic_score > 0 ? 7 : 12)
-    let bw = Math.sqrt(targetArea * ar)
-    let nudge = hash21(nw.nextImageIndex)
+    const job = images[nw.nextImageIndex]!
+    const ar = job.width / job.height
+    const targetArea = (containerWH.x * containerWH.y) / (job.aesthetic_score > 0 ? 7 : 12)
+    const bw = Math.sqrt(targetArea * ar)
+    const nudge = hash21(nw.nextImageIndex)
 
     nw.boxes.push({
-      job: job, id: nw.nextImageIndex, width: bw,
+      job, id: nw.nextImageIndex, width: bw,
       centerX: containerWH.x / 2 + nudge.x,
       centerY: containerWH.y / 2 + nudge.y,
       vx: 0, vy: 0,
@@ -180,32 +208,32 @@ function simulate(w, containerWH) {
       enterProgress: 0, exiting: false,
     })
     nw.nextImageIndex++
-    let r = hash(nw.nextImageIndex + 500)
+    const r = hash(nw.nextImageIndex + 500)
     nw.nextBoxCountdown = job.aesthetic_score > 0 ? 2500 + r * 1000 : 200 + r * 1300
   }
 
-  let forces = nw.boxes.map(function(box) {
+  const forces = nw.boxes.map(function(box) {
     let fx = 0, fy = 0
     for (let j = 0; j < nw.boxes.length; j++) {
-      let other = nw.boxes[j]
+      const other = nw.boxes[j]!
       if (box !== other) {
-        let f = calculateRepulsion(box, other, containerWH)
+        const f = calculateRepulsion(box, other, containerWH)
         fx += f.x; fy += f.y
       }
     }
-    return { fx: fx, fy: fy }
+    return { fx, fy }
   })
 
   for (let i = 0; i < nw.boxes.length; i++) {
-    let box = nw.boxes[i]
-    box.vx += forces[i].fx
-    box.vy += forces[i].fy
+    const box = nw.boxes[i]!
+    box.vx += forces[i]!.fx
+    box.vy += forces[i]!.fy
     box.centerX += box.vx
     box.centerY += box.vy
     box.vx *= 0.2
     box.vy *= 0.2
 
-    let minDist = minEdgeDistPct(box, containerWH)
+    const minDist = minEdgeDistPct(box, containerWH)
     box.scaleSpring.dest = 1 - Math.pow(0.9 - Math.max(0, minDist), 10)
     springStep(box.opacitySpring)
     springStep(box.scaleSpring)
@@ -225,9 +253,9 @@ function simulate(w, containerWH) {
 
 // === Keyframes ===
 
-function boxStyle(box) {
-  let h = boxHeight(box.width, box.job)
-  let aesthetic = box.job.aesthetic_score > 0
+function boxStyle(box: Box): Keyframe {
+  const h = boxHeight(box.width, box.job)
+  const aesthetic = box.job.aesthetic_score > 0
   return {
     display: 'block',
     transform: 'translate3d(' + (box.centerX - box.width / 2) + 'px, ' + (box.centerY - h / 2) + 'px, 0) scale(' + box.scaleSpring.pos + ')',
@@ -238,7 +266,7 @@ function boxStyle(box) {
   }
 }
 
-function animationConfig(kf) {
+function animationConfig(kf: Keyframe[]): KeyframeAnimationOptions {
   return {
     duration: msPerAnimationStep * (kf.length - 1),
     easing: 'steps(' + (kf.length - 1) + ', end)',
@@ -246,30 +274,32 @@ function animationConfig(kf) {
   }
 }
 
-function addKeyframes(w, frame, framesMap) {
-  let idToBox = new Map()
-  for (let i = 0; i < w.boxes.length; i++) idToBox.set(w.boxes[i].id, w.boxes[i])
+type FrameEntry = { box: Box; keyframes: Keyframe[]; animation: Animation | null }
+
+function addKeyframes(w: World, frame: number, framesMap: Map<number, FrameEntry>) {
+  const idToBox = new Map<number, Box>()
+  for (let i = 0; i < w.boxes.length; i++) idToBox.set(w.boxes[i]!.id, w.boxes[i]!)
 
   framesMap.forEach(function(entry, id) {
-    let box = idToBox.get(id)
-    entry.keyframes.push(box ? boxStyle(box) : { display: 'none' })
+    const box = idToBox.get(id)
+    entry.keyframes.push(box != null ? boxStyle(box) : { display: 'none' })
   })
 
   for (let i = 0; i < w.boxes.length; i++) {
-    let box = w.boxes[i]
+    const box = w.boxes[i]!
     if (!framesMap.has(box.id)) {
-      let pad = []
+      const pad: Keyframe[] = []
       for (let j = 0; j < frame; j++) pad.push({ display: 'none' })
       pad.push(boxStyle(box))
-      framesMap.set(box.id, { box: box, keyframes: pad, animation: null })
+      framesMap.set(box.id, { box, keyframes: pad, animation: null })
     }
   }
 }
 
 // === Scheduler ===
 
-let scheduledTimeout = null
-let scheduledRaf = null
+let scheduledTimeout: ReturnType<typeof setTimeout> | null = null
+let scheduledRaf: number | null = null
 function scheduleRender() {
   if (scheduledTimeout != null || scheduledRaf != null) return
   scheduledTimeout = setTimeout(function() {
@@ -283,30 +313,28 @@ function scheduleRender() {
 
 // === Render ===
 
-function render(now) {
+function render(now: number) {
   // DOM reads (batched)
-  let cw = document.documentElement.clientWidth
-  let ch = document.documentElement.clientHeight
-  let containerWH = { x: cw, y: ch }
-
-  // State changes
+  const cw = document.documentElement.clientWidth
+  const ch = document.documentElement.clientHeight
+  const containerWH: Vec2 = { x: cw, y: ch }
 
   // Cancel previous animations
   boxNodes.forEach(function(entry) {
-    if (entry.animation) entry.animation.cancel()
+    if (entry.animation != null) entry.animation.cancel()
   })
 
   // Catch up simulation
   if (animatedUntilTime === 0) animatedUntilTime = now
-  let steps = Math.floor((now - animatedUntilTime) / msPerAnimationStep)
+  const steps = Math.floor((now - animatedUntilTime) / msPerAnimationStep)
   animatedUntilTime += steps * msPerAnimationStep
   for (let i = 0; i < steps; i++) {
     world = simulate(world, containerWH)
   }
 
   // Build predictive keyframes
-  let framesMap = new Map()
-  let predictiveFrameCount = Math.ceil(1200 / msPerAnimationStep)
+  const framesMap = new Map<number, FrameEntry>()
+  const predictiveFrameCount = Math.ceil(1200 / msPerAnimationStep)
   let predicted = world
   for (let i = 0; i <= predictiveFrameCount; i++) {
     addKeyframes(predicted, i, framesMap)
@@ -316,7 +344,7 @@ function render(now) {
   // DOM writes (batched)
 
   // Loading indicator
-  if (images.length > 0 && loadingEl.parentNode) loadingEl.remove()
+  if (images.length > 0 && loadingEl.parentNode != null) loadingEl.remove()
 
   // Remove nodes for boxes no longer in framesMap
   boxNodes.forEach(function(entry, id) {
@@ -324,21 +352,21 @@ function render(now) {
   })
 
   // Create new nodes and start animations
-  let newBoxNodes = new Map()
+  const newBoxNodes = new Map<number, BoxNodeEntry>()
   framesMap.forEach(function(entry, id) {
-    let existing = boxNodes.get(id)
-    let node
-    if (existing) {
+    const existing = boxNodes.get(id)
+    let node: HTMLDivElement
+    if (existing != null) {
       node = existing.node
     } else {
       node = document.createElement('div')
       node.className = 'box'
-      let h = boxHeight(entry.box.width, entry.box.job)
+      const h = boxHeight(entry.box.width, entry.box.job)
       node.style.cssText = 'position:absolute;max-width:none;will-change:transform;transform-origin:center;border-radius:8px;background-size:contain;background-repeat:no-repeat;width:' + entry.box.width + 'px;height:' + h + 'px;background-image:url(' + entry.box.job.url + ')'
       container.appendChild(node)
     }
-    let animation = node.animate(entry.keyframes, animationConfig(entry.keyframes))
-    newBoxNodes.set(id, { node: node, animation: animation })
+    const animation = node.animate(entry.keyframes, animationConfig(entry.keyframes))
+    newBoxNodes.set(id, { node, animation })
   })
   boxNodes = newBoxNodes
 
@@ -350,5 +378,3 @@ function render(now) {
 }
 
 scheduleRender()
-</script>
-</body>
