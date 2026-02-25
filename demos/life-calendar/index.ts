@@ -1,5 +1,3 @@
-export {} // module scope
-
 /*
 TODOs:
 - drag today dot

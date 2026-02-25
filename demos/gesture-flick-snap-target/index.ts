@@ -1,5 +1,3 @@
-export {} // module scope
-
 // === scheduler
 let scheduledRender = false
 function scheduleRender() {

@@ -1,5 +1,3 @@
-export {} // module scope
-
 // === generic scheduler & its debugger
 let scheduledRender = false
 function scheduleRender() {
