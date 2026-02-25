@@ -206,4 +206,3 @@ test('bad input falls back to defaults', () => {
   expect(result.theme).toBe('light') // sanitizer rejected bad data, used defaults
 })
 ```
-

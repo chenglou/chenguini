@@ -1,3 +1,4 @@
+// thanks Alex Evans
 export {} // module scope
 // oxlint-disable no-unnecessary-type-assertion -- tsgo and oxlint disagree on WebGL nullability
 // oxlint-disable strict-boolean-expressions -- WebGL getShaderParameter/getProgramParameter return any
