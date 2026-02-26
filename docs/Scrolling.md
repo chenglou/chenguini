@@ -42,7 +42,7 @@ Despite all this, some effects are only possible through programmatic manipulati
 
 When content above the viewport changes (new items prepended, elements resizing), the visible items shift. Scroll anchoring compensates by adjusting `scrollTop` by the delta, keeping visible content stable.
 
-The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scroll/scroll-anchor-vanilla.html`](../demos/scroll/scroll-anchor-vanilla.html)):
+The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scroll-anchor`](../demos/scroll-anchor/index.ts)):
 
 1. Read `scrollTop` once at the start of each render/frame.
 2. Compare to the stored value from last frame. If different → user scrolled → pick a new anchor (first item below `scrollTop`). If same → data changed → keep the old anchor and compute the delta.
@@ -56,7 +56,7 @@ Remaining limitation: continuous resize with fractional layout values causes sub
 
 ### React 18+ Pitfall
 
-React 18's automatic batching can merge a scroll event's `setState` with unrelated data `setState` into one render. If your scroll handler sets an `onScrolled` flag to distinguish "user scrolled" from "data changed," the batched render sees `onScrolled = true` _and_ new data simultaneously — skipping anchor adjustment while items shifted. Demo: [`demos/scroll/scroll-anchor-react.html`](../demos/scroll/scroll-anchor-react.html).
+React 18's automatic batching can merge a scroll event's `setState` with unrelated data `setState` into one render. If your scroll handler sets an `onScrolled` flag to distinguish "user scrolled" from "data changed," the batched render sees `onScrolled = true` _and_ new data simultaneously — skipping anchor adjustment while items shifted. Demo: [`demos/scroll-anchor/scroll-anchor-react-bug.html`](../demos/scroll-anchor/scroll-anchor-react-bug.html).
 
 The same value-comparison pattern from step 2 above works under React, avoiding the flag entirely:
 

@@ -126,4 +126,4 @@ The simulation must be non-mutative since we're predicting ahead & throwing away
 
 During the catch-up phase where we do `simulate()`: you have a choice to either catch up from potentially a very long time ago (e.g. browser tab was backgrounded) til now, incurring expensive computations, or cap the steps (e.g. `if (steps > N) steps = N`) and accept a time skip. There's no clean middle ground — a slow catch-up makes the next frame late, which means even more catch-up (spiral of death), but capping to 0 freezes the simulation forever at its current state.
 
-See [predictive-keyframes.html](../demos/predictive-keyframes.html) for a working example.
+See [predictive-keyframes](../demos/predictive-keyframes/index.ts) for a working example.
