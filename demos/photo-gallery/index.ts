@@ -118,6 +118,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
 type BoxData = {
   id: string
+  prompt: string
   naturalSizeX: number
   ar: number // aspect ratio
   sizeX: Spring
@@ -126,7 +127,6 @@ type BoxData = {
   y: Spring
   scale: Spring
   fxFactor: Spring
-  node: HTMLDivElement
 }
 
 type State = {
@@ -157,19 +157,9 @@ let st: State; {
       const ar = d.w / d.h
       const sizeX = Math.min(d.w, boxMaxSizeX, imgMaxSizeY * ar)
       const sizeY = sizeX / ar + promptSizeY
-      // upon zooming into 1D mode (big image), swapping out an img src for a higher-res one would cause a flash of blank image in certain cases. Instead, we put the low-res image as a background-image on the container, then the high-res image as a real img on top. Hand-rolled double buffering...
-      const node = document.createElement('div')
-      node.className = 'box'
-      // node.tabIndex = i + 1 // uncomment when dismiss focus isn't this ugly blue hue anymore
-      node.style.backgroundImage = `url(https://cdn.midjourney.com/${d.id}_384_N.webp)` // 128 is the next smallest. Too small for retina screens
-      const img = document.createElement('img')
-      // img.decoding = 'async' // this sucks. It's slower _and_ still janks the UI. No point
-      const promptNode = document.createElement('figcaption')
-      promptNode.className = 'prompt'
-      promptNode.textContent = d.prompt
-      node.append(img, promptNode)
       return {
         id: d.id,
+        prompt: d.prompt,
         naturalSizeX: d.w,
         ar,
         sizeX: spring(sizeX),
@@ -178,7 +168,6 @@ let st: State; {
         y: spring(windowSizeY + Math.floor(i / cols) * imgMaxSizeY),
         scale: spring(1),
         fxFactor: spring(20), // for brightness and blur
-        node,
       }
     }),
   }
@@ -203,6 +192,7 @@ const dummyPlaceholder = document.createElement('div')
 dummyPlaceholder.style.position = 'absolute'
 dummyPlaceholder.style.width = '1px' // make it tiny in case it affects compositing... sigh lamport.azurewebsites.net/pubs/future-of-computing.pdf
 document.body.append(dummyPlaceholder)
+const domCache = new Map<string, HTMLDivElement>() // DOM nodes live outside state; created lazily on first visibility, persist across frames
 // oxlint-disable-next-line no-unnecessary-condition
 if (debug) {
   document.documentElement.style.background = 'repeating-linear-gradient(#e66465 0px, #9198e5 300px)'
@@ -422,14 +412,26 @@ function render(now: number) {
   const browserUIMaxSizeTop = 100, browserUIMaxSizeBottom = 150 // browsers UI like Safari are transluscent. Random conservative numbers
   for (let i = 0; i < data.length; i++) {
     const d = data[i]!
-    const {node} = d
-    const img = node.children[0] as HTMLImageElement, prompt = node.children[1] as HTMLElement
     if ( // occlusion culling, aka only draw what's visible on screen (aka "virtualization")
       d.y.pos -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
       d.y.pos + d.sizeY.pos -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
       d.x.pos <= newWindowSizeX &&
       d.x.pos + d.sizeX.pos >= 0
     ) { // disregard shadow & scaling for now; browserUIMaxSizeBottom and browserUIMaxSizeTop are safe bigger values anyway
+      let node = domCache.get(d.id)
+      if (node == null) { // JIT DOM node creation: first time this box is visible
+        // upon zooming into 1D mode (big image), swapping out an img src for a higher-res one would cause a flash of blank image in certain cases. Instead, we put the low-res image as a background-image on the container, then the high-res image as a real img on top. Hand-rolled double buffering...
+        node = document.createElement('div')
+        node.className = 'box'
+        node.style.backgroundImage = `url(https://cdn.midjourney.com/${d.id}_384_N.webp)` // 128 is the next smallest. Too small for retina screens
+        const img = document.createElement('img')
+        const promptNode = document.createElement('figcaption')
+        promptNode.className = 'prompt'
+        promptNode.textContent = d.prompt
+        node.append(img, promptNode)
+        domCache.set(d.id, node)
+      }
+      const img = node.children[0] as HTMLImageElement, prompt = node.children[1] as HTMLElement
       node.style.width = `${d.sizeX.pos}px`
       node.style.height = `${d.sizeY.pos}px`
       node.style.transform = `translate3d(${d.x.pos}px,${d.y.pos}px,0) scale(${d.scale.pos})` // safari now anti-aliases for hover, but then zoom in janks on big displays...
@@ -458,7 +460,10 @@ function render(now: number) {
         img.style.display = 'none' // hide full res image for perf (yes it makes a difference, even on M1, with Studio Display)
       }
       if (node.parentNode == null) document.body.appendChild(node) // if previously absent, add
-    } else if (node.parentNode != null) document.body.removeChild(node) // if previously present, remove
+    } else { // not visible
+      const node = domCache.get(d.id)
+      if (node != null && node.parentNode != null) document.body.removeChild(node) // if previously present, remove
+    }
   }
 
   document.body.style.cursor = cursor
