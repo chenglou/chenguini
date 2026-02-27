@@ -192,7 +192,7 @@ const dummyPlaceholder = document.createElement('div')
 dummyPlaceholder.style.position = 'absolute'
 dummyPlaceholder.style.width = '1px' // make it tiny in case it affects compositing... sigh lamport.azurewebsites.net/pubs/future-of-computing.pdf
 document.body.append(dummyPlaceholder)
-const domCache = new Map<string, HTMLDivElement>() // DOM nodes live outside state; created lazily on first visibility, persist across frames
+const domCache = new Map<string, HTMLDivElement>() // cache lifetime: on visibility
 // oxlint-disable-next-line no-unnecessary-condition
 if (debug) {
   document.documentElement.style.background = 'repeating-linear-gradient(#e66465 0px, #9198e5 300px)'
@@ -462,7 +462,10 @@ function render(now: number) {
       if (node.parentNode == null) document.body.appendChild(node) // if previously absent, add
     } else { // not visible
       const node = domCache.get(d.id)
-      if (node != null && node.parentNode != null) document.body.removeChild(node) // if previously present, remove
+      if (node != null) {
+        if (node.parentNode != null) document.body.removeChild(node)
+        domCache.delete(d.id)
+      }
     }
   }
 

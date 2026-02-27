@@ -17,7 +17,24 @@ a.map(node => {
 
 Big thread: try https://news.ycombinator.com/item?id=25706993
 */
-let dataRaw = [
+
+export type HNComment = {
+  indent: number
+  user: string
+  age: string
+  comment: string
+}
+
+export type HNThread = {
+  title: string
+  link: string
+  points: number
+  submitter: string
+  submissionDate: string
+  comments: HNComment[]
+}
+
+export let dataRaw: HNThread[] = [
 	{
     title: 'Steve Jobs has passed away.',
   	link: 'apple.com',
@@ -1766,8 +1783,8 @@ let dataRaw = [
   },
 ]
 
-dataRaw[0].comments.splice(30, 9999)
+dataRaw[0]!.comments.splice(30, 9999)
 dataRaw = dataRaw.concat(dataRaw)
 dataRaw = dataRaw.concat(dataRaw)
-// for (i = 0; i < 4; i++) dataRaw[0].comments = dataRaw[0].comments.concat(dataRaw[0].comments)
-// dataRaw[0].comments.forEach((c, i) => c.user = `${i} ${c.user}`)
+// for (let i = 0; i < 4; i++) dataRaw[0]!.comments = dataRaw[0]!.comments.concat(dataRaw[0]!.comments)
+// dataRaw[0]!.comments.forEach((c, i) => c.user = `${i} ${c.user}`)

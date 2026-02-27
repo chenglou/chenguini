@@ -117,25 +117,28 @@ const st: State = {
   events: { mouseup: null, touchend: null, mousemove: null, touchmove: null, pointerdown: null },
 }
 
-// DOM
-const pipNode = document.createElement('div')
-pipNode.className = 'pip'
-pipNode.textContent = 'PiP'
-document.body.appendChild(pipNode)
+// cache lifetime: same as data
+let domCache: {pip: HTMLDivElement; restMarker: HTMLDivElement; corners: HTMLDivElement[]}
+{
+  const pip = document.createElement('div')
+  pip.className = 'pip'
+  pip.textContent = 'PiP'
+  document.body.appendChild(pip)
 
-const restMarker = document.createElement('div')
-restMarker.className = 'rest-marker'
-document.body.appendChild(restMarker)
+  const restMarker = document.createElement('div')
+  restMarker.className = 'rest-marker'
+  document.body.appendChild(restMarker)
 
-// corner markers
-{ const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight
-  for (const c of getCorners(w, h)) {
+  const corners = getCorners(document.documentElement.clientWidth, document.documentElement.clientHeight).map(c => {
     const m = document.createElement('div')
     m.className = 'corner-marker'
     m.style.left = (c.x + pipW / 2) + 'px'
     m.style.top = (c.y + pipH / 2) + 'px'
     document.body.appendChild(m)
-  }
+    return m
+  })
+
+  domCache = {pip, restMarker, corners}
 }
 
 // === events
@@ -244,20 +247,20 @@ function render(now: number) {
     st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null // oxlint-disable-line no-unnecessary-condition
   }
 
-  // === render
+  // === DOM writes (dynamic props only — static props set once in createDOMCache)
   const {x: renderX, y: renderY} = currentPos()
-  pipNode.style.transform = `translate3d(${renderX}px,${renderY}px,0)`
+  domCache.pip.style.transform = `translate3d(${renderX}px,${renderY}px,0)`
 
   // rest marker
-  restMarker.style.display = st.showRestMarker ? 'block' : 'none'
-  restMarker.style.left = (st.restPosX + pipW / 2) + 'px'
-  restMarker.style.top = (st.restPosY + pipH / 2) + 'px'
+  domCache.restMarker.style.display = st.showRestMarker ? 'block' : 'none'
+  domCache.restMarker.style.left = (st.restPosX + pipW / 2) + 'px'
+  domCache.restMarker.style.top = (st.restPosY + pipH / 2) + 'px'
 
   // cursor
   const cursor = st.mode === 'dragging' ? 'grabbing'
     : (pointerX !== undefined && pointerY !== undefined && hitTest(pointerX, pointerY)) ? 'grab' : 'auto'
   document.body.style.cursor = cursor
-  pipNode.style.cursor = cursor
+  domCache.pip.style.cursor = cursor
 
   // === clear events
   st.events.mouseup = st.events.touchend = st.events.mousemove = st.events.touchmove = st.events.pointerdown = null

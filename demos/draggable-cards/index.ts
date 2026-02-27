@@ -65,7 +65,6 @@ type RowData = {
   x: SpringConfig
   y: SpringConfig
   scale: SpringConfig
-  node: HTMLDivElement
 }
 
 type DragInfo = {
@@ -92,6 +91,24 @@ type State = {
   data: RowData[]
 }
 
+// cache lifetime: same as data
+const domCache: HTMLDivElement[] = []
+for (let i = 0; i < 5; i++) {
+  const node = document.createElement("div")
+  const sizeY = 30 + hash(i * 2) * 150 // [30, 180)
+  const rand = hash(i * 2 + 1) * 40 + 40 // Range: [40, 80]
+  // static properties: set once at creation
+  node.className = "row"
+  node.textContent = "Drag Me " + i
+  node.style.width = `${rowSizeX}px`
+  node.style.height = `${sizeY}px`
+  node.style.outline = `1px solid hsl(205, 100%, ${rand}%)` // blue hue
+  node.style.backgroundColor = `hsl(205, 100%, ${rand + 10}%)` // lighter blue hue
+  domCache.push(node)
+  document.body.appendChild(node)
+}
+
+
 const st: State = {
   animatedUntilTime: null,
   dragged: null,
@@ -104,24 +121,14 @@ const st: State = {
 {
   const windowSizeX = document.documentElement.clientWidth // excludes scroll bar & invariant under safari pinch zoom
   for (let i = 0; i < 5; i++) {
-    const node = document.createElement("div")
     const sizeY = 30 + hash(i * 2) * 150 // [30, 180)
-    node.className = "row"
-    node.innerHTML = "Drag Me " + i
-    node.style.width = `${rowSizeX}px`
-    node.style.height = `${sizeY}px`
-    const rand = hash(i * 2 + 1) * 40 + 40 // Range: [40, 80]
-    node.style.outline = `1px solid hsl(205, 100%, ${rand}%)` // blue hue
-    node.style.backgroundColor = `hsl(205, 100%, ${rand + 10}%)` // lighter blue hue
     st.data.push({
       id: i + '', // gonna drag rows around so we can't refer to a row by index. Assign a stable id
       sizeY,
       x: spring(center(rowSizeX, windowSizeX)),
       y: spring(0),
       scale: spring(1),
-      node,
     })
-    document.body.appendChild(node)
   }
 }
 function springForEach(f: (s: SpringConfig) => void) {
@@ -233,9 +240,9 @@ function render(now: number) {
     else stillAnimating = true
   })
 
-  // === step 5: render. Batch DOM writes
+  // === step 5: render. Batch DOM writes (dynamic properties only)
   for (let i = 0; i < st.data.length; i++) {
-    const d = st.data[i]!, style = d.node.style
+    const d = st.data[i]!, style = domCache[Number(d.id)]!.style
     style.transform = `translate3d(${d.x.pos}px,${d.y.pos}px,0) scale(${d.scale.pos})`
     style.zIndex =
       newDragged != null && d.id === newDragged.id ? String(st.data.length + 2)

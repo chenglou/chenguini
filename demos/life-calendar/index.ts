@@ -51,15 +51,17 @@ const st: State = {
   pointer: {x: -Infinity, y: -Infinity}, // btw, on page load, there's no way to render a first cursor state =(
   events: {click: null, input: null, mouseup: null, mousemove: null, pointerdown: null},
 }
-const canvas = document.createElement('canvas')
-const ctx = canvas.getContext('2d')!
-
-const tooltip = document.createElement('input')
-tooltip.id = 'tooltip'
-tooltip.placeholder = 'Set goal...'
-
-document.body.appendChild(canvas)
-document.body.appendChild(tooltip)
+// cache lifetime: same as data
+let domCache: {canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; tooltip: HTMLInputElement}
+{
+  const canvas = document.createElement('canvas')
+  const tooltip = document.createElement('input')
+  tooltip.id = 'tooltip'
+  tooltip.placeholder = 'Set goal...'
+  document.body.appendChild(canvas)
+  document.body.appendChild(tooltip)
+  domCache = {canvas, ctx: canvas.getContext('2d')!, tooltip}
+}
 
 // === scheduler
 let scheduledRender = false
@@ -76,7 +78,7 @@ function scheduleRender() {
 // pointermove doesn't work on android, pointerdown isn't fired on Safari on the first left click after dismissing context menus, mousedown doesn't trigger properly on mobile, pointerup isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event. Tldr there's no pointer event that works cross-browser that can replace mouse & touch events.
 window.addEventListener('resize', () => scheduleRender())
 window.addEventListener('click', (e) => {st.events.click = e; scheduleRender()})
-tooltip.addEventListener('input', (e) => {st.events.input = e; scheduleRender()})
+domCache.tooltip.addEventListener('input', (e) => {st.events.input = e; scheduleRender()})
 window.addEventListener("mouseup", (e) => {st.events.mouseup = e; scheduleRender()})
 window.addEventListener('mousemove', (e) => {st.events.mousemove = e; scheduleRender()})
 window.addEventListener('pointerdown', (e) => {st.events.pointerdown = e; scheduleRender()})
@@ -142,7 +144,8 @@ function render() {
     : hover === age || hover === newCustomDot ? 'move'
     : 'pointer'
 
-  // === step 5: render. Batch DOM writes
+  // === step 5: render. Batch DOM writes (dynamic properties only)
+  const {canvas, ctx, tooltip} = domCache
   // no blurry canvas: coderwall.com/p/vmkk6a/how-to-make-the-canvas-not-look-like-crap-on-retina
   canvas.width = gridFinalSizeX * devicePixelRatio // different than canvas.style.width. Btw this clears the canvas as well
   canvas.height = gridFinalSizeY * devicePixelRatio

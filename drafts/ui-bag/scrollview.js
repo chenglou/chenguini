@@ -46,8 +46,11 @@ let ANIMATE_OUT = 1;
 let ANIMATE_NONE = 2;
 
 let data = [];
+let nextRowId = 0;
+const domCache = new Map(); // cache lifetime: same as data
 function makeRow() {
   return {
+    id: nextRowId++,
     heightFinal: Math.round(Math.random() * 60 + 50), // range: [50, 110]
     color: `hsl(205, 100%, ${Math.random() * 40 + 50}%)`, // blue hue. Range: [50, 90]
     animation: ANIMATE_IN,
@@ -113,9 +116,14 @@ function render({ pressedArrowDown, pressedArrowUp, clickedY }) {
   let removeCount = 0;
   for (let i = 0; i + removeCount < data.length; ) {
     data[i] = data[i + removeCount]; // shift slot if necessary, to compact array
-    data[i].animation === ANIMATE_OUT && data[i].animationTiming === 1
-      ? removeCount++
-      : i++; // proof of progress: either removeCount or i increase, each iteration
+    if (data[i].animation === ANIMATE_OUT && data[i].animationTiming === 1) {
+      let node = domCache.get(data[i].id);
+      if (node != null && node.parentNode != null) node.remove();
+      domCache.delete(data[i].id);
+      removeCount++;
+    } else {
+      i++; // proof of progress: either removeCount or i increase, each iteration
+    }
   }
   data.length -= removeCount;
   // focus management & programmatic scrollTo logic. Both variables are needed later too
@@ -184,8 +192,6 @@ function render({ pressedArrowDown, pressedArrowUp, clickedY }) {
   }
 
   // === now, the actual rendering
-  while (container.childNodes.length > 1) // Wipe content, keep the one dummy placeholder
-    container.removeChild(container.lastChild);
   /*
     https://groups.google.com/a/chromium.org/g/blink-dev/c/_Q7A4AQBFKY
   - scrollTop is a double by spec, but rounded/truncated to int for browsers
@@ -201,8 +207,12 @@ function render({ pressedArrowDown, pressedArrowUp, clickedY }) {
     let height = getHeight(row);
     // is this row in the visible range?
     if (rowTop <= scrollBottom && rowTop + height >= scrollTop) {
-      let node = document.createElement("div");
-      node.className = "row";
+      let node = domCache.get(row.id);
+      if (node == null) { // JIT DOM node creation: first time this row is visible
+        node = document.createElement("div");
+        node.className = "row";
+        domCache.set(row.id, node);
+      }
       node.style.top = rowTop;
       node.style.height = height;
       node.innerText = "Cell " + (i + 1);
@@ -214,7 +224,10 @@ function render({ pressedArrowDown, pressedArrowUp, clickedY }) {
       // if (i === state.selectionPivot)
       //   node.style.boxShadow = "0 0 10px inset red";
 
-      container.append(node);
+      if (node.parentNode == null) container.append(node); // if previously absent, add
+    } else { // not visible
+      let node = domCache.get(row.id);
+      if (node != null && node.parentNode != null) node.remove(); // if previously present, remove
     }
     rowTop += height;
   }

@@ -34,8 +34,8 @@ const container = document.getElementById('container')!
 const spacer = document.getElementById('spacer')!
 const info = document.getElementById('info')!
 
-// DOM node pool (reuse instead of recreate)
-const domNodes: HTMLDivElement[] = []
+// cache lifetime: same as data
+const domCache = new Map<string, HTMLDivElement>()
 
 function makeItem(day: string): Item {
   const n = counter++
@@ -69,32 +69,25 @@ function render() {
 
   // Step 1: Read DOM (batched reads, no writes yet)
   const currentScrollY = container.scrollTop
+  const viewportH = container.clientHeight
 
   // Step 2: Detect user scroll
   // If currentScrollY differs from what we stored last frame, something
   // external changed the scroll position. Pick a new anchor.
   const userScrolled = currentScrollY !== storedScrollY
 
-  // Step 3: Compute layout
+  // Step 3: Compute layout (pure arithmetic — no DOM writes)
+  // Pass 1: iterate all items for y positions, total height, and anchor
   let y = 0
   let adjustedScrollTop = currentScrollY
   let newAnchor: Anchor | null = null
   let isFirstSession = true
   let idx = 0
-  // Track which DOM nodes we need
-  let nodeIdx = 0
 
   while (idx < items.length) {
     const sessionDay = items[idx]!.day
     const gapTop = isFirstSession ? HEADER_GAP_FIRST : HEADER_GAP_REST
-    const headerY = y + gapTop
     y += gapTop + HEADER_HEIGHT + HEADER_GAP_BOTTOM
-
-    // Header
-    const headerNode = getOrCreateNode(nodeIdx++, 'day-header')
-    headerNode.style.top = headerY + 'px'
-    headerNode.style.height = HEADER_HEIGHT + 'px'
-    headerNode.textContent = sessionDay
 
     let firstInSession = true
     while (idx < items.length && items[idx]!.day === sessionDay) {
@@ -113,12 +106,74 @@ function render() {
         anchor.prevY = y
       }
 
-      // Item
-      const itemNode = getOrCreateNode(nodeIdx++, 'item')
-      itemNode.style.top = y + 'px'
-      itemNode.style.height = ITEM_HEIGHT + 'px'
-      itemNode.style.background = item.color
-      itemNode.textContent = item.label + ' \u2014 ' + item.day
+      y += ITEM_HEIGHT
+      idx++
+    }
+    isFirstSession = false
+  }
+
+  const totalHeight = y
+
+  // Update anchor
+  if (userScrolled && newAnchor != null) {
+    anchor = newAnchor
+  }
+
+  // Step 4: DOM writes
+  // Pass 2: iterate items again, check visibility, JIT create + attach/detach
+  const visibleTop = adjustedScrollTop
+  const visibleBottom = adjustedScrollTop + viewportH
+
+  y = 0
+  isFirstSession = true
+  idx = 0
+
+  while (idx < items.length) {
+    const sessionDay = items[idx]!.day
+    const gapTop = isFirstSession ? HEADER_GAP_FIRST : HEADER_GAP_REST
+    const headerY = y + gapTop
+    y += gapTop + HEADER_HEIGHT + HEADER_GAP_BOTTOM
+
+    // Header: visible if it overlaps viewport
+    if (headerY + HEADER_HEIGHT > visibleTop && headerY < visibleBottom) {
+      let headerNode = domCache.get(sessionDay)
+      if (headerNode == null) {
+        headerNode = document.createElement('div')
+        headerNode.className = 'day-header'
+        domCache.set(sessionDay, headerNode)
+      }
+      headerNode.style.top = headerY + 'px'
+      headerNode.style.height = HEADER_HEIGHT + 'px'
+      headerNode.textContent = sessionDay
+      if (headerNode.parentNode == null) spacer.appendChild(headerNode)
+    } else {
+      const headerNode = domCache.get(sessionDay)
+      if (headerNode != null && headerNode.parentNode != null) spacer.removeChild(headerNode)
+    }
+
+    let firstInSession = true
+    while (idx < items.length && items[idx]!.day === sessionDay) {
+      const item = items[idx]!
+      if (!firstInSession) y += ITEM_GAP
+      firstInSession = false
+
+      // Item: visible if it overlaps viewport
+      if (y + ITEM_HEIGHT > visibleTop && y < visibleBottom) {
+        let node = domCache.get(item.id)
+        if (node == null) {
+          node = document.createElement('div')
+          node.className = 'item'
+          domCache.set(item.id, node)
+        }
+        node.style.top = y + 'px'
+        node.style.height = ITEM_HEIGHT + 'px'
+        node.style.background = item.color
+        node.textContent = item.label + ' \u2014 ' + item.day
+        if (node.parentNode == null) spacer.appendChild(node)
+      } else {
+        const node = domCache.get(item.id)
+        if (node != null && node.parentNode != null) spacer.removeChild(node)
+      }
 
       y += ITEM_HEIGHT
       idx++
@@ -126,19 +181,7 @@ function render() {
     isFirstSession = false
   }
 
-  // Remove excess DOM nodes
-  while (nodeIdx < domNodes.length) {
-    const node = domNodes.pop()!
-    node.remove()
-  }
-
-  // Update anchor
-  if (userScrolled && newAnchor != null) {
-    anchor = newAnchor
-  }
-
-  // Step 4: Write DOM (batched writes)
-  spacer.style.height = y + 'px'
+  spacer.style.height = totalHeight + 'px'
 
   if (adjustedScrollTop !== currentScrollY) {
     container.scrollTo({ top: adjustedScrollTop, behavior: 'instant' as ScrollBehavior })
@@ -157,20 +200,6 @@ function render() {
     ' | anchor: ' + (anchor != null ? anchor.id : 'none') +
     ' (prevY: ' + (anchor != null ? Math.round(anchor.prevY) : '-') + ')' +
     ' | items: ' + items.length
-}
-
-// === DOM node pool ===
-function getOrCreateNode(idx: number, className: string) {
-  if (idx < domNodes.length) {
-    const node = domNodes[idx]!
-    if (node.className !== className) node.className = className
-    return node
-  }
-  const node = document.createElement('div')
-  node.className = className
-  spacer.appendChild(node)
-  domNodes.push(node)
-  return node
 }
 
 // === Actions ===
@@ -202,6 +231,9 @@ function resetAll() {
   counter = 0
   anchor = null
   items = makeInitialItems()
+  // Clear DOM cache and wipe spacer children
+  domCache.clear()
+  spacer.textContent = ''
   // Scroll to 0 synchronously (spacer is still tall from last render)
   container.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
   storedScrollY = 0

@@ -131,8 +131,10 @@ type World = {
 let world: World = { nextImageIndex: 0, boxes: [], nextBoxCountdown: 0 }
 let animatedUntilTime = 0
 
-type BoxNodeEntry = { node: HTMLDivElement; animation: Animation | null }
-let boxNodes = new Map<number, BoxNodeEntry>()
+// cache lifetime: same as data
+// animation stored explicitly so we cancel exactly our animation, not CSS transitions or other animations on the node
+type DomCacheEntry = { node: HTMLDivElement; animation: Animation | null }
+const domCache = new Map<number, DomCacheEntry>()
 
 // Static DOM
 const container = document.createElement('div')
@@ -320,7 +322,7 @@ function render(now: number) {
   const containerWH: Vec2 = { x: cw, y: ch }
 
   // Cancel previous animations
-  boxNodes.forEach(function(entry) {
+  domCache.forEach(function(entry) {
     if (entry.animation != null) entry.animation.cancel()
   })
 
@@ -347,28 +349,27 @@ function render(now: number) {
   if (images.length > 0 && loadingEl.parentNode != null) loadingEl.remove()
 
   // Remove nodes for boxes no longer in framesMap
-  boxNodes.forEach(function(entry, id) {
-    if (!framesMap.has(id)) entry.node.remove()
+  domCache.forEach(function(entry, id) {
+    if (!framesMap.has(id)) {
+      entry.node.remove()
+      domCache.delete(id)
+    }
   })
 
   // Create new nodes and start animations
-  const newBoxNodes = new Map<number, BoxNodeEntry>()
   framesMap.forEach(function(entry, id) {
-    const existing = boxNodes.get(id)
-    let node: HTMLDivElement
-    if (existing != null) {
-      node = existing.node
-    } else {
-      node = document.createElement('div')
+    let cached = domCache.get(id)
+    if (cached == null) {
+      const node = document.createElement('div')
       node.className = 'box'
       const h = boxHeight(entry.box.width, entry.box.job)
       node.style.cssText = 'position:absolute;max-width:none;will-change:transform;transform-origin:center;border-radius:8px;background-size:contain;background-repeat:no-repeat;width:' + entry.box.width + 'px;height:' + h + 'px;background-image:url(' + entry.box.job.url + ')'
       container.appendChild(node)
+      cached = { node, animation: null }
+      domCache.set(id, cached)
     }
-    const animation = node.animate(entry.keyframes, animationConfig(entry.keyframes))
-    newBoxNodes.set(id, { node, animation })
+    cached.animation = cached.node.animate(entry.keyframes, animationConfig(entry.keyframes))
   })
-  boxNodes = newBoxNodes
 
   // Fetch next batch if running low
   if (world.nextImageIndex > images.length - 20) scheduleFetch()
