@@ -1,18 +1,29 @@
-// Layout constants (same as React repro)
-const ITEM_HEIGHT = 100
-const HEADER_HEIGHT = 24
-const HEADER_GAP_FIRST = 0
-const HEADER_GAP_REST = 32
-const HEADER_GAP_BOTTOM = 8
-const ITEM_GAP = 8
-const TARGET_SCROLL = 700
+// === constant layout metrics
+const itemHeight = 100
+const headerHeight = 24
+const headerGapFirst = 0
+const headerGapRest = 32
+const headerGapBottom = 8
+const itemGap = 8
+const targetScroll = 700
 
-const COLORS = [
+const colors = [
   '#c0392b', '#2980b9', '#27ae60', '#8e44ad',
   '#d35400', '#16a085', '#2c3e50', '#f39c12',
 ]
 
-// === State ===
+// === generic scheduler
+let scheduledRender = false
+function scheduleRender() {
+  if (scheduledRender) return
+  scheduledRender = true
+  requestAnimationFrame(function renderOnFrame() { // named for profiler
+    scheduledRender = false
+    render()
+  })
+}
+
+// === state
 type Item = {
   id: string
   day: string
@@ -25,21 +36,28 @@ type Anchor = {
   prevY: number
 }
 
-let counter = 0
-let items: Item[] = []
-let anchor: Anchor | null = null
-let storedScrollY = 0 // read-back value from last frame's scrollTo
+type State = {
+  counter: number
+  items: Item[]
+  anchor: Anchor | null
+  storedScrollY: number // read-back value from last frame's scrollTo
+  events: {
+    scrollTo: number | null
+    addAbove: number | null
+  }
+}
 
-const container = document.getElementById('container')!
-const spacer = document.getElementById('spacer')!
-const info = document.getElementById('info')!
-
-// cache lifetime: same as data
-const domCache = new Map<string, HTMLDivElement>()
+let st: State = {
+  counter: 0,
+  items: [],
+  anchor: null,
+  storedScrollY: 0,
+  events: {scrollTo: null, addAbove: null},
+}
 
 function makeItem(day: string): Item {
-  const n = counter++
-  return { id: 'V' + n, day, label: '#' + n, color: COLORS[n % COLORS.length]! }
+  const n = st.counter++
+  return {id: 'V' + n, day, label: '#' + n, color: colors[n % colors.length]!}
 }
 
 function makeInitialItems() {
@@ -50,63 +68,81 @@ function makeInitialItems() {
   return result
 }
 
-// === Scheduler ===
-let scheduled = false
-function scheduleRender() {
-  if (scheduled) return
-  scheduled = true
-  requestAnimationFrame(render)
+// cache lifetime: same as data
+const domCache = {
+  container: document.getElementById('container')! as HTMLDivElement,
+  spacer: document.getElementById('spacer')! as HTMLDivElement,
+  info: document.getElementById('info')! as HTMLDivElement,
+  nodes: new Map<string, HTMLDivElement>(), // items + headers, JIT created
 }
 
-// === Events ===
-// All events just schedule a render. No state mutation, no flags.
-container.addEventListener('scroll', scheduleRender)
-window.addEventListener('resize', scheduleRender)
+// === events
+domCache.container.addEventListener('scroll', () => scheduleRender())
+window.addEventListener('resize', () => scheduleRender())
 
-// === Render ===
+document.getElementById('btn-scroll')!.addEventListener('click', () => {
+  st.events.scrollTo = targetScroll; scheduleRender()
+})
+document.getElementById('btn-add')!.addEventListener('click', () => {
+  st.events.addAbove = 3; scheduleRender()
+})
+document.getElementById('btn-rapid')!.addEventListener('click', () => {
+  // Two separate data changes in quick succession (simulates rapid async updates).
+  // Whether they land in one render or two depends on timing — works
+  // either way. If one render: sees all 3, adjusts once. If two
+  // renders: each adjusts for its new items, prevY updated between.
+  st.events.addAbove = 1; scheduleRender()
+  setTimeout(function addTwoMore() {
+    st.events.addAbove = 2; scheduleRender()
+  }, 0)
+})
+
+// === render
 function render() {
-  scheduled = false
+  // === DOM reads
+  const currentScrollY = domCache.container.scrollTop
+  const viewportH = domCache.container.clientHeight
 
-  // Step 1: Read DOM (batched reads, no writes yet)
-  const currentScrollY = container.scrollTop
-  const viewportH = container.clientHeight
+  // === handle inputs
+  if (st.events.addAbove != null) {
+    for (let i = 0; i < st.events.addAbove; i++) st.items.unshift(makeItem('Today'))
+  }
 
-  // Step 2: Detect user scroll
-  // If currentScrollY differs from what we stored last frame, something
-  // external changed the scroll position. Pick a new anchor.
-  const userScrolled = currentScrollY !== storedScrollY
+  // Detect user scroll: if currentScrollY differs from what we stored last
+  // frame, something external changed the scroll position -> pick a new anchor.
+  // A scrollTo event also counts as external (we'll apply it as a side effect).
+  const userScrolled = st.events.scrollTo != null || currentScrollY !== st.storedScrollY
 
-  // Step 3: Compute layout (pure arithmetic — no DOM writes)
-  // Pass 1: iterate all items for y positions, total height, and anchor
+  // === layout (pure arithmetic, no DOM writes)
   let y = 0
-  let adjustedScrollTop = currentScrollY
+  let adjustedScrollTop = st.events.scrollTo ?? currentScrollY
   let newAnchor: Anchor | null = null
   let isFirstSession = true
   let idx = 0
 
-  while (idx < items.length) {
-    const sessionDay = items[idx]!.day
-    const gapTop = isFirstSession ? HEADER_GAP_FIRST : HEADER_GAP_REST
-    y += gapTop + HEADER_HEIGHT + HEADER_GAP_BOTTOM
+  while (idx < st.items.length) {
+    const sessionDay = st.items[idx]!.day
+    const gapTop = isFirstSession ? headerGapFirst : headerGapRest
+    y += gapTop + headerHeight + headerGapBottom
 
     let firstInSession = true
-    while (idx < items.length && items[idx]!.day === sessionDay) {
-      const item = items[idx]!
-      if (!firstInSession) y += ITEM_GAP
+    while (idx < st.items.length && st.items[idx]!.day === sessionDay) {
+      const item = st.items[idx]!
+      if (!firstInSession) y += itemGap
       firstInSession = false
 
       // Pick new anchor: first item below scrollTop
-      if (userScrolled && newAnchor == null && y > currentScrollY) {
-        newAnchor = { id: item.id, prevY: y }
+      if (userScrolled && newAnchor == null && y > adjustedScrollTop) {
+        newAnchor = {id: item.id, prevY: y}
       }
 
       // Anchor adjustment: compute scroll delta
-      if (!userScrolled && anchor != null && item.id === anchor.id && currentScrollY > 40) {
-        adjustedScrollTop = currentScrollY + (y - anchor.prevY)
-        anchor.prevY = y
+      if (!userScrolled && st.anchor != null && item.id === st.anchor.id && adjustedScrollTop > 40) {
+        adjustedScrollTop = adjustedScrollTop + (y - st.anchor.prevY)
+        st.anchor.prevY = y
       }
 
-      y += ITEM_HEIGHT
+      y += itemHeight
       idx++
     }
     isFirstSession = false
@@ -114,13 +150,13 @@ function render() {
 
   const totalHeight = y
 
-  // Update anchor
+  // === commit state
   if (userScrolled && newAnchor != null) {
-    anchor = newAnchor
+    st.anchor = newAnchor
   }
+  st.events.scrollTo = st.events.addAbove = null
 
-  // Step 4: DOM writes
-  // Pass 2: iterate items again, check visibility, JIT create + attach/detach
+  // === DOM writes
   const visibleTop = adjustedScrollTop
   const visibleBottom = adjustedScrollTop + viewportH
 
@@ -128,124 +164,77 @@ function render() {
   isFirstSession = true
   idx = 0
 
-  while (idx < items.length) {
-    const sessionDay = items[idx]!.day
-    const gapTop = isFirstSession ? HEADER_GAP_FIRST : HEADER_GAP_REST
+  while (idx < st.items.length) {
+    const sessionDay = st.items[idx]!.day
+    const gapTop = isFirstSession ? headerGapFirst : headerGapRest
     const headerY = y + gapTop
-    y += gapTop + HEADER_HEIGHT + HEADER_GAP_BOTTOM
+    y += gapTop + headerHeight + headerGapBottom
 
-    // Header: visible if it overlaps viewport
-    if (headerY + HEADER_HEIGHT > visibleTop && headerY < visibleBottom) {
-      let headerNode = domCache.get(sessionDay)
+    if (headerY + headerHeight > visibleTop && headerY < visibleBottom) {
+      let headerNode = domCache.nodes.get(sessionDay)
       if (headerNode == null) {
         headerNode = document.createElement('div')
         headerNode.className = 'day-header'
-        domCache.set(sessionDay, headerNode)
+        domCache.nodes.set(sessionDay, headerNode)
       }
       headerNode.style.top = headerY + 'px'
-      headerNode.style.height = HEADER_HEIGHT + 'px'
+      headerNode.style.height = headerHeight + 'px'
       headerNode.textContent = sessionDay
-      if (headerNode.parentNode == null) spacer.appendChild(headerNode)
+      if (headerNode.parentNode == null) domCache.spacer.appendChild(headerNode)
     } else {
-      const headerNode = domCache.get(sessionDay)
-      if (headerNode != null && headerNode.parentNode != null) spacer.removeChild(headerNode)
+      const headerNode = domCache.nodes.get(sessionDay)
+      if (headerNode?.parentNode != null) domCache.spacer.removeChild(headerNode)
     }
 
     let firstInSession = true
-    while (idx < items.length && items[idx]!.day === sessionDay) {
-      const item = items[idx]!
-      if (!firstInSession) y += ITEM_GAP
+    while (idx < st.items.length && st.items[idx]!.day === sessionDay) {
+      const item = st.items[idx]!
+      if (!firstInSession) y += itemGap
       firstInSession = false
 
-      // Item: visible if it overlaps viewport
-      if (y + ITEM_HEIGHT > visibleTop && y < visibleBottom) {
-        let node = domCache.get(item.id)
+      if (y + itemHeight > visibleTop && y < visibleBottom) {
+        let node = domCache.nodes.get(item.id)
         if (node == null) {
           node = document.createElement('div')
           node.className = 'item'
-          domCache.set(item.id, node)
+          domCache.nodes.set(item.id, node)
         }
         node.style.top = y + 'px'
-        node.style.height = ITEM_HEIGHT + 'px'
+        node.style.height = itemHeight + 'px'
         node.style.background = item.color
         node.textContent = item.label + ' \u2014 ' + item.day
-        if (node.parentNode == null) spacer.appendChild(node)
+        if (node.parentNode == null) domCache.spacer.appendChild(node)
       } else {
-        const node = domCache.get(item.id)
-        if (node != null && node.parentNode != null) spacer.removeChild(node)
+        const node = domCache.nodes.get(item.id)
+        if (node?.parentNode != null) domCache.spacer.removeChild(node)
       }
 
-      y += ITEM_HEIGHT
+      y += itemHeight
       idx++
     }
     isFirstSession = false
   }
 
-  spacer.style.height = totalHeight + 'px'
+  domCache.spacer.style.height = totalHeight + 'px'
+  domCache.info.textContent =
+    'scrollTop: ' + Math.round(domCache.container.scrollTop) +
+    ' | anchor: ' + (st.anchor != null ? st.anchor.id : 'none') +
+    ' (prevY: ' + (st.anchor != null ? Math.round(st.anchor.prevY) : '-') + ')' +
+    ' | items: ' + st.items.length
 
+  // === side effects
   if (adjustedScrollTop !== currentScrollY) {
-    container.scrollTo({ top: adjustedScrollTop, behavior: 'instant' as ScrollBehavior })
+    domCache.container.scrollTo({top: adjustedScrollTop, behavior: 'instant' as ScrollBehavior})
     // Read back actual value after scrollTo. Do NOT store the requested
     // value — browser truncation (Chrome: 0.5, Safari/Firefox: integers)
     // would cause a false mismatch on the next frame, making us think
     // the user scrolled when they didn't. (Scrolling.md points 3-4)
-    storedScrollY = container.scrollTop
+    st.storedScrollY = domCache.container.scrollTop
   } else {
-    storedScrollY = currentScrollY
+    st.storedScrollY = currentScrollY
   }
-
-  // Update info
-  info.textContent =
-    'scrollTop: ' + Math.round(container.scrollTop) +
-    ' | anchor: ' + (anchor != null ? anchor.id : 'none') +
-    ' (prevY: ' + (anchor != null ? Math.round(anchor.prevY) : '-') + ')' +
-    ' | items: ' + items.length
 }
 
-// === Actions ===
-function scrollToTarget() {
-  container.scrollTo({ top: TARGET_SCROLL, behavior: 'instant' as ScrollBehavior })
-  // The scroll event fires and calls scheduleRender(). The next render
-  // sees currentScrollY !== storedScrollY and picks a new anchor.
-}
-
-function addItemsAbove(n: number) {
-  for (let i = 0; i < n; i++) items.unshift(makeItem('Today'))
-  scheduleRender()
-}
-
-function addOneThenTwo() {
-  // Two separate data changes in quick succession (simulates rapid async updates).
-  // Whether they land in one render or two depends on timing — works
-  // either way. If one render: sees all 3, adjusts once. If two
-  // renders: each adjusts for its new items, prevY updated between.
-  items.unshift(makeItem('Today'))
-  scheduleRender()
-  setTimeout(function() {
-    items.unshift(makeItem('Today'), makeItem('Today'))
-    scheduleRender()
-  }, 0)
-}
-
-function resetAll() {
-  counter = 0
-  anchor = null
-  items = makeInitialItems()
-  // Clear DOM cache and wipe spacer children
-  domCache.clear()
-  spacer.textContent = ''
-  // Scroll to 0 synchronously (spacer is still tall from last render)
-  container.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
-  storedScrollY = 0
-  scheduleRender()
-}
-
-// === Button wiring (module scope, no inline onclick) ===
-document.getElementById('btn-scroll')!.addEventListener('click', scrollToTarget)
-document.getElementById('btn-add')!.addEventListener('click', () => addItemsAbove(3))
-document.getElementById('btn-rapid')!.addEventListener('click', addOneThenTwo)
-document.getElementById('btn-reset')!.addEventListener('click', resetAll)
-
-// === Init ===
-items = makeInitialItems()
+// === init
+st.items = makeInitialItems()
 scheduleRender()
