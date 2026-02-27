@@ -91,11 +91,67 @@ function hashN(args) {
 }
 ```
 
+## DOM
+
+DOM is mutative, imperative, and slow. So against our general guideline of simplicity, we make an exception and create a caching layer for it. The DOM should be a pure projection of state, not part of it (this keeps state immutable and rewindable without troublesome mutable references mixed in), just like React. Except in our case it's introspectable for a bit more expressivity.
+
+The `domCache` lives outside state and can be a `Map`, an object, an array, or whatever heterogenous shape suits the rendering needs. Don't hesitate to restructure the shape — we're counting on AI being able to refactor fast to the next best shape given changed requirements.
+
+Comment each `domCache` ite with its **cache lifetime**. Change them when the requirements change:
+
+```ts
+type DomCache = {
+  logo: HTMLDivElement                       // cache lifetime: same as data
+  sidebar: HTMLDivElement                    // cache lifetime: same as data
+  rows: Map<string, HTMLDivElement>          // cache lifetime: on visibility changes
+  thumbnails: HTMLDivElement[]               // cache lifetime: lru
+}
+
+function render() {
+  // ... DOM reads, state changes, layout, animation ...
+
+  // DOM writes — permanent fields, just dynamic props
+  domCache.logo.style.transform = `translateY(${logoY}px)`
+  domCache.sidebar.style.height = `${sidebarH}px`
+
+  // DOM writes — Map with JIT creation + inline eviction
+  for (const item of data) {
+    if (isVisible(item)) {
+      let node = domCache.rows.get(item.id)
+      if (node == null) {
+        node = document.createElement('div')
+        node.className = 'row'           // static: set once
+        domCache.rows.set(item.id, node)
+      }
+      node.style.top = `${y}px`          // dynamic: set every frame
+      if (node.parentNode == null) container.appendChild(node)
+    } else {
+      const node = domCache.rows.get(item.id)
+      if (node != null) { node.remove(); domCache.rows.delete(item.id) }
+    }
+  }
+
+  // DOM writes — array, evict on data removal elsewhere
+  for (let i = 0; i < domCache.thumbnails.length; i++) {
+    domCache.thumbnails[i]!.style.left = `${thumbX(i)}px`
+  }
+}
+```
+
+Low-level folks might recognize the above as various forms of allocations patterns: static, malloc, lru, etc. We can also alloc & wipe like an arena, or use pooling/recycling like old iOS scrollview. The latter 2 are less worthwhile on web but are viable.
+
+Properties set on a DOM node split into two **disjoint** groups:
+- **Static** (set once at creation): `className`, `backgroundImage`, fixed `textContent`, child structure. These go inside the creation block.
+- **Dynamic** (set every frame): `transform`, `width`, `height`, `opacity`, `zIndex`. These go outside, in the per-frame write path.
+If a property appears in both, it's a bug: either it's truly static (move it to creation) or truly dynamic (remove it from creation).
+
 ## Layout
 
 JS-based layout & positioning isn't as scary as you'd think. It enables JS animations, easy occlusion culling (virtualization in web speak), cooler layouts, etc. For example, for images, a demo here can check the area of each image (instead of just width or height), and adjust it to be more pleasant, e.g. same-ish size relative to other neighbor images.
 
 Do heavily borrow from shader/pytorch/vector primitives, e.g. vec2/3/4 (either as xyzw object or array), the pseudo-randoms above, remap, clamp, fract, step, length, etc.
+
+For JIT DOM creation with variable-height content: **never** use estimated heights for unmeasured rows. Use a tight **lower bound** bigger than 0. This guarantees you never miss rendering a visible row.
 
 ## Hit Testing
 

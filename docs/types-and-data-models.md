@@ -1,5 +1,7 @@
 Highly value asking about & modeling data structures and access patterns first and foremost when iterating. Don't be afraid to change data structure if a new feature requires remodeling. Don't just tackle things on incrementally.
 
+Since we're aggressively coding with AI, please always think from first principle and redo data structures given new requirements instead of incrementally tackling thigns on top. **This is especially important** for e.g. DOM cache modeling, since we actually depend on the AI continuously changing the cache shape as requirements change.
+
 Prefer type and union over interface and enum.
 Aggressively prefer switch over if/else, when possible (e.g. union values). Get those proper branch coverages
 
