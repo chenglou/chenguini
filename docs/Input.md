@@ -82,11 +82,92 @@ From some of the above points, there's no pointer event that works cross-browser
 
 - Font size on inputs must be >= 16px, otherwise iOS Safari auto-zooms the viewport on focus
 
-TODO: good pattern, to document better:
+## Pointer Coordinates
+
+`clientX/Y` = viewport-relative. `pageX/Y` = document-relative (includes scroll offset).
+
+- **Click/hover** (scroll may change between events): use `clientX/Y`. Convert to document-local for hit testing: `pointerXLocal = clientX + scrollX`.
+- **Drag tracking** (container has `overflow: hidden`, no scrolling): use `pageX/Y`. These stay stable in document space across frames.
 
 ```ts
-if (events.mousemove != null) {
-  pointer.x = events.mousemove.pageX - /*toGlobal*/ window.scrollX
-  pointer.y = events.mousemove.pageY - /*toGlobal*/ window.scrollY
+// click/hover: store viewport-relative, convert when needed
+if (events.click != null) {
+  pointer.x = events.click.clientX
+  pointer.y = events.click.clientY
 }
+if (events.mousemove != null) {
+  pointer.x = events.mousemove.clientX
+  pointer.y = events.mousemove.clientY
+}
+// for hit testing against absolute-positioned elements:
+const pointerXLocal = pointer.x + scrollX
+const pointerYLocal = pointer.y + scrollY
+```
+
+## Drag Interactions
+
+### Pointer State Machine
+
+For drag, track a three-state machine:
+
+```js
+/** @type 'down' | 'up' | 'firstDown' */
+let pointerState = 'up'
+```
+
+- **`'firstDown'`**: Set on `pointerdown`. Used for hit testing (which element was pressed). Transitions to `'down'` at end of frame.
+- **`'down'`**: Subsequent frames while held. Used for drag tracking.
+- **`'up'`**: Set on `mouseup`/`touchend`. Triggers release logic.
+
+### Pinning Springs During Drag
+
+During active drag, **set both `pos` and `dest`** on the dragged element's springs:
+
+```js
+d.x.pos = d.x.dest = dragX
+d.y.pos = d.y.dest = dragY
+```
+
+This pins the spring to the cursor (no springy lag). On release, the layout pass sets `dest` to the snap-back target, and the spring animates `pos` → `dest`.
+
+### Velocity Estimation
+
+For flick/throw gestures, estimate velocity from recent pointer history:
+
+```js
+let pointer = [{x: 0, y: 0, time: 0}] // circular buffer, keep last ~20
+// On move: pointer.push({x, y, time: performance.now()})
+// On release:
+let i = pointer.length - 1
+while (i >= 0 && now - pointer[i].time <= 100) i-- // last ~100ms
+let vx = (pointerLast.x - pointer[i].x) / (now - pointer[i].time) * 1000 // px/s
+```
+
+### Drag-to-Reorder
+
+Compare cursor position against neighboring items' midpoints during drag:
+
+```js
+while (dragIdx > 0 && pointerY < data[dragIdx - 1].y.dest + data[dragIdx - 1].sizeY / 2) {
+  [data[dragIdx], data[dragIdx - 1]] = [data[dragIdx - 1], data[dragIdx]]
+  dragIdx--
+}
+```
+
+### Z-Index During Drag & Release
+
+The dragged item needs the highest z-index. After release, it still needs to be high while animating back:
+
+```js
+zIndex = isDragged ? data.length + 2
+  : isLastDragged ? data.length + 1  // still animating back to slot
+  : i
+```
+
+### CSS for Drag
+
+```css
+user-select: none;         /* prevent text selection during drag */
+-webkit-user-select: none;
+overflow: hidden;           /* prevent accidentally dragging the viewport on iOS */
 ```

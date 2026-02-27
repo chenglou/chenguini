@@ -90,6 +90,24 @@ The reason why browsers give you wrong & async `scrollTop` values is because, fo
 
 This is the equivalent of standardizing fixed shader pipeline for WebGL/WebGPU, where standard decides what shapes you get to make, and how. For scrolling, the web's too far gone to fix this, but hopefully this serves as a lesson for future APIs.
 
+## Safari Scroll Container Quirk
+
+On iPad Safari, elements positioned outside the viewport (e.g. a horizontal carousel extending past viewport width) aren't properly clipped by `overflow: hidden` on `<body>` in all cases. The fix is to use `contain: layout` + `width: 100vw` + `height: 100vh` on body, turning it into the scroll container. This means:
+
+- Read scroll via `document.body.scrollTop` / `document.body.scrollLeft` (not `window.scrollY` / `window.scrollX`)
+- Programmatic scroll via `document.body.scrollTo(...)` (not `window.scrollTo(...)`)
+- Scroll event listener needs `{ capture: true }` to catch body scroll events
+
+Detect Safari: `navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')` (Chrome's UA also contains "Safari").
+
+Chrome doesn't rubberband inner elements (only page-wide), so for Chrome you may want to keep using `window` as the scroll target to preserve native page-level rubberbanding.
+
+## Overflow-X
+
+When positioning elements horizontally outside the viewport (e.g. a 1D carousel), set `overflow-x: hidden` on `<body>`. Without it, the browser adds a horizontal scrollbar. This is easy to forget because `overflow-y: auto` doesn't imply `overflow-x: hidden`.
+
 ## Miscellaneous
 
 - Avoid `overscroll-behavior: none` if you can, since it disables rubberbanding.
+- Use `scrollTo({ top: value, behavior: 'instant' })` for programmatic scroll adjustments (e.g. scroll anchoring). Without `behavior: 'instant'`, CSS `scroll-behavior: smooth` on the container would cause the adjustment to animate, fighting with the next frame's read.
+- Prefer `overflow: clip` over `overflow: hidden` when you only need visual clipping without scroll behavior. `clip` is lighter — it doesn't create a scroll container, doesn't create a stacking context, and is slightly more performant. Use `hidden` only when you actually need the element to be a scroll container (e.g. for programmatic scrollTo).

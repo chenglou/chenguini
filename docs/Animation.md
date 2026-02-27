@@ -60,6 +60,10 @@ function springMostlyDone(s: Spring) {
 We usually end a spring animation once it's almost at the target and velocity ~0: `if (springMostlyDone(s)) springGoToEnd(s)`
 We can't compare against the exact target value and velocity of 0 since the spring oscillates forever within a small delta
 
+### Spiral of Death Prevention
+
+When computing `steps = floor((now - animatedUntilTime) / msPerAnimationStep)`, if the tab was backgrounded or the device lagged, `steps` can be enormous (e.g. 10 seconds → 2500 steps at 4ms/step). Running all of them in one frame causes that frame to be late, which makes the next frame's `steps` even larger — a spiral of death. Cap it: `if (steps > N) steps = N` (e.g. N = 200-300). The tradeoff is a time skip (animation jumps forward), but this is better than freezing.
+
 ### Obscure Usages
 
 Imagine a scroll view with an image that you can tap to enlarge into a detail image view. When you dismiss, the image bounces back to its original place in the parent scroll view. If, at that time, you keep scrolling the scroll view up and down non-stop, the image will in theory bounce back and forth forever as you jitter the scroll view. iOS springboard and other places use a concept called *spring tightening* to fix this. They gradually "tighten" the spring, either through tweaking the spring constants, or by modeling the tightening itself as another spring. This way, the image itself bounces tighter and tighter til rest, even if you're still jittering the scroll view.

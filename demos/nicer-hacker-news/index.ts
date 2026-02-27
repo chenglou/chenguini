@@ -368,7 +368,7 @@ function scheduleRender() {
 
     // === End batched DOM reads 1. Begin batched DOM writes 1
 
-    threadView.commentsDisplay.textContent = '' // wipe content. Probably the fastest & most concise way? Bah not the bottleneck
+    threadView.commentsDisplay.textContent = '' // arena-style wipe: bulk-detach all children, re-append only visible ones below
 
     // no blurry canvas: coderwall.com/p/vmkk6a/how-to-make-the-canvas-not-look-like-crap-on-retina
     canvas.width = windowWidth * devicePixelRatio // different than canvas.style.width. Btw this clears the canvas as well
