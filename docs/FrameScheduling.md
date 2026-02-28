@@ -58,8 +58,6 @@ function scheduleRender() {
 window.addEventListener('resize', () => scheduleRender()) // most of time, there should be nothing else in the event handler beside scheduling a render
 window.addEventListener('click', (e) => {events.click = e; scheduleRender()}) // setting a state is fine too
 window.addEventListener('scroll', () => scheduleRender(), true) // feel free to use capture mode for certain events
-TODO: an event where we need some actual logic, like copy to clipboard
-
 function render(now) {
   // DOM reads
   const windowSizeX = document.documentElement.clientWidth
@@ -93,6 +91,24 @@ scheduleRender()
 ```
 
 Only events and render's final step can schedule a next render.
+
+**Gesture-gated APIs** (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`) require user gesture context — the browser only allows them inside the synchronous call stack of a user-initiated event handler. By the time rAF fires, the gesture context has expired, so these can't go through the batched render loop. Instead, skip event delegation for these and attach a direct event listener on the element at creation time:
+
+```js
+// inside domCache JIT creation block
+if (node == null) {
+  node = document.createElement('button')
+  node.className = 'copy-btn'
+  node.textContent = 'Copy'
+  node.addEventListener('click', (e) => {
+    navigator.clipboard.writeText(getTextToCopy())
+    e.stopPropagation() // don't bubble to the delegated window click handler
+  })
+  domCache.copyBtn = node
+}
+// dynamic props still set every frame in DOM writes
+node.style.top = `${y}px`
+```
 
 Name your `rAF` callback (`function renderAndMaybeScheduleAnotherRender(now) { ... }` instead of an anonymous arrow). Named functions show up in the browser profiler and debugger, making performance traces readable.
 
