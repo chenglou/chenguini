@@ -68,8 +68,8 @@ type Pair = {
   numEl: HTMLDivElement; anaEl: HTMLDivElement
 }
 
-const cx = window.innerWidth / 2
-const cy = window.innerHeight / 2
+const cx = document.documentElement.clientWidth / 2
+const cy = document.documentElement.clientHeight / 2
 const pairs: Pair[] = []
 let animatedUntilTime = 0
 
@@ -89,7 +89,7 @@ for (let i = 0; i < 3; i++) {
   anaEl.style.transform = `translate(${x - ringSize / 2}px,${y - ringSize / 2}px)`
   document.body.appendChild(anaEl)
 
-  const now = performance.now()
+  const now = document.timeline.currentTime as number
   pairs.push({
     numX: spring(x), numY: spring(y),
     anaX: aspringCreate(x, x, 0, now), anaY: aspringCreate(y, y, 0, now),
@@ -117,10 +117,10 @@ legend.appendChild(errEl)
 
 // === events ===
 btn.addEventListener('click', () => {
-  const now = performance.now()
+  const now = document.timeline.currentTime as number
   const margin = 80
-  const w = window.innerWidth
-  const h = window.innerHeight
+  const w = document.documentElement.clientWidth
+  const h = document.documentElement.clientHeight
 
   for (const p of pairs) {
     const destX = margin + Math.random() * (w - margin * 2)
