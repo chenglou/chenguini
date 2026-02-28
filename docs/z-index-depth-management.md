@@ -74,9 +74,7 @@ const above = d++
 
 ### Don't
 
-- Hardcode magic numbers: `z-index: 9999` or `z-[50]`
-- Use Tailwind z-index classes for anything global (`z-10`, `z-20`, `z-50`)
-- Use weird constants like 999 or 9999. You either know the order or try to figure out. Maybe once or twice as weird escape hatch values, in the global `Z.ts`, is fine for whatever hacky reason
+- Hardcode magic numbers (`z-index: 9999`, `z-[50]`, Tailwind `z-10`/`z-20`/`z-50`, etc.). You either know the order, or should figure it out. Maybe 1 or 2 magic constants as escape hatch, in a global `Z.ts`, is fine
 - Mix global and local z-index values. E.g., don't import `modal` from `Z.ts` then do `const myZ = modal + 1` in your file
   - If the file's component doesn't have a stacking context, `modal + 1` might silently equal another global constant like `toast`, and if `modal` changes in `Z.ts`, your local code breaks unexpectedly
   - If the file's component has a stacking context, the global value is meaningless anyway; it's just a number competing locally. Use local values (1, 2) instead

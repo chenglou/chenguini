@@ -1,6 +1,6 @@
 We hand-roll our own server rendering (since Bun doesn't provide enough support for our use-cases yet) and hot reloading (which Bun does provide, but it's kinda wonky).
 
-Server rendering is better described by code snippets below (note that the snippets are a draft; they might not correspond exactly to what we do, but they're close).
+Server rendering is better described by code snippets below.
 
 `build.ts` (only called for prod):
 ```ts
