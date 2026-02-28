@@ -156,7 +156,7 @@ while (dragIdx > 0 && pointerY < data[dragIdx - 1].y.dest + data[dragIdx - 1].si
 
 ### Z-Index During Drag & Release
 
-The dragged item needs the highest z-index. After release, it still needs to be high while animating back:
+See also [z-index-depth-management.md](z-index-depth-management.md) for general depth management. The dragged item needs the highest z-index. After release, it still needs to be high while animating back:
 
 ```js
 zIndex = isDragged ? data.length + 2

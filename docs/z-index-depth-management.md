@@ -79,6 +79,10 @@ const above = d++
   - If the file's component doesn't have a stacking context, `modal + 1` might silently equal another global constant like `toast`, and if `modal` changes in `Z.ts`, your local code breaks unexpectedly
   - If the file's component has a stacking context, the global value is meaningless anyway; it's just a number competing locally. Use local values (1, 2) instead
 
+### Drag & Release
+
+For z-index patterns specific to drag interactions (dragged item on top, animating-back item still elevated), see [Input.md § Z-Index During Drag & Release](Input.md#z-index-during-drag--release).
+
 ### Gotchas
 
 - `position: fixed` and `sticky` create a stacking context, but the element is still bounded by any ancestor stacking context. They only compete at the root level if no ancestor creates a stacking context. (This means a fixed/sticky element inside a nav that creates a stacking context — e.g. `position: relative` + `z-index: 5`, or `isolation: isolate` — is bounded by that nav, even though it's positioned relative to the viewport.)
