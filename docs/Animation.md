@@ -8,6 +8,12 @@ Animations are hard for several reasons:
 - Modern web frameworks optimize for throughput performance at the expense of latency performance (elaborate)
 - Animations require structural ...
 
+## Prefer Closed-Form (Analytical) Over Numerical
+
+When possible, prefer animations with closed-form solutions (e.g. `x(t) = dest + e^(-αt) * (A*cos(ωt) + B*sin(ωt))` for underdamped springs) over numerical stepping (Euler integration in a loop). Closed-form lets you sample any point in time directly — no stepping loop, no accumulated numerical error, no spiral-of-death concerns, trivially FPS-independent. It also enables cheap prediction for predictive keyframes: just evaluate the formula at future timestamps instead of cloning & stepping world state. Retargeting (changing destination mid-animation) works by sampling current pos/vel and computing new coefficients. See [spring-comparison](../demos/spring-comparison/index.ts) for both approaches side by side.
+
+Numerical stepping is still necessary when forces depend on other elements' positions (N-body repulsion, collisions), since coupled systems have no general closed-form solution.
+
 ## Tips & Tricks
 
 - Some animations should be source of truth for state from which other states are derived (e.g. ?)
