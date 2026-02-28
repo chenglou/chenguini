@@ -47,7 +47,7 @@ The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scr
 1. Read `scrollTop` once at the start of each render/frame.
 2. Compare to the stored value from last frame. If different → user scrolled → pick a new anchor (first item below `scrollTop`). If same → data changed → keep the old anchor and compute the delta.
 3. Compute layout. When the anchor item is encountered, `adjustedScrollTop = scrollTop + (currentY - anchor.prevY)`.
-4. After all DOM writes, `scrollTo(adjustedScrollTop)` if it changed.
+4. After all DOM writes, `scrollTo(adjustedScrollTop)` if it changed. Make sure to use `behavior: 'instant'` to avoid wrong smooth scrolling
 5. **Read back** `container.scrollTop` and store _that_ value (not the requested value). Browser truncation (point 3 above) would otherwise cause a false "user scrolled" detection next frame.
 
 This requires no flags or workarounds because each frame processes all accumulated state changes independently — `scrollTo` from frame N is fully resolved by frame N+1.
@@ -109,5 +109,4 @@ When positioning elements horizontally outside the viewport (e.g. a 1D carousel)
 ## Miscellaneous
 
 - Avoid `overscroll-behavior: none` if you can, since it disables rubberbanding.
-- Use `scrollTo({ top: value, behavior: 'instant' })` for programmatic scroll adjustments (e.g. scroll anchoring). Without `behavior: 'instant'`, CSS `scroll-behavior: smooth` on the container would cause the adjustment to animate, fighting with the next frame's read.
 - Prefer `overflow: clip` over `overflow: hidden` when you only need visual clipping without scroll behavior. `clip` is lighter — it doesn't create a scroll container, doesn't create a stacking context, and is slightly more performant. Use `hidden` only when you actually need the element to be a scroll container (e.g. for programmatic scrollTo).

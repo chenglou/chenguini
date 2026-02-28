@@ -87,17 +87,17 @@ From some of the above points, there's no pointer event that works cross-browser
 `clientX/Y` = viewport-relative. `pageX/Y` = document-relative (includes scroll offset).
 
 - **Click/hover** (scroll may change between events): use `clientX/Y`. Convert to document-local for hit testing: `pointerXLocal = clientX + scrollX`.
-- **Drag tracking** (container has `overflow: hidden`, no scrolling): use `pageX/Y`. These stay stable in document space across frames.
+- **Drag tracking** (container has no scrolling): use `pageX/Y`. These stay stable in document space across frames.
 
 ```ts
 // click/hover: store viewport-relative, convert when needed
-if (events.click != null) {
-  pointer.x = events.click.clientX
-  pointer.y = events.click.clientY
+if (st.events.click != null) {
+  pointer.x = st.events.click.clientX
+  pointer.y = st.events.click.clientY
 }
-if (events.mousemove != null) {
-  pointer.x = events.mousemove.clientX
-  pointer.y = events.mousemove.clientY
+if (st.events.mousemove != null) {
+  pointer.x = st.events.mousemove.clientX
+  pointer.y = st.events.mousemove.clientY
 }
 // for hit testing against absolute-positioned elements:
 const pointerXLocal = pointer.x + scrollX
@@ -105,19 +105,6 @@ const pointerYLocal = pointer.y + scrollY
 ```
 
 ## Drag Interactions
-
-### Pointer State Machine
-
-For drag, track a three-state machine:
-
-```js
-/** @type 'down' | 'up' | 'firstDown' */
-let pointerState = 'up'
-```
-
-- **`'firstDown'`**: Set on `pointerdown`. Used for hit testing (which element was pressed). Transitions to `'down'` at end of frame.
-- **`'down'`**: Subsequent frames while held. Used for drag tracking.
-- **`'up'`**: Set on `mouseup`/`touchend`. Triggers release logic.
 
 ### Pinning Springs During Drag
 
