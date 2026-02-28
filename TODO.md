@@ -12,6 +12,7 @@
 - `@cs` / `@/cs` headers are compact pseudocode specs describing the code below them. They sit inside `<script>` tags or at the top of `.ts` files.
 - analytical springs
 - tailwind-like layout naming conventions?
+- ben's video tweak advice from chromium
 
 - Safari
   - CSS for Drag section: recheck overflow: hidden vs clip
