@@ -231,7 +231,7 @@ function render(now: number) {
 
   // === step 4: run animation
   let newAnimatedUntilTime = st.animatedUntilTime ?? now
-  const steps = Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep) // run x spring steps. Decouple physics simulation from framerate!
+  const steps = Math.min(300, Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)) // run x spring steps. Decouple physics simulation from framerate!
   newAnimatedUntilTime += steps * msPerAnimationStep
   let stillAnimating = false
   springForEach(s => {

@@ -70,7 +70,7 @@ function render(now) {
 
   // Animation tick
   let newAnimatedUntilTime = animatedUntilTime ?? now
-  const steps = Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)
+  const steps = Math.min(300, Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)) // spiral of death prevention, see Animation.md
   newAnimatedUntilTime += steps * msPerAnimationStep
   let stillAnimating = false
   // ... spring steps

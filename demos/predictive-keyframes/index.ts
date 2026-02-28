@@ -328,7 +328,7 @@ function render(now: number) {
 
   // Catch up simulation
   if (animatedUntilTime === 0) animatedUntilTime = now
-  const steps = Math.floor((now - animatedUntilTime) / msPerAnimationStep)
+  const steps = Math.min(300, Math.floor((now - animatedUntilTime) / msPerAnimationStep))
   animatedUntilTime += steps * msPerAnimationStep
   for (let i = 0; i < steps; i++) {
     world = simulate(world, containerWH)

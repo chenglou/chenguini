@@ -235,7 +235,7 @@ function render(now: number) {
 
   if (st.mode !== 'dragging') {
     let newAnimatedUntilTime = st.animatedUntilTime ?? now
-    const steps = Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)
+    const steps = Math.min(300, Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep))
     newAnimatedUntilTime += steps * msPerAnimationStep
 
     const allSprings = [st.spring1x, st.spring1y, st.spring2x, st.spring2y]

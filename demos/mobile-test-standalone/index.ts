@@ -594,7 +594,7 @@ function render(now: number) {
 
   // === animation step
   const newAnimatedUntilTime = animatedUntilTime ?? now
-  const steps = Math.floor((now - newAnimatedUntilTime) / msPerStep)
+  const steps = Math.min(300, Math.floor((now - newAnimatedUntilTime) / msPerStep))
   const _newAnimatedUntilTime = newAnimatedUntilTime + steps * msPerStep
   let stillAnimating = false
   springForEach(data, function(s: Spring) {

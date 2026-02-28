@@ -62,7 +62,7 @@ We can't compare against the exact target value and velocity of 0 since the spri
 
 ### Spiral of Death Prevention
 
-When computing `steps = floor((now - animatedUntilTime) / msPerAnimationStep)`, if the tab was backgrounded or the device lagged, `steps` can be enormous (e.g. 10 seconds → 2500 steps at 4ms/step). Running all of them in one frame causes that frame to be late, which makes the next frame's `steps` even larger — a spiral of death. Cap it: `if (steps > N) steps = N` (e.g. N = 200-300). The tradeoff is a time skip (animation jumps forward), but this is better than freezing.
+When computing `steps = floor((now - animatedUntilTime) / msPerAnimationStep)`, if the tab was backgrounded or the device lagged, `steps` can be enormous (e.g. 10 seconds → 2500 steps at 4ms/step). Running all of them in one frame causes that frame to be late, which makes the next frame's `steps` even larger — a spiral of death. Cap it: `steps = Math.min(N, steps)`. Since `animatedUntilTime` only advances by the capped amount, the remaining gap catches up naturally over subsequent frames — no time skip. Pick N large enough that normal operation never triggers it (60fps at 4ms/step needs ~4 steps/frame; occasional stalls might need ~50), but small enough to prevent the spiral. N = 300 (1200ms at 4ms/step) is a good default: most animations settle well within that, and no normal frame is 1.2 seconds long.
 
 ### Obscure Usages
 
@@ -128,6 +128,6 @@ The simulation must be non-mutative since we're predicting ahead & throwing away
 - Pure function for `simulate()`. No bad DOM ops, no side effects inside `simulate()`
 - JS animations. CSS transitions/easings are opaque won't work since you can't know & control their intermediate values
 
-During the catch-up phase where we do `simulate()`: you have a choice to either catch up from potentially a very long time ago (e.g. browser tab was backgrounded) til now, incurring expensive computations, or cap the steps (e.g. `if (steps > N) steps = N`) and accept a time skip. There's no clean middle ground — a slow catch-up makes the next frame late, which means even more catch-up (spiral of death), but capping to 0 freezes the simulation forever at its current state.
+During the catch-up phase where we do `simulate()`: cap the steps (e.g. `steps = Math.min(300, steps)`) to prevent spiral of death from backgrounded tabs or device stalls. See Spiral of Death Prevention above for details.
 
 See [predictive-keyframes](../demos/predictive-keyframes/index.ts) for a working example.
