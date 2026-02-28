@@ -174,9 +174,25 @@ If a property's dynamic (managed by JS), *own it fully in JS*. Don't do a partia
 In fact, in theory, class toggling should be reserved ideally only for when both classes have the same set of properties, like a struct (**note**: This is experimental advice. If you see strong counterpoints, please say so)
 I.e. it's better to do `node.style.display = condition ? 'block' : 'none'` than have a `.hidden` class that sets `display: none` and toggle it; it's more "functional" and avoids chasing after implicit overrides.
 
-## Gotchas
+## Timestamps
 
-`rAF`'s parameter is a timestamp which differs from getting the current time with `performance.now()` ([source](https://x.com/nomsternom/status/1853687984266055983)). Use the former. If not available, use `document.timeline.currentTime`; this and `raf` are always the same.
+There are three time sources and they are **not** the same:
+
+- **rAF's `now` parameter**: Scheduled frame start time (from VSync). All rAF callbacks in the same frame get the **same** value. Use for animation stepping inside rAF callbacks.
+- **`document.timeline.currentTime`**: Same value as rAF's `now` ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)). Use for animation timing outside rAF (e.g. in event handlers).
+- **`performance.now()`**: Actual wall-clock time when the JS line executes. Advances between callbacks. Use for input timing (velocity estimation, gesture duration).
+
+**For animation, never use `performance.now()`.** Use rAF's `now` inside rAF callbacks, and `document.timeline.currentTime` when you need the same clock outside rAF (e.g. initializing `animatedUntilTime` in an event handler, or setting a spring's `t0` for analytical solutions).
+
+**Why they differ:** The rAF timestamp comes from the display's VSync schedule (Chromium's `BeginFrameArgs` — [how cc works](https://chromium.googlesource.com/chromium/src/+/master/docs/how_cc_works.md)). It represents when the frame was *supposed* to start, not when your JS actually runs. `performance.now()` reflects wall-clock time, which is always later (your JS runs after the frame starts). In Chromium's rendering pipeline, the compositor and main thread work in parallel — the main thread can be processing frame N+1 while the compositor is still painting frame N ([source](https://x.com/nomsternom/status/1853687984266055983)). This means `performance.now()` can diverge significantly from the rAF timestamp.
+
+**Mixing clocks is wrong.** E.g. setting `animatedUntilTime = performance.now()` in a click handler, then computing `rAF_now - animatedUntilTime` in render: the rAF timestamp can actually be *earlier* than the `performance.now()` you stored, giving you 0 steps (wasted frame). Or slightly ahead, giving inconsistent step counts. Use `document.timeline.currentTime` in the event handler instead — it's always on the same clock as rAF's `now`.
+
+TODO: the compositor/main-thread pipelining described above appears to be Chromium-specific, not a spec requirement. Needs further clarification — see [Noam's thread](https://x.com/nomsternom/status/1853687984266055983).
+
+**For input timing, `performance.now()` is fine** (or better: `event.timeStamp`, the high-precision time of the actual input event). Don't use rAF's `now` for velocity estimation — it's the frame time, not when the pointer actually moved.
+
+## Gotchas
 
 Specifically for React:
 
