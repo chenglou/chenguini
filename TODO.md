@@ -1,3 +1,4 @@
+- dictate st and domcache by making a skeleton
 - Actually describe vibeui and do a pass over the demos to make sure they respect it
 - fuse docs maybe?
 - bring over a proper claude.md
