@@ -114,13 +114,7 @@ Name your `rAF` callback (`function renderAndMaybeScheduleAnotherRender(now) { .
 
 A React app might not be able to follow this, but when the need arises (heavy interactivity), this can still be adopted within components.
 
-## DOM Reads
-
-Use `document.documentElement.clientWidth` and `document.documentElement.clientHeight` for viewport dimensions. Do NOT use `window.innerWidth` / `window.innerHeight` — those include scrollbar width and behave differently under Safari pinch zoom (they change during zoom, `clientWidth/Height` don't). `visualViewport.width/height` also changes during pinch zoom.
-
-For pointer coordinates, see Input.md (`clientX/Y` vs `pageX/Y`, coordinate space conversion, drag patterns).
-
-### Event Consumption
+## Event Consumption
 
 In the render loop, events are stored on arrival and consumed during render. **Null them in the "commit state" phase** (after layout + animation, before DOM writes), not at the beginning of render. This ensures they're available throughout the entire state computation.
 
@@ -129,50 +123,7 @@ In the render loop, events are stored on arrival and consumed during render. **N
 events.keydown = events.click = events.mousemove = null
 ```
 
-## DOM Interleaving
-
-Repeated DOM read & write is catastrophic for performance ([https://gist.github.com/paulirish/5d52fb081b3570c81e3a](https://gist.github.com/paulirish/5d52fb081b3570c81e3a)). It's not always avoidable (especially when there's need for text measurement as part of layout logic before render), but keep to them a strict minimum.
-For easier reasoning & testing, pass the read DOM values to helper functions instead of having said helpers read from DOM. And definitely avoid having helpers mutate DOM, when possible.
-
-## DOM Writes
-
-**Everything that touches DOM properties is a DOM write** — not just element content and transforms, but also `body.style.cursor`, `body.style.overflowY`, dummy element heights, etc. These all belong in the DOM writes phase. A common mistake is setting `document.body.style.cursor` during layout computation — instead, compute the cursor value as a local variable during layout, then assign it to the DOM in the DOM writes phase.
-
-React did it right with its idempotent JSX. Treat the DOM writes section of the render loop as essentially JSX as much as possible. For example, avoid partial mutations like `node.classList.add('foo')` and `node.classList.remove('foo')`. Assign the entire classes string at once. Use ternary, and when if-else are needed ensure they touch the DOM structure the same way:
-
-```ts
-// good:
-if (condition) {
-  node.style.display = 'block'
-  node.style.color = 'red'
-} else {
-  node.style.display = 'none'
-  node.style.color = 'blue'
-}
-
-// also good:
-let display, color
-if (condition) {
-  display = 'block'
-  color = 'red'
-} else {
-  display = 'none'
-  color = 'blue'
-}
-node.style.display = display
-node.style.color = color
-
-// bad:
-if (condition) {
-  node.style.display = 'block'
-} else {
-  node.style.color = 'red'
-}
-```
-
-If a property's dynamic (managed by JS), *own it fully in JS*. Don't do a partial thing where some default value's set in CSS, then overridden with JS or classes sometime. Avoid implicit property inheritance from your CSS.
-In fact, in theory, class toggling should be reserved ideally only for when both classes have the same set of properties, like a struct (**note**: This is experimental advice. If you see strong counterpoints, please say so)
-I.e. it's better to do `node.style.display = condition ? 'block' : 'none'` than have a `.hidden` class that sets `display: none` and toggle it; it's more "functional" and avoids chasing after implicit overrides.
+For DOM reads, writes, and interleaving rules, see [ui-architecture.md § DOM](ui-architecture.md#dom).
 
 ## Timestamps
 
