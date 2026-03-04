@@ -24,30 +24,28 @@ if (isProd) {
 
 serve({
   routes: {
-    '/*': async (req): Promise<Response> => {
-      const parsedRoute = parseUrl(req.url) // our own routing logic. Ignore
-      const authedUser = await getAuthUser(req.cookies) // example async logic
-      const initialProps = {
-        authedUser,
-      }
-      if (isProd) {
-        const fullJSX = await Document({
-          jsPath: builtArtifacts.jsPath, // Document.tsx below will render a script tag with this path
-          cssPath: builtArtifacts.cssPath, // same
-          initialProps, // Document.tsx will render a JSON script tag with this initialProps
-          parsedRoute,
-        })
-        const fullHTML = renderToString(fullJSX)
-        return new Response(fullHTML)
-      } else {
-        // ew, at dev time, pass the initial data though cookies
-        req.cookies.set('initialProps', JSON.stringify(initialProps), {...})
-        // then redirect
-        return new Response(null, { status: 302, headers: { location: `/dev${req.url}` } })
-        // these 2 contortions are only needed because dev-time hot reloading requires us to pass index.html directly as a response (see right below)
-      }
-    }
-    '/dev/*': isProd ? undefined : app, // the dev-time hot reloading hack
+    // In prod, server-render the full page. In dev, serve index.html directly for hot reloading.
+    '/*': isProd
+      ? async (req): Promise<Response> => {
+          const authedUser = await getAuthUser(req.cookies)
+          const initialProps = { authedUser }
+          const fullJSX = await Document({
+            jsPath: builtArtifacts.jsPath, // Document.tsx below will render a script tag with this path
+            cssPath: builtArtifacts.cssPath, // same
+            initialProps, // Document.tsx will render a JSON script tag with this initialProps
+          })
+          const fullHTML = renderToString(fullJSX)
+          return new Response(fullHTML)
+        }
+      : app, // dev: serve index.html directly for Bun's hot reloading
+
+    // Dev-only endpoint: the client fetches initialProps (including auth) via this API
+    '/api/dev-initial-props': isProd
+      ? new Response('Not found', { status: 404 })
+      : async (req) => {
+          const initialAuthUser = await getAuthUser(req.cookies)
+          return Response.json({ initialAuthUser, urlFromInitialServerRequest: new URL(req.url).searchParams.get('url') })
+        }
   }
 })
 ```
@@ -89,8 +87,11 @@ if (isProd) {
     />,
   )
 } else {
-  const initialProps = parseAndGetPropsFromCookies(document.cookies)
-   const container = document.createElement('div')
+  // In dev, fetch initialProps from a dev-only API endpoint (which does auth server-side)
+  const urlFromRequest = `${window.location.pathname}${window.location.search}`
+  const response = await fetch(`/api/dev-initial-props?url=${encodeURIComponent(urlFromRequest)}`)
+  const initialProps = await response.json()
+  const container = document.createElement('div')
   document.body.appendChild(container)
   createRoot(container).render(
     <MyApp
