@@ -30,6 +30,8 @@ What we were missing was sufficiently smart AI to assess the situation, conditio
 
 The key shift: when requirements change, AI can read, reassess, and rewrite — producing the next best abstraction given the new constraints. No need to incrementally modify architecture from the old state, accumulating accidental complexity. Just regenerate the right thing.
 
+Most libraries and patterns we've built were defensive — protecting humans from mistakes, hiding complexity behind opaque APIs, constraining expressiveness to prevent footguns. With AI, we can be aggressive. This doesn't mean no abstractions — it means a different kind of abstraction. Not "hide the dangerous parts" but "express the intent clearly and let AI handle the mechanical correctness." These docs are an attempt to find what those new abstractions look like.
+
 ## Vibe Engineering
 
 The vibe coding movement has produced more apps, faster. But the ceiling is the ceiling of what we already have — we're just producing more of these things in quantity. The quality and ambition haven't moved.
