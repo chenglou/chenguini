@@ -38,6 +38,29 @@ The vibe coding movement has produced more apps, faster. But the ceiling is the 
 
 What we're trying to do here is raise both the ceiling and the floor. Turn vibe coding into vibe engineering.
 
+## The Quadrant
+
+```
+  aesthetic
+  quality
+    ▲
+    │
+  1 │  landing pages          ◉ ← us, goal
+    │       ◉               ╱
+    │                      ╱
+    │                    ╱
+    │                  ╱
+    │                ╱
+    │              ╱
+  0 │─────────────◉──────────────▶
+    0        saas dashboards    1
+                          maintainability
+```
+
+SaaS dashboards are maintainable but visually basic — built with frameworks that optimize for shipping features, not feel. Landing pages are beautiful but throwaway — hand-crafted, can't evolve, rebuilt from scratch each time. The gap exists because achieving both requires interaction design expertise that's too expensive to sustain at scale.
+
+AI + these docs close the gap. The expertise is encoded once, applied every time. Maintainable code that's also tasteful, because the mechanical cost of taste drops to near zero.
+
 ## The No-Framework Framework
 
 These docs aren't a library to npm install. They're patterns and conventions that AI applies contextually. The framework is knowledge, not code. A `domCache` isn't a generic virtual DOM — it's whatever shape this specific app needs right now, reshapeable when requirements change. The router isn't a routing library — it's a switch statement and `pushState`. The animation system isn't a package — it's spring math inlined where it's used.
