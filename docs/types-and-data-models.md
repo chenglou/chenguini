@@ -28,6 +28,8 @@ DO NOT prematurily optimize data for performance at the cost of simplicity:
 - Highly value single source of truth. Don't denormalize & add auxiliary fields on data that we could have just computed on the fly. The computations are quasi-free compared to memory
 - Keep fewer data structures, flatter data, and collapse data with the same lifetimes together
 
+DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash.
+
 ## Project Setup
 
 A quick iteration & verification loop is important especially for AI now. To that end, we use nuanced TypeScript + linting to essentially monkeypatch the type system into a mostly correct one, while opinionatedly dropping all the unhelpful stylistic rules that distracts AI
