@@ -30,7 +30,7 @@
      scrolling breaks silently.
 
   6. `touch-action: none` on body is intentional — the component does all its own
-     touch handling (touchstart/touchmove/pointerup). Removing it causes double-
+     touch handling (touchstart/touchmove/touchend). Removing it causes double-
      handling with the browser's native gestures.
 
   == JS PITFALLS ==

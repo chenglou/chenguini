@@ -257,14 +257,15 @@ window.addEventListener('mousemove', function(event) {
 
 function ontouch(event: TouchEvent) {
   event.preventDefault()
-  if (event.touches.length > 0) {
-    cursorPosition.x = event.touches[0]!.clientX
-    cursorPosition.y = event.touches[0]!.clientY
-  }
+  const touch = event.touches[0] ?? event.changedTouches[0]
+  if (touch == null) return
+  cursorPosition.x = touch.clientX
+  cursorPosition.y = touch.clientY
 }
 document.documentElement.style.touchAction = 'none'
 window.addEventListener('touchstart', ontouch)
 window.addEventListener('touchend', ontouch)
+window.addEventListener('touchcancel', ontouch)
 window.addEventListener('touchmove', ontouch)
 
 let needclear = -1

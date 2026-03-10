@@ -162,6 +162,10 @@ window.addEventListener('touchend', () => {
   inputs.pointerState = 'up'
   scheduleRender()
 })
+window.addEventListener('touchcancel', () => {
+  inputs.pointerState = 'up'
+  scheduleRender()
+})
 window.addEventListener('click', () => {
   inputs.clicked = true
   scheduleRender()

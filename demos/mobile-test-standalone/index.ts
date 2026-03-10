@@ -241,12 +241,18 @@ window.addEventListener('keydown', function(e: KeyboardEvent) {
 })
 inputForm.addEventListener('submit', function(e: Event) { e.preventDefault() })
 if (useTouch) {
-  window.addEventListener('touchstart', function(e: TouchEvent) { const t = e.touches[0]!; inputs.pointer.push({ state: 'down', x: t.pageX, y: t.pageY, target: e.target, time: performance.now() }); scheduleRender() })
-  window.addEventListener('touchmove', function(e: TouchEvent) { const t = e.touches[0]!; inputs.pointer.push({ state: 'move', x: t.pageX, y: t.pageY, target: e.target, time: performance.now() }); scheduleRender() })
-  window.addEventListener('pointerup', function(e: PointerEvent) { inputs.pointer.push({ state: 'up', x: e.pageX, y: e.pageY, target: e.target, time: performance.now() }); scheduleRender() })
+  window.addEventListener('touchstart', function(e: TouchEvent) { const t = e.touches[0]!; inputs.pointer.push({ state: 'down', x: t.pageX, y: t.pageY, target: e.target, time: e.timeStamp }); scheduleRender() })
+  window.addEventListener('touchmove', function(e: TouchEvent) { const t = e.touches[0]!; inputs.pointer.push({ state: 'move', x: t.pageX, y: t.pageY, target: e.target, time: e.timeStamp }); scheduleRender() })
+  function onTouchEnd(e: TouchEvent) {
+    const t = e.changedTouches[0]
+    if (t == null) return
+    inputs.pointer.push({ state: 'up', x: t.pageX, y: t.pageY, target: e.target, time: e.timeStamp }); scheduleRender()
+  }
+  window.addEventListener('touchend', onTouchEnd)
+  window.addEventListener('touchcancel', onTouchEnd)
 } else {
-  window.addEventListener('mousemove', function(e: MouseEvent) { inputs.pointer.push({ state: 'move', x: e.pageX, y: e.pageY, target: e.target, time: performance.now() }); scheduleRender() })
-  window.addEventListener('click', function(e: MouseEvent) { inputs.pointer.push({ state: 'up', x: e.pageX, y: e.pageY, target: e.target, time: performance.now() }); scheduleRender() })
+  window.addEventListener('mousemove', function(e: MouseEvent) { inputs.pointer.push({ state: 'move', x: e.pageX, y: e.pageY, target: e.target, time: e.timeStamp }); scheduleRender() })
+  window.addEventListener('click', function(e: MouseEvent) { inputs.pointer.push({ state: 'up', x: e.pageX, y: e.pageY, target: e.target, time: e.timeStamp }); scheduleRender() })
 }
 
 // === hit testing
@@ -352,7 +358,7 @@ function render(now: number) {
         let ii = prevInputs.length - 1; while (ii > 0 && prevInputs[ii]!.time > td.time && p.time - prevInputs[ii]!.time <= 40) ii--
         const pLast = prevInputs[prevInputs.length - 1]!, pI = prevInputs[ii]!
         const dt = p.time - pI.time
-        processedInput = { state: 'touchend', x: p.x, y: p.y, deltaX: p.x - td.x, deltaY: p.y - td.y, time: p.time, target: p.target, deltaVX: (pLast.x - pI.x) / dt * 1000, deltaVY: (pLast.y - pI.y) / dt * 1000 }
+        processedInput = { state: 'touchend', x: p.x, y: p.y, deltaX: p.x - td.x, deltaY: p.y - td.y, time: p.time, target: p.target, deltaVX: dt > 0 ? (pLast.x - pI.x) / dt * 1000 : 0, deltaVY: dt > 0 ? (pLast.y - pI.y) / dt * 1000 : 0 }
         newTouchDown = null
       } else if (p.state === 'down') {
         processedInput = { state: 'touchstart', x: p.x, y: p.y, time: p.time }

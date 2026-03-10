@@ -84,6 +84,7 @@ type State = {
   events: {
     mouseup: MouseEvent | null
     touchend: TouchEvent | null
+    touchcancel: TouchEvent | null
     mousemove: MouseEvent | null
     touchmove: TouchEvent | null
     pointerdown: PointerEvent | null
@@ -115,7 +116,7 @@ const st: State = {
   lastDragged: null,
   pointerState: 'up',
   pointer: [{x: 0, y: 0, time: 0}], // circular buffer. Btw, on page load, there's no way to render a first cursor state =(
-  events: { mouseup: null, touchend: null, mousemove: null, touchmove: null, pointerdown: null },
+  events: { mouseup: null, touchend: null, touchcancel: null, mousemove: null, touchmove: null, pointerdown: null },
   data: [],
 }
 {
@@ -142,6 +143,7 @@ function springForEach(f: (s: SpringConfig) => void) {
 window.addEventListener('resize', () => scheduleRender())
 window.addEventListener("mouseup", (e) => {st.events.mouseup = e; scheduleRender()})
 window.addEventListener("touchend", (e) => {st.events.touchend = e; scheduleRender()})
+window.addEventListener("touchcancel", (e) => {st.events.touchcancel = e; scheduleRender()})
 window.addEventListener("mousemove", (e) => {st.events.mousemove = e; scheduleRender()})
 window.addEventListener("touchmove", (e) => {st.events.touchmove = e; scheduleRender()})
 window.addEventListener('pointerdown', (e) => {st.events.pointerdown = e; scheduleRender()})
@@ -158,16 +160,25 @@ function hitTest(data: RowData[], pointer: PointerSample) {
 function render(now: number) {
   // === step 0: process events
   // mouseup/touchend
-  if (st.events.mouseup != null || st.events.touchend != null) st.pointerState = 'up'
+  if (st.events.mouseup != null || st.events.touchend != null || st.events.touchcancel != null) st.pointerState = 'up'
+  if (st.events.mouseup != null) st.pointer.push({x: st.events.mouseup.pageX, y: st.events.mouseup.pageY, time: st.events.mouseup.timeStamp})
+  if (st.events.touchcancel != null) {
+    const touch = st.events.touchcancel.changedTouches[0]
+    if (touch != null) st.pointer.push({x: touch.pageX, y: touch.pageY, time: st.events.touchcancel.timeStamp})
+  }
+  if (st.events.touchend != null) {
+    const touch = st.events.touchend.changedTouches[0]
+    if (touch != null) st.pointer.push({x: touch.pageX, y: touch.pageY, time: st.events.touchend.timeStamp})
+  }
   // move
   // when scrolling (which might schedule a render), a container's pointermove doesn't trigger, so the pointer's local coordinates are stale
   // this means we should only use pointer's global coordinates, which is always right
-  if (st.events.mousemove != null) st.pointer.push({x: st.events.mousemove.pageX, y: st.events.mousemove.pageY, time: performance.now()})
-  if (st.events.touchmove != null) st.pointer.push({x: st.events.touchmove.touches[0]!.pageX, y: st.events.touchmove.touches[0]!.pageY, time: performance.now()})
+  if (st.events.mousemove != null) st.pointer.push({x: st.events.mousemove.pageX, y: st.events.mousemove.pageY, time: st.events.mousemove.timeStamp})
+  if (st.events.touchmove != null) st.pointer.push({x: st.events.touchmove.touches[0]!.pageX, y: st.events.touchmove.touches[0]!.pageY, time: st.events.touchmove.timeStamp})
   // down
   if (st.events.pointerdown != null) {
     st.pointerState = 'firstDown'
-    st.pointer.push({x: st.events.pointerdown.pageX, y: st.events.pointerdown.pageY, time: performance.now()})
+    st.pointer.push({x: st.events.pointerdown.pageX, y: st.events.pointerdown.pageY, time: st.events.pointerdown.timeStamp})
   }
 
   // === step 1: batched DOM reads (to avoid accidental DOM read & write interleaving)
@@ -180,12 +191,15 @@ function render(now: number) {
   else if (st.pointerState === 'up') {
     if (st.dragged != null) {
       const dragIdx = st.data.findIndex(d => d.id === st.dragged!.id)
-      let i = st.pointer.length - 1; while (i >= 0 && now - st.pointer[i]!.time <= 100) i-- // only consider last ~100ms of movements
-      const deltaTime = now - st.pointer[i]!.time
-      const vx = (pointerLast.x - st.pointer[i]!.x) / deltaTime * 1000 // speed over ~1s
-      const vy = (pointerLast.y - st.pointer[i]!.y) / deltaTime * 1000
-      st.data[dragIdx]!.x.v += vx
-      st.data[dragIdx]!.y.v += vy
+      let i = st.pointer.length - 1
+      while (i > 0 && pointerLast.time - st.pointer[i - 1]!.time <= 100) i--
+      const deltaTime = pointerLast.time - st.pointer[i]!.time
+      if (deltaTime > 0) {
+        const vx = (pointerLast.x - st.pointer[i]!.x) / deltaTime * 1000 // speed over ~1s
+        const vy = (pointerLast.y - st.pointer[i]!.y) / deltaTime * 1000
+        st.data[dragIdx]!.x.v += vx
+        st.data[dragIdx]!.y.v += vy
+      }
     }
     newDragged = null
   } else {
@@ -265,7 +279,7 @@ function render(now: number) {
   st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null // oxlint-disable-line no-unnecessary-condition
   if (st.pointerState === 'up') st.pointer = [{x: 0, y: 0, time: 0}]
   if (st.pointer.length > 20) st.pointer.shift() // keep last ~20
-  st.events.mouseup = st.events.touchend = st.events.mousemove = st.events.touchmove = st.events.pointerdown = null
+  st.events.mouseup = st.events.touchend = st.events.touchcancel = st.events.mousemove = st.events.touchmove = st.events.pointerdown = null
 
   return stillAnimating // oxlint-disable-line no-unnecessary-condition
 }

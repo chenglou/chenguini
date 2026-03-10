@@ -91,6 +91,7 @@ type State = {
   events: {
     mouseup: MouseEvent | null
     touchend: TouchEvent | null
+    touchcancel: TouchEvent | null
     mousemove: MouseEvent | null
     touchmove: TouchEvent | null
     pointerdown: PointerEvent | null
@@ -114,7 +115,7 @@ const st: State = {
   dragPosX: 0,
   dragPosY: 0,
   pointerHistory: [],
-  events: { mouseup: null, touchend: null, mousemove: null, touchmove: null, pointerdown: null },
+  events: { mouseup: null, touchend: null, touchcancel: null, mousemove: null, touchmove: null, pointerdown: null },
 }
 
 // cache lifetime: same as data
@@ -142,8 +143,10 @@ let domCache: {pip: HTMLDivElement; restMarker: HTMLDivElement; corners: HTMLDiv
 }
 
 // === events
+// pointermove doesn't work on android, pointerdown isn't fired on Safari on the first left click after dismissing context menus, mousedown doesn't trigger properly on mobile, pointerup isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event. Tldr there's no pointer event that works cross-browser that can replace mouse & touch events.
 window.addEventListener("mouseup", (e) => {st.events.mouseup = e; scheduleRender()})
 window.addEventListener("touchend", (e) => {st.events.touchend = e; scheduleRender()})
+window.addEventListener("touchcancel", (e) => {st.events.touchcancel = e; scheduleRender()})
 window.addEventListener("mousemove", (e) => {st.events.mousemove = e; scheduleRender()})
 window.addEventListener("touchmove", (e) => {st.events.touchmove = e; scheduleRender()})
 window.addEventListener('pointerdown', (e) => {st.events.pointerdown = e; scheduleRender()})
@@ -185,43 +188,58 @@ function render(now: number) {
   const windowH = document.documentElement.clientHeight
 
   // === step 0: process events
-  let pointerX: number | undefined, pointerY: number | undefined
+  let pointerX: number | undefined, pointerY: number | undefined, pointerTime: number | undefined
 
-  if (st.events.mousemove != null) { pointerX = st.events.mousemove.pageX; pointerY = st.events.mousemove.pageY }
-  if (st.events.touchmove != null) { pointerX = st.events.touchmove.touches[0]!.pageX; pointerY = st.events.touchmove.touches[0]!.pageY }
-  if (st.events.pointerdown != null) { pointerX = st.events.pointerdown.pageX; pointerY = st.events.pointerdown.pageY }
+  if (st.events.mouseup != null) { pointerX = st.events.mouseup.pageX; pointerY = st.events.mouseup.pageY; pointerTime = st.events.mouseup.timeStamp }
+  if (st.events.touchcancel != null) {
+    const touch = st.events.touchcancel.changedTouches[0]
+    if (touch != null) { pointerX = touch.pageX; pointerY = touch.pageY; pointerTime = st.events.touchcancel.timeStamp }
+  }
+  if (st.events.touchend != null) {
+    const touch = st.events.touchend.changedTouches[0]
+    if (touch != null) { pointerX = touch.pageX; pointerY = touch.pageY; pointerTime = st.events.touchend.timeStamp }
+  }
+  if (st.events.mousemove != null) { pointerX = st.events.mousemove.pageX; pointerY = st.events.mousemove.pageY; pointerTime = st.events.mousemove.timeStamp }
+  if (st.events.touchmove != null) { pointerX = st.events.touchmove.touches[0]!.pageX; pointerY = st.events.touchmove.touches[0]!.pageY; pointerTime = st.events.touchmove.timeStamp }
+  if (st.events.pointerdown != null) { pointerX = st.events.pointerdown.pageX; pointerY = st.events.pointerdown.pageY; pointerTime = st.events.pointerdown.timeStamp }
 
   // pointer down
-  if (st.events.pointerdown != null && pointerX !== undefined && pointerY !== undefined && hitTest(pointerX, pointerY)) {
+  if (st.events.pointerdown != null && pointerX !== undefined && pointerY !== undefined && pointerTime !== undefined && hitTest(pointerX, pointerY)) {
     const cur = currentPos() // must read before setting mode to 'dragging'
     st.mode = 'dragging'
     st.dragOffsetX = pointerX - cur.x
     st.dragOffsetY = pointerY - cur.y
     st.dragPosX = cur.x
     st.dragPosY = cur.y
-    st.pointerHistory = [{x: pointerX, y: pointerY, time: now}]
+    st.pointerHistory = [{x: pointerX, y: pointerY, time: pointerTime}]
   }
 
   // pointer move while dragging
-  if (st.mode === 'dragging' && (st.events.mousemove != null || st.events.touchmove != null) && pointerX !== undefined && pointerY !== undefined) {
+  if (st.mode === 'dragging' && (st.events.mousemove != null || st.events.touchmove != null) && pointerX !== undefined && pointerY !== undefined && pointerTime !== undefined) {
     st.dragPosX = pointerX - st.dragOffsetX
     st.dragPosY = pointerY - st.dragOffsetY
-    st.pointerHistory.push({x: pointerX, y: pointerY, time: now})
+    st.pointerHistory.push({x: pointerX, y: pointerY, time: pointerTime})
     if (st.pointerHistory.length > 20) st.pointerHistory.shift()
   }
 
   // pointer up while dragging -> snap to nearest corner
-  if (st.mode === 'dragging' && (st.events.mouseup != null || st.events.touchend != null)) {
+  if (st.mode === 'dragging' && (st.events.mouseup != null || st.events.touchend != null || st.events.touchcancel != null)) {
+    if (pointerX !== undefined && pointerY !== undefined && pointerTime !== undefined) {
+      st.dragPosX = pointerX - st.dragOffsetX
+      st.dragPosY = pointerY - st.dragOffsetY
+      st.pointerHistory.push({x: pointerX, y: pointerY, time: pointerTime})
+      if (st.pointerHistory.length > 20) st.pointerHistory.shift()
+    }
     st.mode = 'idle'
 
     // calculate release velocity from last ~100ms of pointer history
     let vx = 0, vy = 0
     if (st.pointerHistory.length >= 2) {
+      const last = st.pointerHistory[st.pointerHistory.length - 1]!
       let i = st.pointerHistory.length - 1
-      while (i > 0 && now - st.pointerHistory[i - 1]!.time <= 100) i--
-      const dt = now - st.pointerHistory[i]!.time
+      while (i > 0 && last.time - st.pointerHistory[i - 1]!.time <= 100) i--
+      const dt = last.time - st.pointerHistory[i]!.time
       if (dt > 0) {
-        const last = st.pointerHistory[st.pointerHistory.length - 1]!
         vx = (last.x - st.pointerHistory[i]!.x) / dt * 1000
         vy = (last.y - st.pointerHistory[i]!.y) / dt * 1000
       }
@@ -263,7 +281,7 @@ function render(now: number) {
   domCache.pip.style.cursor = cursor
 
   // === clear events
-  st.events.mouseup = st.events.touchend = st.events.mousemove = st.events.touchmove = st.events.pointerdown = null
+  st.events.mouseup = st.events.touchend = st.events.touchcancel = st.events.mousemove = st.events.touchmove = st.events.pointerdown = null
 
   return st.mode === 'dragging' || stillAnimating // oxlint-disable-line no-unnecessary-condition
 }
