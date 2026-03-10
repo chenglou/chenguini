@@ -11,7 +11,7 @@
 - debug control, time, rewind, etc.
 - function name/hash then during spec changes have llm grep for callsites and decide whether to re-expand the definition. Wait just hash tags
 - `@cs` / `@/cs` headers are compact pseudocode specs describing the code below them. They sit inside `<script>` tags or at the top of `.ts` files.
-- analytical springs
+- re-explore analytical springs: source-of-truth demo, regimes, near-critical behavior, and whether they actually keep the sweet spot
 - tailwind-like layout naming conventions?
 - ben's video tweak advice from chromium
 
