@@ -7,6 +7,7 @@
 - layout & occlusion/virtualization
 - bring over actual mj guidelines
 - safari pointer down up whatever in nicer-hacker-news and MobileCreationView and other demos
+- turn scrolling / scroll anchoring into a small skeleton instead of a prose-heavy doc section
 - how to make ui verifiable more without browser
 - debug control, time, rewind, etc.
 - document the `x/y/size + residual` pattern somewhere temporary first: regular values stay plain, residual is current on-screen delta to the new target, plain resize usually doesn't touch residuals, mode changes / reflow do
