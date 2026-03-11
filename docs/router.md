@@ -1,17 +1,8 @@
 # Type-Safe Client-Side Routing Without a Framework
 
-A pattern for building routing that's fully typed, handles browser history correctly, and avoids the traps of routing libraries.
+If you want a lightweight, hand-rolled router, do it this way.
 
-## The Problem with Routing Libraries
-
-Routing libraries try to be one-size-fits-all:
-- Some apps need async guards, some don't
-- Some need deep component hierarchy access, some don't
-- Some need multiple effects on route change, some don't
-
-The result: every app uses a different subset, but pays for the worst-case complexity. You end up fighting the library's abstractions instead of just... parsing URLs.
-
-**Alternative:** Treat routing as a pure parsing problem. LLMs can write the boilerplate. You get full power and full types.
+As much as possible, treat routing as a pure parsing problem. Especially when nowadays AI can write the boilerplate and relieve you of the pressure of over-wrapping APIs for human write-time ergonomics.
 
 ## Core Insight: Route Object vs URL
 

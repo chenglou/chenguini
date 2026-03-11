@@ -26,6 +26,7 @@
 
 For developers:
 - **Short, dependency-free code with no hidden control flow**.
+- **Only the right properties are animated, and only at the right times**. E.g. on window resize, an image's `x/y/scale` correctly do NOT animate if it stays in the same place/column (and they also do animate if the image moves to a different slot in the grid entirely)
 - **Fun debug mode with manual frame stepping**.
 - **Guaranteed minimum render count**. Renders are batched per frame. Also no multi-frames cascading rerenders from wrongly ordered state changes.
 - **Minimal DOM nodes**. A clean, wrapper-divs-free inspector experience.
@@ -119,14 +120,22 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 type BoxData = {
   id: string
   prompt: string
-  naturalSizeX: number
+  naturalSizeX: number // image's original size
   ar: number // aspect ratio
-  sizeX: Spring
-  sizeY: Spring
-  x: Spring
-  y: Spring
   scale: Spring
   fxFactor: Spring
+  // "base" values are the regular, non-animated values. Final visual value = base value + residual (see below)
+  x: number
+  y: number
+  sizeX: number
+  sizeY: number
+  // "residuals" are animation-specific deltas that usually go toward 0. Their current value (spring pos) is the delta between e.g. the current visual x position, and the object's actual x position (the destination) without animation
+  // naively, we'd just use a single field that's `x: Spring`. But means the object's x is animating even during e.g. window resize and other times where animation is undesirable. This is tasteless
+  // so instead we keep x as the regular animation-less scalar value, and xResidual usually at 0 too (aka unanimated). And when we _do_ wanna animate x, we instead set x to the final destination, set residual to be the delta between current and final x, then derive the final visual x with the formula in the prev comment on base value
+  xResidual: Spring
+  yResidual: Spring
+  sizeXResidual: Spring
+  sizeYResidual: Spring
 }
 
 type State = {
@@ -140,11 +149,66 @@ type State = {
   data: BoxData[]
 }
 
+function shiftSpringPos(s: Spring, delta: number) {
+  s.pos += delta
+}
+function sizeXPos(d: BoxData) {
+  return d.sizeX + d.sizeXResidual.pos
+}
+function sizeYPos(d: BoxData) {
+  return d.sizeY + d.sizeYResidual.pos
+}
+function xPos(d: BoxData) {
+  return d.x + d.xResidual.pos
+}
+function yPos(d: BoxData) {
+  return d.y + d.yResidual.pos
+}
+// Set x/y/size right away. If this change should animate, stash the current on-screen delta in the residuals and let them settle back to 0.
+function setLayout(d: BoxData, x: number, y: number, sizeX: number, sizeY: number, preservePosition: boolean, preserveSize: boolean) {
+  const currentX = xPos(d), currentY = yPos(d)
+  const currentSizeX = sizeXPos(d), currentSizeY = sizeYPos(d)
+  d.x = x
+  d.y = y
+  d.sizeX = sizeX
+  d.sizeY = sizeY
+  if (preservePosition) {
+    d.xResidual.pos = currentX - x
+    d.yResidual.pos = currentY - y
+  }
+  if (preserveSize) {
+    d.sizeXResidual.pos = currentSizeX - sizeX
+    d.sizeYResidual.pos = currentSizeY - sizeY
+  }
+}
+function get2DLayout(windowSizeX: number) {
+  const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
+  const boxes2DSizeX: number[] = [], boxes2DSizeY: number[] = [], rowsTop: number[] = [windowPaddingTop] // length: number of rows + 1
+  let rowMaxSizeY = 0
+  for (let i = 0; i < photoGalleryData.length; i++) {
+    const d = photoGalleryData[i]!
+    const ar = d.w / d.h
+    const imgMaxSizeY =
+      ar === 1 ? boxMaxSizeX * 0.85 // square aspect ratio area too big. Shrink it
+      : ar < 1 ? boxMaxSizeX * 1.05 // vertical images look a bit small. Grow it
+      : boxMaxSizeX
+    const sizeX = Math.min(d.w, boxMaxSizeX, imgMaxSizeY * ar)
+    const sizeY = sizeX / ar + promptSizeY
+    boxes2DSizeX.push(sizeX)
+    boxes2DSizeY.push(sizeY)
+    rowMaxSizeY = Math.max(rowMaxSizeY, sizeY)
+    if (i % cols === cols - 1 || i === photoGalleryData.length - 1) { // last box of the row or last box ever
+      rowsTop.push(rowsTop.at(-1)! + rowMaxSizeY + boxesGapY)
+      rowMaxSizeY = 0
+    }
+  }
+  return {cols, boxMaxSizeX, boxes2DSizeX, boxes2DSizeY, rowsTop}
+}
+
 let st: State; {
   const windowSizeX = document.documentElement.clientWidth
   const windowSizeY = document.documentElement.clientHeight
-  const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
-  const imgMaxSizeY = boxMaxSizeX + 100 // TODO: adjust this better
+  const {cols, boxMaxSizeX, boxes2DSizeX, boxes2DSizeY, rowsTop} = get2DLayout(windowSizeX)
   st = {
     debugTimestamp: 0,
     animatedUntilTime: null,
@@ -155,17 +219,24 @@ let st: State; {
     events: { keydown: null, click: null, mousemove: null },
     data: photoGalleryData.map((d, i) => {
       const ar = d.w / d.h
-      const sizeX = Math.min(d.w, boxMaxSizeX, imgMaxSizeY * ar)
-      const sizeY = sizeX / ar + promptSizeY
+      const sizeX = boxes2DSizeX[i]!, sizeY = boxes2DSizeY[i]!
+      const currentRow = Math.floor(i / cols)
+      const rowMaxSizeY = rowsTop[currentRow + 1]! - boxesGapY - rowsTop[currentRow]! // restore the row's max height
+      const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - sizeX) / 2
+      const y = rowsTop[currentRow]! + (rowMaxSizeY - sizeY) / 2
       return {
         id: d.id,
         prompt: d.prompt,
         naturalSizeX: d.w,
         ar,
-        sizeX: spring(sizeX),
-        sizeY: spring(sizeY), // image + prompt
-        x: spring(Math.floor(i / cols) * -windowSizeX - windowSizeX), // unfold from lower left. More visible on long screens
-        y: spring(windowSizeY + Math.floor(i / cols) * imgMaxSizeY),
+        sizeX,
+        sizeY,
+        x,
+        y,
+        sizeXResidual: spring(0),
+        sizeYResidual: spring(0), // image + prompt
+        xResidual: spring(Math.floor(i / cols) * -windowSizeX - windowSizeX - x), // unfold from lower left. More visible on long screens
+        yResidual: spring(windowSizeY + Math.floor(i / cols) * boxMaxSizeX - y),
         scale: spring(1),
         fxFactor: spring(20), // for brightness and blur
       }
@@ -174,7 +245,7 @@ let st: State; {
 }
 function springForEach(f: (s: Spring) => void) { // no spring ownership struggle between the spring library above vs consumer; un-inversion of control!
   for (const d of st.data) {
-    f(d.sizeX); f(d.sizeY); f(d.x); f(d.y); f(d.scale); f(d.fxFactor) // no different than [a, b, c].forEach(f)
+    f(d.sizeXResidual); f(d.sizeYResidual); f(d.xResidual); f(d.yResidual); f(d.scale); f(d.fxFactor) // no different than [a, b, c].forEach(f)
   }
 }
 
@@ -202,8 +273,8 @@ if (debug) {
 // === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either)
 function hitTest2DMode(data: BoxData[], pointerX: number, pointerY: number) {
   for (let i = 0; i < data.length; i++) {
-    const {x, y, sizeX, sizeY} = data[i]!
-    if (x.dest <= pointerX && pointerX < x.dest + sizeX.dest && y.dest <= pointerY && pointerY < y.dest + sizeY.dest) return i // pointer on this box
+    const d = data[i]!
+    if (d.x <= pointerX && pointerX < d.x + d.sizeX && d.y <= pointerY && pointerY < d.y + d.sizeY) return i // pointer on this box
   }
   return null
 }
@@ -274,28 +345,14 @@ function render(now: number) {
   }
 
   // === layout & cursor
-  const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(newWindowSizeX)
-  const boxes2DSizeX: number[] = [], boxes2DSizeY: number[] = [], rowsTop: number[] = [windowPaddingTop] // length: number of rows + 1
-  { // first pass over data to set final 2D dimensions and row height (for vertical centering in 2D & total scrollbar height)
-    let rowMaxSizeY = 0
-    for (let i = 0; i < data.length; i++) {
-      const d = data[i]!
-      const {naturalSizeX, ar} = d
-      const imgMaxSizeY =
-        ar === 1 ? boxMaxSizeX * 0.85 // square aspect ratio area too big. Shrink it
-        : ar < 1 ? boxMaxSizeX * 1.05 // vertical images look a bit small. Grow it
-        : boxMaxSizeX
-      const sizeX = Math.min(naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
-      const sizeY = sizeX / ar + promptSizeY
-      boxes2DSizeX.push(sizeX)
-      boxes2DSizeY.push(sizeY)
-      rowMaxSizeY = Math.max(rowMaxSizeY, sizeY)
-      if (i % cols === cols - 1 || i === data.length - 1) { // last box of the row or last box ever
-        rowsTop.push(rowsTop.at(-1)! + rowMaxSizeY + boxesGapY)
-        rowMaxSizeY = 0
-      }
-    }
-  }
+  const {cols: oldCols} = get2DLayout(st.windowSizeX)
+  const {cols, boxMaxSizeX, boxes2DSizeX, boxes2DSizeY, rowsTop} = get2DLayout(newWindowSizeX)
+  const resized = newWindowSizeX !== st.windowSizeX
+  const entered1D = focused == null && newFocused != null
+  const dismissed1D = focused != null && newFocused == null
+  const changedFocusIn1D = focused != null && newFocused != null && focused !== newFocused
+  // Resize alone doesn't touch residuals. 2D grid reflow does.
+  const reflowed2D = newFocused == null && resized && oldCols !== cols
   let cursor: string
   let newAnchor = st.anchor
   let adjustedScrollTop = currentScrollY
@@ -314,10 +371,14 @@ function render(now: number) {
       const sizeX = boxes2DSizeX[i]!, sizeY = boxes2DSizeY[i]!
       const currentRow = Math.floor(i / cols)
       const rowMaxSizeY = rowsTop[currentRow + 1]! - boxesGapY - rowsTop[currentRow]! // this is restoring the rowMaxSizeY info above, kinda weird
-      d.sizeX.dest = sizeX
-      d.sizeY.dest = sizeY
-      d.x.dest = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - sizeX) / 2 // center horizontally
-      d.y.dest = rowsTop[currentRow]! + (rowMaxSizeY - sizeY) / 2
+      const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - sizeX) / 2
+      const y = rowsTop[currentRow]! + (rowMaxSizeY - sizeY) / 2
+      // Back to grid: keep current x/y/size. Pure 2D reflow only keeps x/y. Same-grid resize doesn't touch the residuals.
+      setLayout(d, x, y, sizeX, sizeY, dismissed1D || reflowed2D, dismissed1D)
+      d.sizeXResidual.dest = 0
+      d.sizeYResidual.dest = 0
+      d.xResidual.dest = 0
+      d.yResidual.dest = 0
       d.scale.dest = 1
       d.fxFactor.dest = 1
     }
@@ -326,19 +387,19 @@ function render(now: number) {
     if (hit == null) cursor = 'auto'
     else { // hovering over a box. Adjust position
       cursor = 'zoom-in'
-      const {x, y, sizeX, sizeY, scale} = data[hit]!
-      x.dest += (pointerXLocal - (x.dest + sizeX.dest / 2)) / hoverMagnetFactor
-      y.dest += (pointerYLocal - (y.dest + sizeY.dest / 2)) / hoverMagnetFactor
-      scale.dest = 1.02
+      const d = data[hit]!
+      d.xResidual.dest += (pointerXLocal - (d.x + d.sizeX / 2)) / hoverMagnetFactor
+      d.yResidual.dest += (pointerYLocal - (d.y + d.sizeY / 2)) / hoverMagnetFactor
+      d.scale.dest = 1.02
     }
     // if layout shifted, keep the boxes near the same place to prevent annoying layout jumps while viewing
-    const anchorY = data[st.anchor]!.y.dest - gapTopPeek
+    const anchorY = data[st.anchor]!.y - gapTopPeek
     if (newWindowSizeX !== st.windowSizeX) adjustedScrollTop = Math.max(0, anchorY) // resized; maintain position!
     if (adjustedScrollTop !== st.scrollY && Math.abs(anchorY -/*toLocal*/adjustedScrollTop) > windowSizeY / 10) { // find new anchor if the current one moved too much
       for (newAnchor = 0; newAnchor < data.length; newAnchor += cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
         const d = data[newAnchor]!
         // find 1st box whose bottom exceeds 20% of window height
-        if (d.y.dest + d.sizeY.dest -/*toLocal*/adjustedScrollTop > windowSizeY / 5) break
+        if (d.y + d.sizeY -/*toLocal*/adjustedScrollTop > windowSizeY / 5) break
       }
     }
   } else { // 1D mode
@@ -362,11 +423,15 @@ function render(now: number) {
       const {naturalSizeX, ar} = d
       const imgSizeX = Math.min(naturalSizeX, box1DMaxSizeX, img1DSizeY * ar) * (i === newFocused ? 1 : 0.7)
       const boxSizeY = imgSizeX / ar + prompt1DSizeY
-      d.sizeX.dest = imgSizeX
-      d.sizeY.dest = boxSizeY
-      d.y.dest = Math.max(windowPaddingTop, (windowSizeY - boxSizeY) / 2) +/*toLocal*/adjustedScrollTop
-      d.x.dest = i === newFocused ? (newWindowSizeX - imgSizeX) / 2 : currentLeft
-      d.x.v += edgeRubberBandVelocityX / (i === newFocused ? 1 : 4)
+      const x = i === newFocused ? (newWindowSizeX - imgSizeX) / 2 : currentLeft
+      const y = Math.max(windowPaddingTop, (windowSizeY - boxSizeY) / 2) +/*toLocal*/adjustedScrollTop
+      // Going into 1D mode, or switching focused image, starts from the current on-screen x/y/size. Plain 1D resize doesn't.
+      setLayout(d, x, y, imgSizeX, boxSizeY, entered1D || changedFocusIn1D, entered1D || changedFocusIn1D)
+      d.sizeXResidual.dest = 0
+      d.sizeYResidual.dest = 0
+      d.xResidual.dest = 0
+      d.yResidual.dest = 0
+      d.xResidual.v += edgeRubberBandVelocityX / (i === newFocused ? 1 : 4)
       d.scale.dest = 1
       d.fxFactor.dest = i === newFocused ? 1 : 0.2 // center image has no brightness & blur effect
 
@@ -377,15 +442,16 @@ function render(now: number) {
     if (hit == null) cursor = 'zoom-out'
     else { // hovering on left or right image
       cursor = 'zoom-in'
-      const {x, y, sizeX, sizeY, scale, fxFactor} = data[hit]!
-      x.dest += (pointerXLocal - (x.dest + sizeX.dest / 2)) / hoverMagnetFactor
-      y.dest += (pointerYLocal - (y.dest + sizeY.dest / 2)) / hoverMagnetFactor
-      scale.dest = 1.02
-      fxFactor.dest = 0.5
+      const d = data[hit]!
+      d.xResidual.dest += (pointerXLocal - (d.x + d.sizeX / 2)) / hoverMagnetFactor
+      d.yResidual.dest += (pointerYLocal - (d.y + d.sizeY / 2)) / hoverMagnetFactor
+      d.scale.dest = 1.02
+      d.fxFactor.dest = 0.5
     }
   }
-  // ensure that no matter how the scrolling is abruptly adjusted, the boxes on the screen don't suddenly jump too. When going 1D->2D mode where the dismissed image might be far from the initial one, or when resizing causes layout shifts, the boxes now stay unaffected!
-  for (const {y} of data) y.pos += adjustedScrollTop - currentScrollY
+  if (focused != null && newFocused == null && adjustedScrollTop !== currentScrollY) { // scroll changes base coordinates only; preserve the current visual position while it catches up
+    for (const d of data) shiftSpringPos(d.yResidual, adjustedScrollTop - currentScrollY)
+  }
 
   // === animation
   let newAnimatedUntilTime = st.animatedUntilTime ?? now
@@ -412,11 +478,12 @@ function render(now: number) {
   const browserUIMaxSizeTop = 100, browserUIMaxSizeBottom = 150 // browsers UI like Safari are transluscent. Random conservative numbers
   for (let i = 0; i < data.length; i++) {
     const d = data[i]!
+    const boxY = yPos(d), boxSizeY = sizeYPos(d), boxX = xPos(d), boxSizeX = sizeXPos(d)
     if ( // occlusion culling, aka only draw what's visible on screen (aka "virtualization")
-      d.y.pos -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
-      d.y.pos + d.sizeY.pos -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
-      d.x.pos <= newWindowSizeX &&
-      d.x.pos + d.sizeX.pos >= 0
+      boxY -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
+      boxY + boxSizeY -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
+      boxX <= newWindowSizeX &&
+      boxX + boxSizeX >= 0
     ) { // disregard shadow & scaling for now; browserUIMaxSizeBottom and browserUIMaxSizeTop are safe bigger values anyway
       let node = domCache.get(d.id)
       if (node == null) { // JIT DOM node creation: first time this box is visible
@@ -432,15 +499,15 @@ function render(now: number) {
         domCache.set(d.id, node)
       }
       const img = node.children[0] as HTMLImageElement, prompt = node.children[1] as HTMLElement
-      node.style.width = `${d.sizeX.pos}px`
-      node.style.height = `${d.sizeY.pos}px`
-      node.style.transform = `translate3d(${d.x.pos}px,${d.y.pos}px,0) scale(${d.scale.pos})` // safari now anti-aliases for hover, but then zoom in janks on big displays...
+      node.style.width = `${boxSizeX}px`
+      node.style.height = `${boxSizeY}px`
+      node.style.transform = `translate3d(${boxX}px,${boxY}px,0) scale(${d.scale.pos})` // safari now anti-aliases for hover, but then zoom in janks on big displays...
       // we can't afford fxFactor & blur for all pics; too expensive for Safari & Chrome. E.g. when zomming out of a photo, keep scrolling; Chrome stops render on Studio Display
       node.style.filter = newFocused != null && (i === newFocused - 1 || i === newFocused || i === newFocused + 1)
         ? `brightness(${d.fxFactor.pos * 100}%) blur(${Math.max(0, 6 - d.fxFactor.pos * 6)}px)` // blur these 3 only
         : `brightness(${d.fxFactor.pos * 100}%)` // blur of unrelated pics is too fast during transition from/to 1D mode to be seen anyway
       if (debug) node.style.outline = i === newAnchor ? '2px solid rgba(255, 255, 0, 0.8)' : 'none' // oxlint-disable-line no-unnecessary-condition
-      prompt.style.top = `${d.sizeX.pos / d.ar}px` // right below img's sizeY
+      prompt.style.top = `${boxSizeX / d.ar}px` // right below img's sizeY
 
       if (i === newFocused) {
         node.style.zIndex = String(data.length + 1) // guaranteed above everything
