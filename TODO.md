@@ -9,6 +9,7 @@
 - safari pointer down up whatever in nicer-hacker-news and MobileCreationView and other demos
 - how to make ui verifiable more without browser
 - debug control, time, rewind, etc.
+- document the `x/y/size + residual` pattern somewhere temporary first: regular values stay plain, residual is current on-screen delta to the new target, plain resize usually doesn't touch residuals, mode changes / reflow do
 - function name/hash then during spec changes have llm grep for callsites and decide whether to re-expand the definition. Wait just hash tags
 - `@cs` / `@/cs` headers are compact pseudocode specs describing the code below them. They sit inside `<script>` tags or at the top of `.ts` files.
 - re-explore analytical springs: source-of-truth demo, regimes, near-critical behavior, and whether they actually keep the sweet spot

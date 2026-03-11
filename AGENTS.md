@@ -10,3 +10,5 @@ Example:
 - Avoid: `A more robust architectural approach is to define the image position relative to the parent scrolling container so that scrolling does not interfere with the animation system.`
 - Preferred: `Properties are only selectively animated. E.g. on window resize, an image's x/y/scale do NOT animate if it stays in the same place/column.`
 - Avoid: `Layout changes and transitions are treated separately. On resize, x/y/scale don't animate if an image stays in the same place; when changing modes, the image keeps its current visual position and glides to the new layout.`
+- Preferred: `If you want a lightweight, hand-rolled router, do it this way.`
+- Avoid: `A pattern for building routing that's fully typed, handles browser history correctly, and avoids the traps of routing libraries.`
