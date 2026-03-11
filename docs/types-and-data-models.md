@@ -88,7 +88,7 @@ For linting, we prefer oxlint + tsgolint npm packages for AI verification loop p
 // "@typescript-eslint/no-base-to-string": "error", // enabled by default in oxlint. Prevents showing string [object Object]. This also lets us construct IDs from strings, without letting these IDs be subject to string manipulations
 ```
 
-Some of these configs for preventing extra checks (e.g. erroring on checking a value is null when it can't be) are crucial to shrink the codebase back when a feature's cleaned away. See `types-and-data-modeling.md` on the section for handling nulls for example.
+Some of these configs for preventing extra checks (e.g. erroring on checking a value is null when it can't be) are crucial to shrink the codebase back when a feature's cleaned away. See early section for handling nulls for example.
 
 Recommended alias in package.json as e.g.:
 
