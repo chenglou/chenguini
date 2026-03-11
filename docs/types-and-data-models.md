@@ -85,6 +85,10 @@ For linting, we prefer oxlint + tsgolint npm packages for AI verification loop p
 "@typescript-eslint/no-unnecessary-condition": ["error", {
   "allowConstantLoopConditions": true,
 }],
+"no-unused-expressions": ["error", {
+  "allowTernary": true,
+  "allowShortCircuit": true,
+}],
 // "@typescript-eslint/no-base-to-string": "error", // enabled by default in oxlint. Prevents showing string [object Object]. This also lets us construct IDs from strings, without letting these IDs be subject to string manipulations
 ```
 
