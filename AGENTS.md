@@ -1,4 +1,8 @@
+This repo documents all the code patterns we want to codify for a new era of UI apps written with AI. Demos at `demos/` and docs at `docs/`. Read the latter in full before working.
+
 `bun check` for linting, `bun start` for running the demos. Their url is the respective folder, e.g. `http://localhost:3000/photo-gallery/`
+
+We'll periodically refactor other codebases' code and extract lessons back into our docs. Whenever you encounter a new pattern in some code that isn't found in the docs, or if you hesitate with the structuring of code, loudly alert **NEW PATTERN DETECTED**. Then let's discuss what to bake into the docs.
 
 ## Docs Tone
 - Preserve the author's tone in docs and drafts. Prefer concise, slightly personal phrasing over generic explanatory filler.
