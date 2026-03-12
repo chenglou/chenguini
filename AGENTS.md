@@ -6,8 +6,10 @@ We'll periodically refactor other codebases' code and extract lessons back into 
 
 ## Docs Tone
 - Preserve the author's tone in docs and drafts. Prefer concise, slightly personal phrasing over generic explanatory filler.
-- Do not bulk-normalize docs into default LLM prose. If agent-friendly expansion is useful, put it in a derived doc, draft, or skeleton instead of rewriting the canon.
-- When editing existing docs, make the smallest change that clarifies the point while keeping the original voice.
+- Ground abstract explanations in examples (and shorten explanations length this way). Make sure the examples can be understood without excessive context and that the naming aren't abstract either:
+  - write docs guidelines like this: "Colocate lifetimes. Instead of a `personAge: number | null` and a `personName: string | null`, put them into a `type Person = { age: number, name: string } | null`"
+  - don't write like this: "Colocate lifetimes. Instead of `a: T1 | null` and `b: T2 | null`, put them into a `type P = { a: T1, b: T2 } | null`". Also don't use weirdly contextful names like `hullShape: HullID | null`
+- The above applies to generating doc comments for functions too
 
 Example:
 - Preferred: `The image's position should be relative to the scroll view container's.`

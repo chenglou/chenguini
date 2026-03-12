@@ -3,7 +3,6 @@ Highly value asking about & modeling data structures and access patterns first a
 Since we're aggressively coding with AI, please always think from first principle and redo data structures given new requirements instead of incrementally tackling thigns on top. **This is especially important** for e.g. DOM cache modeling, since we actually depend on the AI continuously changing the cache shape as requirements change.
 
 Prefer type and union over interface and enum.
-Aggressively prefer switch over if/else, when possible (e.g. union values). Get those proper branch coverages
 
 Parse & validate your data as early as possible. Don't pass down half-validated data then do ad-hoc checks in downstream call sites. For example, don't half-parse a route's payload then re-transform & check some of its fields in call sites later.
 
@@ -26,9 +25,24 @@ Avoid `reduce` in most cases except for simple cases like summing up numbers. Us
 DO NOT prematurily optimize data for performance at the cost of simplicity:
 - Avoid caching
 - Highly value single source of truth. Don't denormalize & add auxiliary fields on data that we could have just computed on the fly. The computations are quasi-free compared to memory
-- Keep fewer data structures, flatter data, and collapse data with the same lifetimes together
+- Keep fewer data structures, flatter data, and collapse data with the same lifetimes together. E.g. store those same-lifetime values into object fields so that they're created & deleted together when we manipulate the obj. This is also why we avoid denormalized data, because having stuff in 2+ places falsely convey extra degrees of freedom. Think as if you need to manually allocate them; your app/component doesn't that _that_ many different lifetimes!
+
+Resist future-proofing with generic helpers if you've only encountered one instance of the logic. The more abstract it gets, the bigger the risk for vagueness. The more indirection there is, the more the reader has to mentally compute the chain of generic logic to understand the callsite. This also closes off cleaner situation-specific algorithms and naming. Keep it local first. Generalize later when there's a second real use.
 
 DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash.
+
+## Control Flow
+
+Folks try to "solve" performance by hiding them behind ever more obscure control flows, e.g. nested ifs, lazy imports, etc. Avoid these; they often just obscure the perf degradation, and add extra state checking & debugging complexity. We prefer making systems with even latency and throughput, like shaders or real-time systems: branchless, predictable. Branches (and caches) lower the cost of best-case scenarios by rising the cost of worst-case scenarios; we don't want that! We don't want a 4ms frame to reduce to 1ms while, in the worst case, upping it to 10ms (which is now a frame drop).
+
+Avoid excessive asyncs. If needed, at least spot the asyncs that need to go together, and wrap them in a group with Promise.all. Prefer top-down control flow. E.g. don't do one `configLoaded.then(...)`, one `dataLoaded.then(...)`, then some shared `maybeStart()` / `if (fooReady && barReady)` handshake if what you really mean is "wait for both, then start".
+
+Aggressively prefer `switch` over `if/else`, when possible (e.g. union values). Get those exhaustiveness coverages. Write conditions like a functional langauge with pattern matching:
+- Do: `switch (payload.type) { case 'image': return handleImage(payload); case 'text': return handleText(payload); }`
+- Don't: `if (payload.type === 'image') { handleImage(payload); } else if (payload.type === 'text') { handleText(payload); }`
+- Don't: `const dispatch = { image: handleImage, text: handleText }; dispatch[payload.type](payload)`
+
+The latter's especially prominent (using objects as dynamic dispatch tables). It's overly cute, wrecks static analysis, and cannot varie the value (function)'s shape
 
 ## Project Setup
 
