@@ -50,6 +50,10 @@ Aggressively prefer `switch` over `if/else`, when possible (e.g. union values). 
 
 The latter's especially prominent (using objects as dynamic dispatch tables). It's overly cute, wrecks static analysis, and cannot varie the value (function)'s shape
 
+Loop invariants are extremely underutilized in reasoning. Understanding what doesn't change makes each iteration easy to verify, and makes static parts easier to lift outside of the loop.
+
+Not all code reuse is good. Before extracting similar calls into helpers, consider whether the redundant work is actually a manifestation of a control flow that didn't properly compute the shared part before the downstream usage sites.
+
 ## Project Setup
 
 A quick iteration & verification loop is important especially for AI now. To that end, we use nuanced TypeScript + linting to essentially monkeypatch the type system into a mostly correct one, while opinionatedly dropping all the unhelpful stylistic rules that distracts AI
