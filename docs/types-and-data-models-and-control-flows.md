@@ -6,6 +6,8 @@ Prefer type and union over interface and enum.
 
 Parse & validate your data as early as possible. Don't pass down half-validated data then do ad-hoc checks in downstream call sites. For example, don't half-parse a route's payload then re-transform & check some of its fields in call sites later.
 
+Strings are the `any` of data. If you're parsing, splitting, or regex-matching a string repeatedly, it should have been a structured type upstream. If there's already such data type and you're still forced to use the original unparsed string, then that data type was modeled too tightly and lost necessary info. Fix that instead
+
 Guideline for typing potentially nullable string:
 
 - If the nullable string has no valid `''` state (e.g. mandatory non-empty username), model it as `string | null`
