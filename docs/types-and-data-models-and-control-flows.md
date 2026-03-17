@@ -31,7 +31,11 @@ Resist future-proofing with generic helpers if you've only encountered one insta
 
 DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash.
 
-Think twice before using overly generic data structures like Map and Set. They're fine in many cases, but in many others, it just means you haven't leveraged more properties & strong assumptions from your domain. Array's often a better bet unless your algorithm really need `O(1)` access with some map/set lookup. Think more in C-style terms: where does is a C hash map more appropriate despite its higher friction?
+Think twice before using overly generic data structures like Map and Set. They're fine in many cases, but in many others, it just means you haven't leveraged more properties & strong assumptions from your domain. Array's often a better bet unless your algorithm really needs `O(1)` access. Think more in C-style terms: where is a hash map more appropriate despite its higher friction?
+
+Orient your data structure to match your access pattern. If you have `folders: Map<folderName, Set<imageId>>` but your hot path asks "which folders is this image in?", build `imageToFolders: Map<imageId, Set<folderName>>` once upfront. Don't scan all folders per image — that turns an O(1) lookup into O(folders).
+
+O(n^2) is fine when both n's are bounded by domain constraints, e.g. images per job (~4) × collections (~tens) = ~hundreds. It's not fine when one n is user data that grows unboundedly (10k jobs, feed items). Watch out for bounded-looking inner loops that get nested inside an unbounded outer loop and repeated across the system — each instance is cheap but 4 repetitions × 10k jobs × 18 re-renders adds up.
 
 ## Control Flow
 
