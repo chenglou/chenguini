@@ -1,10 +1,8 @@
-Highly value asking about & modeling data structures and access patterns first and foremost when iterating. Don't be afraid to change data structure if a new feature requires remodeling. Don't just tackle things on incrementally.
-
-Since we're aggressively coding with AI, please always think from first principle and redo data structures given new requirements instead of incrementally tackling thigns on top. **This is especially important** for e.g. DOM cache modeling, since we actually depend on the AI continuously changing the cache shape as requirements change.
+Highly value asking about & modeling data structures and access patterns first and foremost when iterating. Don't be afraid to change data structure if a new feature requires remodeling. Don't just tackle things on incrementally. AI can rewrite fast and well.
 
 Prefer type and union over interface and enum.
 
-Parse & validate your data as early as possible. Don't pass down half-validated data then do ad-hoc checks in downstream call sites. For example, don't half-parse a route's payload then re-transform & check some of its fields in call sites later.
+Parse & validate your data as early as possible. Don't pass down half-validated data then do ad-hoc checks in downstream call sites. For example, don't half-parse a payload then re-transform & check some of its fields in call sites later.
 
 Strings are the `any` of data. If you're parsing, splitting, or regex-matching a string repeatedly, it should have been a structured type upstream. If there's already such data type and you're still forced to use the original unparsed string, then that data type was modeled too tightly and lost necessary info. Fix that instead
 
@@ -28,6 +26,8 @@ DO NOT prematurily optimize data for performance at the cost of simplicity:
 - Avoid caching
 - Highly value single source of truth. Don't denormalize & add auxiliary fields on data that we could have just computed on the fly. The computations are quasi-free compared to memory
 - Keep fewer data structures, flatter data, and collapse data with the same lifetimes together. E.g. store those same-lifetime values into object fields so that they're created & deleted together when we manipulate the obj. This is also why we avoid denormalized data, because having stuff in 2+ places falsely convey extra degrees of freedom. Think as if you need to manually allocate them; your app/component doesn't that _that_ many different lifetimes!
+- Ideally, derived data should be computed and then gone, in the same scope as the inputs that produced them. Fewer lifetimes mismatches, less staleness
+- Imagine: If multiple callsites need the same derived data in the same scope, we'd obviously compute it once and then use it many times below. But somehow, it feels ickier to store that derived data alongside the same object that holds the inputs that produced it. This is because a local derived value is just a computation result, but a derived field stored on the object becomes state. Its lifetime now follows the object rather than the evaluation that justified it, so you have created a second representation of the same fact, plus an invalidation problem
 
 Resist future-proofing with generic helpers if you've only encountered one instance of the logic. The more abstract it gets, the bigger the risk for vagueness. The more indirection there is, the more the reader has to mentally compute the chain of generic logic to understand the callsite. This also closes off cleaner situation-specific algorithms and naming. Keep it local first. Generalize later when there's a second real use.
 
@@ -147,6 +147,7 @@ To do a migration:
   - This is the time to remove all fields from v3 that are no longer needed
   - Once this is in production, `data.ts` also becomes immutable. Any modifications need another migration. This is cumbersome, but there are shortcuts to alter your data without violating invariants, if your data schema library is lenient enough:
     - You can add new fields to the schema and make them optional with a default value, assuming the schema library allows decoding & filling absent fields with a default
+    - You can remove fields from the schema, assuming the schema library ignores unknown fields when parsing the existing persisted data
     - You can add new enum/union values to a particular field of your schema
 3. Write a `migrate3To4()` function that reads the old format and writes the new one. One-off, turing-complete, no constraints.
 4. **Don't** forget that it's a good time to:
