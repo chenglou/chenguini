@@ -18,6 +18,33 @@ Essentially:
 - `rAF` inside another `rAF` is executed next frame. This can recurse.
 - `rAF` called before the browser's first paint joins that first frame.
 
+## Timestamps
+
+There are three time sources and they are **not** the same:
+
+- **rAF's `now` parameter**: Scheduled frame start time (from VSync). All rAF callbacks in the same frame get the **same** value. Use for animation stepping inside rAF callbacks.
+- **`document.timeline.currentTime`**: Same value as rAF's `now` ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)). Use when an event handler needs to capture a timestamp that would otherwise be lost before the next render.
+- **`performance.now()`**: Actual wall-clock time when the JS line executes. Advances between callbacks. Use for input timing (velocity estimation, gesture duration).
+
+**For animation, never use `performance.now()`.** Use rAF's `now` inside rAF callbacks, and `document.timeline.currentTime` when you need the same clock outside rAF (e.g. storing `pointerDownTime` for the next render).
+
+**Why they differ:** The rAF timestamp comes from the display's VSync schedule (Chromium's `BeginFrameArgs` — [how cc works](https://chromium.googlesource.com/chromium/src/+/master/docs/how_cc_works.md)). It represents when the frame was *supposed* to start, not when your JS actually runs. `performance.now()` reflects wall-clock time, which is always later (your JS runs after the frame starts). In Chromium's rendering pipeline, the compositor and main thread work in parallel — the main thread can be processing frame N+1 while the compositor is still painting frame N ([source](https://x.com/nomsternom/status/1853687984266055983)). This means `performance.now()` can diverge significantly from the rAF timestamp.
+
+**Mixing clocks is wrong.** E.g. setting `animatedUntilTime = performance.now()` in a click handler, then computing `rAF_now - animatedUntilTime` in render: the rAF timestamp can actually be *earlier* than the `performance.now()` you stored, giving you 0 steps (wasted frame). Or slightly ahead, giving inconsistent step counts. Use `document.timeline.currentTime` in the event handler instead — it's always on the same clock as rAF's `now`.
+
+TODO: the compositor/main-thread pipelining described above appears to be Chromium-specific, not a spec requirement. Needs further clarification — see [Noam's thread](https://x.com/nomsternom/status/1853687984266055983).
+
+**For input timing, `performance.now()` is fine** (or better: `event.timeStamp`, the high-precision time of the actual input event). Don't use rAF's `now` for velocity estimation — it's the frame time, not when the pointer actually moved.
+
+## Gotchas
+
+Specifically for React:
+
+- As of React 18, all `setState`s are batched: https://github.com/reactwg/react-18/discussions/21
+- Calling `setState` inside a `rAF` inside an event handler makes the state update happen on the *next* frame. [Demo](https://tinyurl.com/4yz8nes8). [Source](https://github.com/facebook/react/issues/31634#issuecomment-2500890102).
+
+[Extra in-depth article on iOS game frame timing](https://web.archive.org/web/20210513101414/https://www.gamasutra.com/blogs/KwasiMensah/20110211/88949/Game_Loops_on_IOS.php) if you're interested. Generally applicable elsewhere.
+
 ## Render Loop
 
 Prefer a simplified game engine loop:
@@ -56,7 +83,7 @@ function scheduleRender() {
 }
 // use event delegation as much as possible to statically allocate events
 window.addEventListener('resize', () => scheduleRender()) // most of time, there should be nothing else in the event handler beside scheduling a render
-window.addEventListener('click', (e) => {events.click = e; scheduleRender()}) // setting a state is fine too
+window.addEventListener('click', (e) => {events.click = e; scheduleRender()}) // storing raw input / pending state is fine too
 window.addEventListener('scroll', () => scheduleRender(), true) // feel free to use capture mode for certain events
 function render(now) {
   // DOM reads
@@ -92,6 +119,16 @@ scheduleRender()
 
 Only events and render's final step can schedule a next render.
 
+### Event Handlers
+
+Allowed in event handlers:
+
+- Storing raw input that'd otherwise be lost before the next render, e.g. `events.click = e`, `formValue = input.value`, or `pointerDownTime = document.timeline.currentTime`
+- `scheduleRender()`
+- Gesture-gated APIs (see below)
+
+Store event info in event handlers (e.g. a click event, or an input value); do NOT do extra logic/state modifications that could have been done in `render` instead. This is counter to many paradigms out there that loosely do bigger chunks of state changes in events. In a proper render loop architecture, like in games, events are stored then that frame's render, and often only by then, has full info on what to do with those events. If we crammed bits of logic into events out of premature convenience, we wouldn't be able to e.g. consider both a click and a key press in that same frame and do some interesting UX action
+
 **Gesture-gated APIs** (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`) require user gesture context — the browser only allows them inside the synchronous call stack of a user-initiated event handler. By the time rAF fires, the gesture context has expired, so these can't go through the batched render loop. Instead, skip event delegation for these and attach a direct event listener on the element at creation time:
 
 ```js
@@ -110,8 +147,6 @@ if (node == null) {
 node.style.top = `${y}px`
 ```
 
-Name your `rAF` callback (`function renderAndMaybeScheduleAnotherRender(now) { ... }` instead of an anonymous arrow). Named functions show up in the browser profiler and debugger, making performance traces readable.
-
 A React app might not be able to follow this, but when the need arises (heavy interactivity), this can still be adopted within components.
 
 ## Event Consumption
@@ -124,30 +159,3 @@ events.keydown = events.click = events.mousemove = null
 ```
 
 For DOM reads, writes, and interleaving rules, see [ui-architecture.md § DOM](ui-architecture.md#dom).
-
-## Timestamps
-
-There are three time sources and they are **not** the same:
-
-- **rAF's `now` parameter**: Scheduled frame start time (from VSync). All rAF callbacks in the same frame get the **same** value. Use for animation stepping inside rAF callbacks.
-- **`document.timeline.currentTime`**: Same value as rAF's `now` ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)). Use for animation timing outside rAF (e.g. in event handlers).
-- **`performance.now()`**: Actual wall-clock time when the JS line executes. Advances between callbacks. Use for input timing (velocity estimation, gesture duration).
-
-**For animation, never use `performance.now()`.** Use rAF's `now` inside rAF callbacks, and `document.timeline.currentTime` when you need the same clock outside rAF (e.g. initializing `animatedUntilTime` in an event handler, or setting a spring's `t0` for analytical solutions).
-
-**Why they differ:** The rAF timestamp comes from the display's VSync schedule (Chromium's `BeginFrameArgs` — [how cc works](https://chromium.googlesource.com/chromium/src/+/master/docs/how_cc_works.md)). It represents when the frame was *supposed* to start, not when your JS actually runs. `performance.now()` reflects wall-clock time, which is always later (your JS runs after the frame starts). In Chromium's rendering pipeline, the compositor and main thread work in parallel — the main thread can be processing frame N+1 while the compositor is still painting frame N ([source](https://x.com/nomsternom/status/1853687984266055983)). This means `performance.now()` can diverge significantly from the rAF timestamp.
-
-**Mixing clocks is wrong.** E.g. setting `animatedUntilTime = performance.now()` in a click handler, then computing `rAF_now - animatedUntilTime` in render: the rAF timestamp can actually be *earlier* than the `performance.now()` you stored, giving you 0 steps (wasted frame). Or slightly ahead, giving inconsistent step counts. Use `document.timeline.currentTime` in the event handler instead — it's always on the same clock as rAF's `now`.
-
-TODO: the compositor/main-thread pipelining described above appears to be Chromium-specific, not a spec requirement. Needs further clarification — see [Noam's thread](https://x.com/nomsternom/status/1853687984266055983).
-
-**For input timing, `performance.now()` is fine** (or better: `event.timeStamp`, the high-precision time of the actual input event). Don't use rAF's `now` for velocity estimation — it's the frame time, not when the pointer actually moved.
-
-## Gotchas
-
-Specifically for React:
-
-- As of React 18, all `setState`s are batched: https://github.com/reactwg/react-18/discussions/21
-- Calling `setState` inside a `rAF` inside an event handler makes the state update happen on the *next* frame. [Demo](https://tinyurl.com/4yz8nes8). [Source](https://github.com/facebook/react/issues/31634#issuecomment-2500890102).
-
-[Extra in-depth article on iOS game frame timing](https://web.archive.org/web/20210513101414/https://www.gamasutra.com/blogs/KwasiMensah/20110211/88949/Game_Loops_on_IOS.php) if you're interested. Generally applicable elsewhere.
