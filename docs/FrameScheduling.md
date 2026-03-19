@@ -68,9 +68,12 @@ Render:
 ```
 
 ```js
-let animatedUntilTime = null
-let pointer = {x: -Infinity, y: -Infinity}
-let state = {keydown: null, click: null}
+// centralized state
+let st = {
+  animatedUntilTime: null,
+  selectedId: null,
+  events: {click: null},
+}
 
 let scheduledRender = false
 function scheduleRender() {
@@ -83,30 +86,37 @@ function scheduleRender() {
 }
 // use event delegation as much as possible to statically allocate events
 window.addEventListener('resize', () => scheduleRender()) // most of time, there should be nothing else in the event handler beside scheduling a render
-window.addEventListener('click', (e) => {events.click = e; scheduleRender()}) // storing raw input / pending state is fine too
+window.addEventListener('click', (e) => {st.events.click = e; scheduleRender()}) // storing raw input in transient state is fine too
 window.addEventListener('scroll', () => scheduleRender(), true) // feel free to use capture mode for certain events
 function render(now) {
   // DOM reads
   const windowSizeX = document.documentElement.clientWidth
   // Handle inputs
-  if (events.click) { pointer.x = events.click.clientX; pointer.y = events.click.clientY }
-  if (events.mousemove) { pointer.x = events.mousemove.clientX; pointer.y = events.mousemove.clientY }
+  let selectedId = st.selectedId
+  if (st.events.click != null) {
+    const target = st.events.click.target
+    if (target instanceof HTMLElement) {
+      selectedId = target.dataset.id ?? selectedId
+    }
+  }
 
   // Layout (no DOM writes here; compute cursor as variable, not on DOM)
-  let cursor = 'auto'
+  let cursor = windowSizeX < 800 ? 'default' : 'auto'
+  if (selectedId != null) cursor = 'pointer'
 
   // Animation tick
-  let newAnimatedUntilTime = animatedUntilTime ?? now
+  let newAnimatedUntilTime = st.animatedUntilTime ?? now
   const steps = Math.min(300, Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)) // spiral of death prevention, see Animation.md
   newAnimatedUntilTime += steps * msPerAnimationStep
   let stillAnimating = false
   // ... spring steps
 
   // Commit state
-  events.keydown = events.click = events.mousemove = null
-  animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
+  st.selectedId = selectedId
+  st.events.click = null
+  st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
 
-  // DOM writes
+  // DOM writes projections
   document.body.style.cursor = cursor
 
   // Side effects (scrollTo, pushState, selection, etc.)
@@ -123,11 +133,11 @@ Only events and render's final step can schedule a next render.
 
 Allowed in event handlers:
 
-- Storing raw input that'd otherwise be lost before the next render, e.g. `events.click = e`, `formValue = input.value`, or `pointerDownTime = document.timeline.currentTime`
+- Storing raw input that'd otherwise be lost before the next render in regular transient state, e.g. `st.events.click = e`, `formValue = input.value`, or `pointerDownTime = document.timeline.currentTime`
 - `scheduleRender()`
 - Gesture-gated APIs (see below)
 
-Store event info in event handlers (e.g. a click event, or an input value); do NOT do extra logic/state modifications that could have been done in `render` instead. This is counter to many paradigms out there that loosely do bigger chunks of state changes in events. In a proper render loop architecture, like in games, events are stored then that frame's render, and often only by then, has full info on what to do with those events. If we crammed bits of logic into events out of premature convenience, we wouldn't be able to e.g. consider both a click and a key press in that same frame and do some interesting UX action
+These event fields are not a separate subsystem; they're just ordinary state fields whose lifetime happens to be one frame or so. Store event info in event handlers (e.g. a click event, or an input value); do NOT do extra logic/state modifications that could have been done in `render` instead. This is counter to many paradigms out there that loosely do bigger chunks of state changes in events. In a proper render loop architecture, like in games, events are stored then that frame's render, and often only by then, has full info on what to do with those events. If we crammed bits of logic into events out of premature convenience, we wouldn't be able to e.g. consider both a click and a key press in that same frame and do some interesting UX action
 
 **Gesture-gated APIs** (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`) require user gesture context — the browser only allows them inside the synchronous call stack of a user-initiated event handler. By the time rAF fires, the gesture context has expired, so these can't go through the batched render loop. Instead, skip event delegation for these and attach a direct event listener on the element at creation time:
 
@@ -155,7 +165,7 @@ In the render loop, events are stored on arrival and consumed during render. **N
 
 ```js
 // commit state
-events.keydown = events.click = events.mousemove = null
+st.events.click = null
 ```
 
 For DOM reads, writes, and interleaving rules, see [ui-architecture.md § DOM](ui-architecture.md#dom).
