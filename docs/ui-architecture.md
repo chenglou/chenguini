@@ -1,8 +1,116 @@
-## UI Architecture
+# UI Architecture
 
-See [FrameScheduling.md](FrameScheduling.md) for the render loop structure, event consumption timing, and timestamps.
+## Render Loop
 
-## State Management
+Prefer a simplified game engine loop:
+
+```
+Initialization (done once, all upfront):
+  State declaration
+  Static DOM chunks
+  Events registration (leverage event delegation to make this happen)
+
+Render:
+  DOM reads (batched, to avoid DOM interleaving)
+  State changes, in this order:
+    Handle inputs
+    New layout & cursor
+    Animation tick
+    Commit state changes
+  Occlusion & DOM writes (batched, same reason)
+  Side effects (scrollTo, pushState, focus, selection, localStorage, etc.)
+  schedule next render (e.g. if animating)
+```
+
+```js
+// centralized state
+let st = {
+  animatedUntilTime: null,
+  selectedId: null,
+  events: {click: null},
+}
+
+let scheduledRender = false
+function scheduleRender() {
+  if (scheduledRender) return
+  scheduledRender = true
+  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) { // eye-grabbing name to avoid "(anonymous)" function in the debugger & profiler
+    scheduledRender = false
+    if (render(now)) scheduleRender()
+  })
+}
+// use event delegation as much as possible to statically allocate events
+window.addEventListener('resize', () => scheduleRender()) // most of time, there should be nothing else in the event handler beside scheduling a render
+window.addEventListener('click', (e) => {st.events.click = e; scheduleRender()}) // storing raw input in transient state is fine too
+window.addEventListener('scroll', () => scheduleRender(), true) // feel free to use capture mode for certain events
+function render(now) {
+  // DOM reads
+  const windowSizeX = document.documentElement.clientWidth
+  // Handle inputs
+  let selectedId = st.selectedId
+  if (st.events.click != null) {
+    const target = st.events.click.target
+    if (target instanceof HTMLElement) {
+      selectedId = target.dataset.id ?? selectedId
+    }
+  }
+
+  // Layout (no DOM writes here; compute cursor as variable, not on DOM)
+  let cursor = windowSizeX < 800 ? 'default' : 'auto'
+  if (selectedId != null) cursor = 'pointer'
+
+  // Animation tick
+  let newAnimatedUntilTime = st.animatedUntilTime ?? now
+  const steps = Math.min(300, Math.floor((now - newAnimatedUntilTime) / msPerAnimationStep)) // spiral of death prevention, see Animation.md
+  newAnimatedUntilTime += steps * msPerAnimationStep
+  let stillAnimating = false
+  // ... animation steps for e.g. numerical springs
+
+  // Commit state
+  st.selectedId = selectedId
+  st.events.click = null // do NOT forget to reset ephemeral events!
+  st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null
+
+  // DOM writes projections
+  document.body.style.cursor = cursor
+
+  // Side effects (scrollTo, pushState, selection, etc.)
+
+  return stillAnimating
+}
+
+scheduleRender()
+```
+
+Only events and render's final step can schedule a next render.
+
+### Event Handling
+
+Traditional webapps cram lots of logic inside event callbacks:
+
+```tsx
+function handleClick(e) { /* everything here */ };
+<div onClick={handleClick}> ... </div>
+```
+
+**Avoid doing this**. This pattern was convenient for simple cases, built around oversimplified assumptions of interactions logic. The more complex the interactions, the more you'd need to compute the logic in a place that has access to all the relevant states. That place is `render` for us (and for game engines, which we aspire to imitate). This is why we _minimize_ logic in events, storing only the transient event states, then let that frame's `render` interpret all relevant input states together. This way we can:
+- order the importance of a key press relative to a concurrent (potentially conflicting) mouse click
+- resolve one tap while another finger is held down
+- press a key while mouse's hovering over a special section for pro user actions
+- resolve two directional controls on a game pad composing into a new action
+
+So, allowed in event callbacks:
+
+- Storing raw input that'd otherwise be lost before the next render in regular transient state, e.g. `st.events.click = e`, `formValue = e.target.value`, or `dragStartTime = event.timeStamp`
+- `scheduleRender()`
+- Exceptionally, gesture-gated APIs (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`). These require user gesture context — the browser only allows them inside the synchronous call stack of a user-initiated event handler (by the time scheduleRender's `rAF` fires, the gesture context would have expired, so these can't go through the batched render loop)
+
+The event fields are just regular state fields whose lifetime happens to be one frame or so. **don't forget to reset those event states** at the end of the render loop.
+
+A React app might not be able to follow this render architecture, but when the need arises (heavy interactivity), this can still be adopted within components.
+
+### State Management
+
 It's actually fine for most apps to have a single global state object, especially when AI's definitely of readability differs from human's from a LLM-as-a-compiler perspective (a compiler's binary is a single file and we don't worry about it not having encapstulating or that it contains duplication, from e.g. generic specialization).
 Benefits of a single state: serializable, clonable, rewindable (for debugging), etc.
 
