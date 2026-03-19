@@ -10,6 +10,7 @@ We'll periodically refactor other codebases' code and extract lessons back into 
   - write docs guidelines like this: "Colocate lifetimes. Instead of a `personAge: number | null` and a `personName: string | null`, put them into a `type Person = { age: number, name: string } | null`"
   - don't write like this: "Colocate lifetimes. Instead of `a: T1 | null` and `b: T2 | null`, put them into a `type P = { a: T1, b: T2 } | null`". Also don't use weirdly contextful names like `hullShape: HullID | null`
 - The above applies to generating doc comments for functions too
+- Leverage descriptive variable names that represent a whole category. If you come across a context-less example like "store events in state, e.g. pointerDownTime = ..." you still know that `pointerDownTime` is examplary among many other use-cases. Whereas a doc that says "e.g. ptAt = ..." is the _same_ variable but bakes in way less explanatory power
 
 Example:
 - Preferred: `The image's position should be relative to the scroll view container's.`
