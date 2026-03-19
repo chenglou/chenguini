@@ -117,7 +117,7 @@ d.y.pos = d.y.dest = dragY
 
 This pins the spring to the cursor (no springy lag). On release, the layout pass sets `dest` to the snap-back target, and the spring animates `pos` → `dest`.
 
-### Velocity Estimation
+### Velocity Estimation (TODO: re-verify with gesture-flick-snap-target demo)
 
 For flick/throw gestures, estimate velocity from recent pointer history:
 
@@ -128,27 +128,6 @@ let pointer = [{x: 0, y: 0, time: 0}] // circular buffer, keep last ~20
 let i = pointer.length - 1
 while (i >= 0 && now - pointer[i].time <= 100) i-- // last ~100ms
 let vx = (pointerLast.x - pointer[i].x) / (now - pointer[i].time) * 1000 // px/s
-```
-
-### Drag-to-Reorder
-
-Compare cursor position against neighboring items' midpoints during drag:
-
-```js
-while (dragIdx > 0 && pointerY < data[dragIdx - 1].y.dest + data[dragIdx - 1].sizeY / 2) {
-  [data[dragIdx], data[dragIdx - 1]] = [data[dragIdx - 1], data[dragIdx]]
-  dragIdx--
-}
-```
-
-### Z-Index During Drag & Release
-
-See also [z-index-depth-management.md](z-index-depth-management.md) for general depth management. The dragged item needs the highest z-index. After release, it still needs to be high while animating back:
-
-```js
-zIndex = isDragged ? data.length + 2
-  : isLastDragged ? data.length + 1  // still animating back to slot
-  : i
 ```
 
 ### CSS for Drag
