@@ -1,4 +1,4 @@
-# Image (Section Under Construction)
+# Image
 
 Sizing: careful that max-width being set to 100% (e.g. tailwind global reset) means setting image's css width vs using scale3d don't always end up with the same width
 
@@ -14,3 +14,8 @@ const img = new Image()
 img.onload = () => img.decode().then(() => { /* decoded, aka now safe to paint atomically */ })
 img.src = url
 ```
+
+Prefer `<img>` over `<div>` with `background-image`
+- People used `background-image` for easy `background-size: cover` and centering. `object-fit: cover` and `object-position` on `<img>` do the same thing now.
+- `background-image` silently swallows load failures — you end up writing a `new Image()` preload just to detect errors. You also lose `decode()`, `onerror`, `srcSet`, and native long-press save on mobile
+- For stacking images (low-res behind high-res, poster frame behind `<video>`), use two absolutely-positioned `<img>` elements instead of multiple `background-image` layers.
