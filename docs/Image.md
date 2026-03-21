@@ -18,4 +18,5 @@ img.src = url
 Prefer `<img>` over `<div>` with `background-image`
 - People used `background-image` for easy `background-size: cover` and centering. `object-fit: cover` and `object-position` on `<img>` do the same thing now.
 - `background-image` silently swallows load failures — you end up writing a `new Image()` preload just to detect errors. You also lose `decode()`, `onerror`, `srcSet`, and native long-press save on mobile
+- Dragging an `<img>` triggers Chrome's native image drag (opens a side panel). Fix: set `draggable={false}` on the `<img>` and put the drag handler on a parent wrapper that drags a data structure instead of a URL.
 - For stacking images (low-res behind high-res, poster frame behind `<video>`), use two absolutely-positioned `<img>` elements instead of multiple `background-image` layers.
