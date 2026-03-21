@@ -35,12 +35,11 @@ For developers:
 import {photoGalleryData} from './data'
 
 // === generic scheduler & its debugger
-let scheduledRender = false
+let scheduledRaf: number | null = null
 function scheduleRender() {
-  if (scheduledRender) return;
-  scheduledRender = true
-  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) { // eye-grabbing name. No "(anonymous)" function in the debugger & profiler
-    scheduledRender = false
+  if (scheduledRaf != null) return;
+  scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) { // eye-grabbing name. No "(anonymous)" function in the debugger & profiler
+    scheduledRaf = null
     if (render(now)) scheduleRender()
   })
 }

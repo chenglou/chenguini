@@ -13,12 +13,11 @@ const colors = [
 ]
 
 // === generic scheduler
-let scheduledRender = false
+let scheduledRaf: number | null = null
 function scheduleRender() {
-  if (scheduledRender) return
-  scheduledRender = true
-  requestAnimationFrame(function renderOnFrame() { // named for profiler
-    scheduledRender = false
+  if (scheduledRaf != null) return
+  scheduledRaf = requestAnimationFrame(function renderOnFrame() { // named for profiler
+    scheduledRaf = null
     render()
   })
 }

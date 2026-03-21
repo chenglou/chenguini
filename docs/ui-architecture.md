@@ -30,12 +30,11 @@ let st = {
   events: {click: null},
 }
 
-let scheduledRender = false
+let scheduledRaf = null
 function scheduleRender() {
-  if (scheduledRender) return
-  scheduledRender = true
-  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) { // eye-grabbing name to avoid "(anonymous)" function in the debugger & profiler
-    scheduledRender = false
+  if (scheduledRaf != null) return
+  scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) { // eye-grabbing name to avoid "(anonymous)" function in the debugger & profiler
+    scheduledRaf = null
     if (render(now)) scheduleRender()
   })
 }

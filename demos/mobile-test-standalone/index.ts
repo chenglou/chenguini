@@ -29,12 +29,11 @@ function lessEqual(a: number, b: number, c: number) { return a <= b && b <= c }
 function clamp(min: number, v: number, max: number) { return v > max ? max : v < min ? min : v }
 
 // === scheduler
-let scheduledRender = false
+let scheduledRaf: number | null = null
 function scheduleRender() {
-  if (scheduledRender) return
-  scheduledRender = true
-  requestAnimationFrame(function(now) {
-    scheduledRender = false
+  if (scheduledRaf != null) return
+  scheduledRaf = requestAnimationFrame(function(now) {
+    scheduledRaf = null
     if (render(now)) scheduleRender()
   })
 }

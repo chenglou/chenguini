@@ -1,10 +1,9 @@
 // === scheduler ===
-let scheduledRender = false
+let scheduledRaf: number | null = null
 function scheduleRender() {
-  if (scheduledRender) return
-  scheduledRender = true
-  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) {
-    scheduledRender = false
+  if (scheduledRaf != null) return
+  scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) {
+    scheduledRaf = null
     if (render(now)) scheduleRender()
   })
 }

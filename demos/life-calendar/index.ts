@@ -64,12 +64,11 @@ let domCache: {canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; tooltip
 }
 
 // === scheduler
-let scheduledRender = false
+let scheduledRaf: number | null = null
 function scheduleRender() {
-  if (scheduledRender) return
-  scheduledRender = true
-  requestAnimationFrame(function renderAndMaybeScheduleAnotherRender() {
-    scheduledRender = false
+  if (scheduledRaf != null) return
+  scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender() {
+    scheduledRaf = null
     render()
   })
 }
