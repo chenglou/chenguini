@@ -102,7 +102,8 @@ So, allowed in event callbacks:
 
 - Storing raw input that'd otherwise be lost before the next render in regular transient state, e.g. `st.events.click = e`, `formValue = e.target.value`, or `dragStartTime = event.timeStamp`
 - `scheduleRender()`
-- Exceptionally, gesture-gated APIs (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`). These require user gesture context — the browser only allows them inside the synchronous call stack of a user-initiated event handler (by the time scheduleRender's `rAF` fires, the gesture context would have expired, so these can't go through the batched render loop)
+
+_btw, gesture-gated APIs (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`) used to behave more like they needed same-stack synchrony, esp on mobile Safari, which meant doing sync logic inside event callbacks. That's no longer true on modern browsers._
 
 The event fields are just regular state fields whose lifetime happens to be one frame or so. **don't forget to reset those event states** at the end of the render loop.
 
