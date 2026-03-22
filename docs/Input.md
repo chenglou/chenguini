@@ -13,6 +13,7 @@
 - on iOS Safari, `mouseup` and `click` don't fire on window-level, unless they're bubbled up from some other element
 - pointer coordinates are rounded/truncated to integers on iOS Safari, and sometime, by heuristics, even less precise. This, along with throttled frame rate, explains why most webapps don't feel smooth on iOS vs their native counterparts.
 - `pointermove` doesn't work on android (TODO: re-verify)
+- TODO: check `mousemove` and `touchmove` behaviors
 - (Not a bug, just a warning) when scrolling, a container's `pointermove`/`touchmove`/`mousemove` obviously don't always trigger; some stored `event.offsetX/Y` (coordinates local to container) would be stale
 - pointer values can exceed document bounds, thus have legal negative values
 - On page load, there's no way to render a first cursor state.

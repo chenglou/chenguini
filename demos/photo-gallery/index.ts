@@ -249,7 +249,7 @@ function springForEach(f: (s: Spring) => void) { // no spring ownership struggle
 }
 
 // === events
-// pointermove doesn't work on android, pointerdown isn't fired on Safari on the first left click after dismissing context menus, mousedown doesn't trigger properly on mobile, pointerup isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event. Tldr there's no pointer event that works cross-browser that can replace mouse & touch events.
+// See docs/Input.md.
 window.addEventListener('resize', () => scheduleRender())
 window.addEventListener('scroll', () => scheduleRender(), true) // capture is needed for iPad Safari...
 window.addEventListener('popstate', () => scheduleRender())

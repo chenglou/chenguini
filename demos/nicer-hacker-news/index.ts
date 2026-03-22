@@ -192,7 +192,7 @@ window.addEventListener('pointermove', (e) => {
   inputs.pointerXY.pageX = e.pageX; inputs.pointerXY.pageY = e.pageY // can exceed document bounds, e.g. dragging reports back out-of-bound values
   scheduleRender()
 })
-// safari pointerdown isn't fired on the first left click after dismissing context menus... back to mousedown
+// See docs/Input.md.
 window.addEventListener('mousedown', (e) => {
   inputs.pointerState = 'firstDown'
   // also update position. Maybe pointer never moved (page refresh, right click, move, then left click to dismiss, etc.)

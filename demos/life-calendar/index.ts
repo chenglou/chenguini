@@ -74,7 +74,7 @@ function scheduleRender() {
 }
 
 // === events
-// pointermove doesn't work on android, pointerdown isn't fired on Safari on the first left click after dismissing context menus, mousedown doesn't trigger properly on mobile, pointerup isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event. Tldr there's no pointer event that works cross-browser that can replace mouse & touch events.
+// See docs/Input.md.
 window.addEventListener('resize', () => scheduleRender())
 window.addEventListener('click', (e) => {st.events.click = e; scheduleRender()})
 domCache.tooltip.addEventListener('input', (e) => {st.events.input = e; scheduleRender()})
