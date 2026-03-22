@@ -1,0 +1,36 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+
+<body>
+  <button id="reset">Reset</button>
+  <div id="area">Tap area</div>
+  <button id="big-button">Giant button</button>
+  <pre id="output"></pre>
+
+  <style>
+    body {
+      margin: 16px;
+      font: 16px/1.4 system-ui, sans-serif;
+    }
+
+    #reset {
+      margin-bottom: 16px;
+    }
+
+    #area,
+    #big-button {
+      width: 100%;
+      min-height: 180px;
+      margin-bottom: 16px;
+      border: 1px solid #000;
+      display: grid;
+      place-items: center;
+      background: white;
+      font: inherit;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+  </style>
+
+  <script type="module" src="./index.ts"></script>
+</body>

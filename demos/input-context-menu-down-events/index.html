@@ -1,0 +1,36 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+
+<body>
+  <button id="reset">Reset</button>
+  <div id="target">Right click here</div>
+  <pre id="output"></pre>
+
+  <style>
+    body {
+      margin: 16px;
+      font: 16px/1.4 system-ui, sans-serif;
+    }
+
+    button {
+      margin-bottom: 16px;
+    }
+
+    #target {
+      min-height: 200px;
+      border: 1px solid #000;
+      display: grid;
+      place-items: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #output {
+      margin-top: 16px;
+      white-space: pre-wrap;
+      font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+  </style>
+
+  <script type="module" src="./index.ts"></script>
+</body>

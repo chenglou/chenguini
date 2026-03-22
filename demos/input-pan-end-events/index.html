@@ -1,0 +1,43 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+
+<body>
+  <button id="reset">Reset</button>
+  <div id="scroller">
+    <div id="content"></div>
+  </div>
+  <pre id="output"></pre>
+
+  <style>
+    body {
+      margin: 16px;
+      font: 16px/1.4 system-ui, sans-serif;
+    }
+
+    button {
+      margin-bottom: 16px;
+    }
+
+    #scroller {
+      height: 240px;
+      overflow: auto;
+      border: 1px solid #000;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #content {
+      height: 1200px;
+      background:
+        linear-gradient(#ddd 1px, transparent 1px) 0 0 / 100% 48px,
+        linear-gradient(90deg, #ddd 1px, transparent 1px) 0 0 / 48px 100%;
+    }
+
+    #output {
+      margin-top: 16px;
+      white-space: pre-wrap;
+      font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+  </style>
+
+  <script type="module" src="./index.ts"></script>
+</body>
