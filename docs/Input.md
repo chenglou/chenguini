@@ -1,28 +1,26 @@
 # Input
 
+## Quirks
+
+- no `touch` events fire on desktop (with mouse/trackpad at least. Not sure about touch screens)
+- `pointerdown`'s by spec faster than `mousedown`, by ~1ms on desktop Safari, <1ms on Chrome, and **~100ms** on iOS Safari. On iOS Safari, `pointerdown` fires at the same time as `touchstart`
+- `pointerup`'s by spec faster than `mouseup` and `click`, by ~1ms on desktop Safari, <1ms on Chrome, and **~40ms** on iOS Safari. `click` slightly trails `mouseup` by ~1ms on all browsers. On iOS Safari, `pointerup` fires at the same time as `touchend`.
+- On desktop, on the first left click when dismissing context menus, none of `pointerup`, `mouseup`, `click` and `touchend` fire
+- On desktop, right click to open context menu triggers `pointerdown` and `mousedown`, but not `pointerup`, `mouseup` and `click`
+- `pointerup`, `mouseup`, and `click` aren't fired on iOS Safari when finger down -> pan -> finger up. Only `touchend` fires. All 4 fire for regular tap. On desktop, all of the first 3 fire after pan (but not `touchend` ofc, unless it's a touch screen desktop, but that's untested).
+- `pointerup` _is_ fired (but not `mouseup` or `click`) when finger down -> panning a native iOS Safari scrollbar
+- `mousedown` (!) and `click` don't fire on iOS Safari when finger down -> pan -> finger up, on both regular elements and scrollbar
+- on iOS Safari, `mouseup` and `click` don't fire on window-level, unless they're bubbled up from some other element
+- pointer coordinates are rounded/truncated to integers on iOS Safari, and sometime, by heuristics, even less precise. This, along with throttled frame rate, explains why most webapps don't feel smooth on iOS vs their native counterparts.
+- `pointermove` doesn't work on android (TODO: re-verify)
+- (Not a bug, just a warning) when scrolling, a container's `pointermove`/`touchmove`/`mousemove` obviously don't always trigger; some stored `event.offsetX/Y` (coordinates local to container) would be stale
+- pointer values can exceed document bounds, thus have legal negative values
+- On page load, there's no way to render a first cursor state.
+- Font size on inputs must be >= 16px, otherwise iOS Safari auto-zooms the viewport on focus
+
 ## Timing
 
 Events contain a `timeStamp` property, the high-precision time when the event occurred. Use this over `performance.now()` and others, when relevant event-related calculations are involved. Refer to [FrameScheduling.md](FrameScheduling.md) for more details on timestamps.
-
-## Touch
-
-Pointer up's slightly faster than mouseup on iOS Safari: https://x.com/_chenglou/status/1666771401729265664
-
-Pointer coordinates are rounded/truncated to integers on iOS Safari. This, along with throttled frame rate, explains why most webapps don't feel smooth on iOS vs their native counterparts.
-
-## Miscellaneous
-
-- On page load, there's no way to render a first cursor state.
-- `pointermove` doesn't work on android
-- `pointerdown` isn't fired on Safari on the first left click after dismissing context menus
-- `mousedown` doesn't trigger properly on mobile
-- `pointerup` isn't triggered when pointer panned (at least on iOS), don't forget contextmenu event
-- (Not a bug, but careful) when scrolling, a container's pointermove doesn't trigger; some stored `event.offsetX/Y` (coordinates local to container) would be stale
-- pointer can exceed document bounds, thus have legal negative values
-
-From some of the above points, there's no pointer event that works cross-browser that can replace mouse & touch events.
-
-- Font size on inputs must be >= 16px, otherwise iOS Safari auto-zooms the viewport on focus
 
 ## Pointer Coordinates
 
@@ -47,6 +45,8 @@ const pointerYLocal = pointer.y + scrollY
 ```
 
 ## Drag Interactions
+
+See quirks at the beginning of the doc, when you craft drag interactions.
 
 ### Pinning Springs During Drag
 
