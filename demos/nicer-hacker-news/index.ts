@@ -193,7 +193,7 @@ window.addEventListener('pointermove', (e) => {
   scheduleRender()
 })
 // See docs/Input.md.
-window.addEventListener('mousedown', (e) => {
+window.addEventListener('pointerdown', (e) => {
   inputs.pointerState = 'firstDown'
   // also update position. Maybe pointer never moved (page refresh, right click, move, then left click to dismiss, etc.)
   inputs.pointerXY.pageX = e.pageX; inputs.pointerXY.pageY = e.pageY
@@ -251,7 +251,7 @@ function scheduleRender() {
     for (let i = 0; i < data.length; i++) rowsHeightNatural += rowHeightNaturalF(data[i]!.commentHeightNatural)
 
     // submission, comments, vertical sizing logic
-    const windowHeight = window.innerHeight
+    const windowHeight = document.documentElement.clientHeight
     let submissionLine1Top: number
     let submissionHeight: number
     let scrollerHeightNatural: number
@@ -294,7 +294,7 @@ function scheduleRender() {
     // When rows animate, the cursor's target might change over time. E.g. a pressed row A shrinks
     // to 0 -> cursor now targets row B -> row B makes row A expand back; infinite cycle.
     // **Views should be decoupled from their hitboxes!** Here, the hitboxes ignore animating states
-    const windowWidth = window.innerWidth
+    const windowWidth = document.documentElement.clientWidth
     const containerWidth = containerWidthF(windowWidth)
     const containerLeft = (windowWidth - containerWidth) / 2 // center on the page
     let pointer: Pointer = {on: null}
