@@ -142,12 +142,6 @@ function hashN(args) {
 
 DOM is mutative, imperative, and slow. So against our general guideline of simplicity, we make an exception and create a caching layer for it. The DOM should be a pure projection of state, not part of it (this keeps state immutable and rewindable without troublesome mutable references mixed in), just like React. Except in our case it's introspectable for a bit more expressivity.
 
-### DOM Reads
-
-Use `document.documentElement.clientWidth` and `document.documentElement.clientHeight` for viewport dimensions. Do NOT use `window.innerWidth` / `window.innerHeight` — those include scrollbar width and behave differently under Safari pinch zoom (they change during zoom, `clientWidth/Height` don't). `visualViewport.width/height` also changes during pinch zoom.
-
-For pointer coordinates, see [Input.md](Input.md) (`clientX/Y` vs `pageX/Y`, coordinate space conversion, drag patterns).
-
 ### DOM Interleaving
 
 Repeated DOM read & write is catastrophic for performance ([source](https://gist.github.com/paulirish/5d52fb081b3570c81e3a)). It's not always avoidable (especially when there's need for text measurement as part of layout logic before render), but keep to them a strict minimum.
@@ -234,6 +228,8 @@ Properties set on a DOM node split into two **disjoint** groups:
 If a property appears in both, it's a bug: either it's truly static (move it to creation) or truly dynamic (remove it from creation).
 
 ## Layout
+
+Use `document.documentElement.clientWidth` and `document.documentElement.clientHeight` for viewport dimensions. Do NOT use `window.innerWidth` / `window.innerHeight` — those include scrollbar width and behave differently under Safari pinch zoom (they change during zoom, `clientWidth/Height` don't). `visualViewport.width/height` also changes during pinch zoom.
 
 JS-based layout & positioning isn't as scary as you'd think. It enables JS animations, easy occlusion culling (virtualization in web speak), cooler layouts, etc. For example, for images, a demo here can check the area of each image (instead of just width or height), and adjust it to be more pleasant, e.g. same-ish size relative to other neighbor images.
 
