@@ -7,6 +7,7 @@ Parse & validate your data as early as possible. Don't pass down half-validated 
 Parse and normalize early but don't _interpret_ too early. Interpret data at a narrow useful scope that will see all interacting data and has a real reason to own the result. If e.g. a click handler only sees the click, but render also sees scroll position, hit targets and route state, store the click (or any other raw fact you'd otherwise lose) and let render decide what it means.
 
 Strings are the `any` of data. If you're parsing, splitting, or regex-matching a string repeatedly, it should have been a structured type upstream. If there's already such data type and you're still forced to use the original unparsed string, then that data type was modeled too tightly and lost necessary info. Fix that instead
+Careful making a composite key through string concat of parts (e.g. `` `${id}-${index}` `` as a Set key). In a hot loop this allocates a string per lookup
 
 Guideline for typing potentially nullable string:
 
