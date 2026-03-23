@@ -92,6 +92,8 @@ This is the equivalent of standardizing fixed shader pipeline for WebGL/WebGPU, 
 
 ## Safari Scroll Container Quirk
 
+On iOS Safari, a total height of roughly >500000px can crash the browser. To repro, make such a page and drag the scrollbar non-stop for a while (easier to crash on >1M px. Even tapping the header to go back to top can trigger it).
+
 On iPad Safari, elements positioned outside the viewport (e.g. a horizontal carousel extending past viewport width) aren't properly clipped by `overflow: hidden` on `<body>` in all cases. The fix is to use `contain: layout` + `width: 100vw` + `height: 100vh` on body, turning it into the scroll container. This means:
 
 - Read scroll via `document.body.scrollTop` / `document.body.scrollLeft` (not `window.scrollY` / `window.scrollX`)
