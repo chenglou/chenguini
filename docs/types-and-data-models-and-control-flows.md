@@ -37,6 +37,11 @@ Resist future-proofing with generic helpers if you've only encountered one insta
 DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash.
 
 Think twice before using overly generic data structures like Map and Set. They're fine in many cases, but in many others, it just means you haven't leveraged more properties & strong assumptions from your domain. Array's often a better bet unless your algorithm really needs `O(1)` access. Think more in C-style terms: where is a hash map more appropriate despite its higher friction?
+Data structures tier:
+- Record/tuple
+- Array
+- Map/set
+(Tagged union is a bit of a special data structure that doesn't belong in this ranking. But obviously, use it)
 
 Orient your data structure to match your access pattern. If you have `folders: Map<folderName, Set<imageId>>` but your hot path asks "which folders is this image in?", build `imageToFolders: Map<imageId, Set<folderName>>` once upfront. Don't scan all folders per image — that turns an O(1) lookup into O(folders).
 
@@ -44,7 +49,7 @@ O(n^2) is fine when both n's are bounded by domain constraints, e.g. images per 
 
 ## Control Flow
 
-Folks try to "solve" performance by hiding them behind ever more obscure control flows, e.g. nested ifs, lazy imports, etc. Avoid these; they often just obscure the perf degradation, and add extra state checking & debugging complexity. We prefer making systems with even latency and throughput, like shaders or real-time systems: branchless, predictable. Branches (and caches) lower the cost of best-case scenarios by rising the cost of worst-case scenarios; we don't want that! We don't want a 4ms frame to reduce to 1ms while, in the worst case, upping it to 10ms (which is now a frame drop).
+Folks try to "solve" performance by hiding them behind ever more obscure control flows, e.g. nested ifs, lazy imports, etc. Avoid these; they often just obscure the perf degradation, and add extra state checking & debugging complexity. We prefer making systems with even latency and throughput, like shaders or real-time systems: branchless, predictable. Branches (and caches) lower the cost of best-case scenarios by rising the cost of worst-case scenarios; we don't want that! We don't want a 4ms frame to reduce to 1ms while, in the worst case, upping it to 10ms (which is now a frame drop). So try to first and only cater to worst-case frame latency.
 
 Avoid excessive asyncs. If needed, at least spot the asyncs that need to go together, and wrap them in a group with Promise.all. Prefer top-down control flow. E.g. don't do one `configLoaded.then(...)`, one `dataLoaded.then(...)`, then some shared `maybeStart()` / `if (fooReady && barReady)` handshake if what you really mean is "wait for both, then start".
 
@@ -58,6 +63,10 @@ The latter's especially prominent (using objects as dynamic dispatch tables). It
 Loop invariants are extremely underutilized in reasoning. Understanding what doesn't change makes each iteration easy to verify, and makes static parts easier to lift outside of the loop.
 
 Not all code reuse is good. Before extracting similar calls into helpers, consider whether the redundant work is actually a manifestation of a control flow that didn't properly compute the shared part before the downstream usage sites.
+
+## Caching
+
+Modern computing's much cheaper than memory. Recompute instead of storing the result. Plus, computing being ephemeral, avoids lifetime issues. We make exceptions and cache things like DOM, because they're genuinely expensive.
 
 ## Project Setup
 
