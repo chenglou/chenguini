@@ -140,18 +140,16 @@ function hashN(args) {
 
 ## DOM
 
-DOM is mutative, imperative, and slow. So against our general guideline of simplicity, we make an exception and create a caching layer for it. The DOM should be a pure projection of state, not part of it (this keeps state immutable and rewindable without troublesome mutable references mixed in), just like React. Except in our case it's introspectable for a bit more expressivity.
-
-### DOM Interleaving
+DOM is mutative, imperative, slow, stateful, non-idempotent, and barely serializable compared to regular data structures. Here's how we handle it.
 
 Repeated DOM read & write is catastrophic for performance ([source](https://gist.github.com/paulirish/5d52fb081b3570c81e3a)). It's not always avoidable (especially when there's need for text measurement as part of layout logic before render), but keep to them a strict minimum.
 For easier reasoning & testing, pass the read DOM values to helper functions instead of having said helpers read from DOM. And definitely avoid having helpers mutate DOM, when possible.
 
-### DOM Writes
+DOM writes should be batched, to avoid read/write interleaving.
 
-**Everything that touches DOM properties is a DOM write** — not just element content and transforms, but also `body.style.cursor`, `body.style.overflowY`, dummy element heights, etc. These all belong in the DOM writes phase. A common mistake is setting `document.body.style.cursor` during layout computation — instead, compute the cursor value as a local variable during layout, then assign it to the DOM in the DOM writes phase.
+Keep DOM ops in a well-contained section of `render`, let's say a "DOM write phase", to prevent toxic spills and DOM read-write interleaving. **Everything that touches DOM properties is a DOM write** — not just element content and transforms, but also `body.style.cursor`, `body.style.overflowY`, dummy element heights, etc. Instead of setting `document.body.style.cursor` during layout computation, compute the cursor value as a normal local variable during layout, then assign it to the DOM in the "DOM writes phase".
 
-React did it right with its idempotent JSX. Treat the DOM writes section of the render loop as essentially JSX as much as possible. For example, avoid partial mutations like `node.classList.add('foo')` and `node.classList.remove('foo')`. Assign the entire classes string at once. Use ternary, and when if-else are needed ensure they touch the DOM structure the same way:
+**Treat DOM as a pure-ish projection of state**, like an immediate-mode renderer, a-la JSX. Avoid partial mutations like `node.classList.add('foo')` and `node.classList.remove('foo')`. Assign the entire classes string at once. Use ternary, and when if-else are needed ensure they touch the DOM structure the same way:
 
 ```ts
 // good:
@@ -171,15 +169,15 @@ if (condition) {
 }
 ```
 
-If a property's dynamic (managed by JS), *own it fully in JS*. Don't do a partial thing where some default value's set in CSS, then overridden with JS or classes sometime. Avoid implicit property inheritance from your CSS.
+If a property's dynamic (managed by JS), **own it fully in JS**. Don't do a partial thing where some default value's set in CSS, then overridden with JS or classes sometime. Avoid implicit property inheritance from your CSS.
 In fact, in theory, class toggling should be reserved ideally only for when both classes have the same set of properties, like a struct (**note**: This is experimental advice. If you see strong counterpoints, please say so)
 I.e. it's better to do `node.style.display = condition ? 'block' : 'none'` than have a `.hidden` class that sets `display: none` and toggle it; it's more "functional" and avoids chasing after implicit overrides.
 
-### domCache
+### Specialized `domCache` Data Structure
 
-The `domCache` lives outside state and can be a `Map`, an object, an array, or whatever heterogenous shape suits the rendering needs. Don't hesitate to restructure the shape — we're counting on AI being able to refactor fast to the next best shape given changed requirements.
+As an exception to our general guideline of simplicity, we advise a caching layer for DOM since it's truly slow. Call it `domCache` and keep it outside state. That keeps state immutable, serializable and rewindable without troublesome mutable references mixed in. Depending on the access patterns, it can be a `Map`, an object, an array, or whatever heterogenous shape suits the rendering needs. Don't hesitate to restructure the shape when render requirements change; we're counting on AI being able to refactor fast into the next best shape.
 
-Comment each `domCache` ite with its **cache lifetime**. Change them when the requirements change:
+Comment each `domCache` item with its **cache lifetime**. Change them when the requirements change:
 
 ```ts
 type DomCache = {
@@ -226,6 +224,37 @@ Properties set on a DOM node split into two **disjoint** groups:
 - **Static** (set once at creation): `className`, `backgroundImage`, fixed `textContent`, child structure. These go inside the creation block.
 - **Dynamic** (set every frame): `transform`, `width`, `height`, `opacity`, `zIndex`. These go outside, in the per-frame write path.
 If a property appears in both, it's a bug: either it's truly static (move it to creation) or truly dynamic (remove it from creation).
+
+### DOM Update Strategies
+
+React has to use a universal diffing algorithm for human developer needs, with much expressivity and performance cost. With AI, we should specialize a tiny, access-pattern-aware inlined reconciling strategy per DOM chunk instead.
+
+Use the simplest thing that matches the chunk:
+
+1. Keep a few permanent nodes in `domCache`, then project dynamic props onto them every `render`.
+Works well for fixed chrome and bounded mostly-static chunks.
+
+2. Wipe with e.g. `textContent = ''`, then recreate and reappend the nodes.
+Suitable for tiny bounded stateless chunks.
+
+3. Just-in-time create and attach nodes on first visibility, then remove them on occlusion.
+This is the most versatile strategy. Especially useful for dynamic virtualized lists.
+
+4. Preserve some nodes, rebuild others.
+Useful when a chunk contains stateful nodes like `video`, `canvas`, or a focused input.
+
+5. Pool / recycle detached nodes.
+Reach for this only after simpler visible-node caching loses. On the web it's often premature optimization.
+
+Strategies like `2` traditionally don't work well, because every component actually destroying their nodes is expensive. However, it's possible and desirable, given that you have:
+- A good virtualization/occlusion logic, which reduces the nodes count to an extremely low amount, bounded by visibility rather than document size
+- A shallow DOM tree with few nodes
+
+Both of these can be unlocked by having the layout logic done in JS!
+
+### DOM Nodes Ownership
+
+Every DOM node should have one owner at a time. If another chunk needs to render elsewhere, that should probably happen through an explicit mount point or ownership transfer, not random DOM searching. Avoid querying the DOM; you wouldn't query your own state.
 
 ## Layout
 
