@@ -71,6 +71,22 @@ This works well because:
 - it survives reloads cleanly
 - it does not require a special JS bridge
 
+## Compare Like With Like
+
+If you're checking layout or typography, make sure the browser reference is actually the same kind of thing as the target.
+
+Good:
+
+- compare a normal text `div` against another normal text `div`
+- compare two elements with the same font, padding, border, width, and `white-space`
+
+Bad:
+
+- compare a `textarea` against a `div`
+- compare two boxes that differ by `1px` border or padding and then trust threshold-width results
+
+This matters more than it sounds. Near a line-wrap threshold, a tiny box-model mismatch can create a fake bug. And some elements, like form controls, simply do not follow the same layout behavior as ordinary app text.
+
 ## Why `requestId` Matters
 
 Always include a unique `requestId`.
@@ -156,6 +172,13 @@ Why:
 If Chrome automation is already running, the next Chrome job should wait.
 
 Safari should have its own separate lock.
+
+If you use a lock file, store the owner metadata in it, at least:
+
+- `pid`
+- `startedAt`
+
+Then if a later run finds an existing lock, it can check whether that process is still alive. If not, remove the stale lock and continue. Dead-owner locks are common enough that a lock without self-healing will eventually confuse a healthy system.
 
 ## Accuracy Runs vs Benchmark Runs
 

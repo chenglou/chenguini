@@ -34,6 +34,8 @@ DO NOT prematurily optimize data for performance at the cost of simplicity:
 
 Resist future-proofing with generic helpers if you've only encountered one instance of the logic. The more abstract it gets, the bigger the risk for vagueness. The more indirection there is, the more the reader has to mentally compute the chain of generic logic to understand the callsite. This also closes off cleaner situation-specific algorithms and naming. Keep it local first. Generalize later when there's a second real use.
 
+If behavior genuinely differs by some dimension, say, browser, feature flag, or mode, model that difference explicitly in one place. Don't weave it through a bunch of local conditionals.
+
 DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash.
 
 Think twice before using overly generic data structures like Map and Set. They're fine in many cases, but in many others, it just means you haven't leveraged more properties & strong assumptions from your domain. Array's often a better bet unless your algorithm really needs `O(1)` access. Think more in C-style terms: where is a hash map more appropriate despite its higher friction?
