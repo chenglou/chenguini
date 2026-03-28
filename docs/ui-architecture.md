@@ -273,11 +273,11 @@ Every DOM node should have one owner at a time. If another chunk needs to render
 
 Use `document.documentElement.clientWidth` and `document.documentElement.clientHeight` for viewport dimensions. Do NOT use `window.innerWidth` / `window.innerHeight` — those include scrollbar width and behave differently under Safari pinch zoom (they change during zoom, `clientWidth/Height` don't). `visualViewport.width/height` also changes during pinch zoom. **`<!DOCTYPE html>` is required.** Without it, the browser enters quirks mode and `document.documentElement.clientHeight` returns the full document content height instead of the viewport height.
 
-JS-based layout & positioning isn't as scary as you'd think. It enables JS animations, easy occlusion culling (virtualization in web speak), cooler layouts, etc. For example, for images, a demo here can check the area of each image (instead of just width or height), and adjust it to be more pleasant, e.g. same-ish size relative to other neighbor images.
-
 Do heavily borrow from shader/pytorch/vector primitives, e.g. vec2/3/4 (either as xyzw object or array), the pseudo-randoms above, remap, clamp, fract, step, length, etc.
 
 For JIT DOM creation with variable-height content: **never** use estimated heights for unmeasured rows. Use a tight **lower bound** bigger than 0. This guarantees you never miss rendering a visible row.
+
+JS-based layout & positioning isn't as scary as you'd think. It enables JS animations, easy occlusion culling (virtualization in web speak), cooler layouts, etc. When you do so, be careful about interleaving JS and CSS layout logic; don't have JS decide placement or fit of, say, a label pill's text width and height, while CSS quietly adds margins, padding, or other spacing that changes the result. That either gives you wrong layout, or forces you to crawl dimensions back out of the DOM/CSS later, which violates our data flow principles.
 
 ## Hit Testing
 
