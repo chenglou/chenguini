@@ -71,6 +71,26 @@ This works well because:
 - it survives reloads cleanly
 - it does not require a special JS bridge
 
+### Phase Markers For Hangs
+
+If a page can take non-trivial time, publish a coarse phase marker in addition to the final report.
+
+For example:
+
+- `loading`
+- `measuring`
+- `ready`
+- `error`
+
+This helps distinguish:
+
+- page never loaded
+- page loaded but never started work
+- page hung in a particular phase
+- runner timed out after real progress
+
+For debugging, console logs at semantic boundaries are fine too. But keep the actual regression runner keyed to structured page state, not ad hoc log parsing.
+
 ## Compare Like With Like
 
 If you're checking layout or typography, make sure the browser reference is actually the same kind of thing as the target.
