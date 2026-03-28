@@ -66,6 +66,14 @@ Loop invariants are extremely underutilized in reasoning. Understanding what doe
 
 Not all code reuse is good. Before extracting similar calls into helpers, consider whether the redundant work is actually a manifestation of a control flow that didn't properly compute the shared part before the downstream usage sites.
 
+### Exceptions
+
+Exceptions are non-local control flow. They cause invalid states. Avoid them, apart from 2 cases:
+- _Do_ throw when something is unrecoverable. Use it the same way some languages use `panic`
+- _Do_ throw instead of silently hiding big invariant violations, e.g. when a React context is only supposed to be used in certain paths, or when a DOM node that's guaranteed to be present is missing. Silencing those end up making you propagate e.g. a null value, making your app state look much bigger than it actually is. See the early `null` section
+
+If the error is actually expected and recoverable, don't throw; model with regular data/control flow. When using APIs that throw, try & catch them early.
+
 ### Model The Dependency Order Directly
 
 If two parts of your app depend on the same upstream fact, derive both from that fact. Don't make the program rediscover dependencies it already knows.
