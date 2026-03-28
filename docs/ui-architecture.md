@@ -7,6 +7,7 @@ Prefer a simplified game engine loop:
 ```
 Initialization (done once, all upfront):
   State declaration
+  Initial derived state needed for first paint
   Static DOM chunks
   Events registration (leverage event delegation to make this happen)
 
@@ -83,6 +84,16 @@ scheduleRender()
 
 Only events and render's final step can schedule a next render.
 
+### First Paint Uses The Same Data Flow
+
+If a UI is only correct after some derived state exists, then the data ordering's wrong. This'd cause initial page flashes.
+
+Don't paint placeholders and let the first RAF fix them. Don't hide the UI to paper over the gap either. Use the same upstream facts for first and subsequent renders (See types-and-data-models-and-control-flows.md). Examples:
+- `viewport width -> available text width -> line breaks -> DOM`
+- `scroll position -> visible row range -> DOM`
+
+If correctness depends on some module happening to load before paint, that's already a smell. Serialize or inline the initial derived state, then let the normal render loop take over (FrameScheduling.md confirms that first `rAF` is guaranteed to run before paint).
+
 ### Event Handling
 
 Traditional webapps cram lots of logic inside event callbacks:
@@ -150,6 +161,8 @@ DOM writes should be batched, to avoid read/write interleaving.
 Keep DOM ops in a well-contained section of `render`, let's say a "DOM write phase", to prevent toxic spills and DOM read-write interleaving. **Everything that touches DOM properties is a DOM write** — not just element content and transforms, but also `body.style.cursor`, `body.style.overflowY`, dummy element heights, etc. Instead of setting `document.body.style.cursor` during layout computation, compute the cursor value as a normal local variable during layout, then assign it to the DOM in the "DOM writes phase".
 
 **Treat DOM as a pure-ish projection of state**, like an immediate-mode renderer, a-la JSX. Avoid partial mutations like `node.classList.add('foo')` and `node.classList.remove('foo')`. Assign the entire classes string at once. Use ternary, and when if-else are needed ensure they touch the DOM structure the same way:
+
+That includes startup. Don't use the DOM's wrong initial state as a staging area that JS corrects a frame later.
 
 ```ts
 // good:
