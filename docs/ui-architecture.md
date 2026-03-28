@@ -92,7 +92,7 @@ Don't paint placeholders and let the first RAF fix them. Don't hide the UI to pa
 - `viewport width -> available text width -> line breaks -> DOM`
 - `scroll position -> visible row range -> DOM`
 
-If correctness depends on some module happening to load before paint, that's already a smell. Serialize or inline the initial derived state, then let the normal render loop take over (FrameScheduling.md confirms that first `rAF` is guaranteed to run before paint).
+If correctness depends on some derived fact before paint, run that same derivation before paint. The startup path and the steady-state path should follow the same dependency order.
 
 ### Event Handling
 
