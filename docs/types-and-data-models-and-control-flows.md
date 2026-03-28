@@ -66,6 +66,17 @@ Loop invariants are extremely underutilized in reasoning. Understanding what doe
 
 Not all code reuse is good. Before extracting similar calls into helpers, consider whether the redundant work is actually a manifestation of a control flow that didn't properly compute the shared part before the downstream usage sites.
 
+### Model The Dependency Order Directly
+
+If two parts of your app depend on the same upstream fact, derive both from that fact. Don't make the program rediscover dependencies it already knows.
+
+Reactive systems, event-driven systems, and DOM-driven code often do black-box theater here: one part "emits", "updates", or "writes to the DOM", and another part tries to recover meaning later. This hides order and precedence, then later someone has to reconstruct them from timing, subscription order, or DOM reads.
+
+- don't update an animated card's DOM position, then measure the DOM somewhere else to drive a sibling effect. Compute the card position once, then feed both the DOM styles and the sibling effect from it.
+- don't fire several events and let downstream listeners reconstruct which state won. Put that ordering logic in one place that sees the relevant state, then feed the result downstream.
+
+Your app is more of a white box than these systems pretend. Keep the ordering logic in one place. If something has to be messy, let it be visibly messy in one place instead of spread across listeners, effects, and DOM reads.
+
 ## Caching
 
 Modern computing's much cheaper than memory. Recompute instead of storing the result. Plus, computing being ephemeral, avoids lifetime issues. We make exceptions and cache things like DOM, because they're genuinely expensive.
