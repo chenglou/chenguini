@@ -240,21 +240,25 @@ If a property appears in both, it's a bug: either it's truly static (move it to 
 
 ### DOM Update Strategies
 
-React has to use a universal diffing algorithm for human developer needs, with much expressivity and performance cost. With AI, we should specialize a tiny, access-pattern-aware inlined reconciling strategy per DOM chunk instead.
+React has to use a universal diffing algorithm for human developer needs, with much expressivity and performance cost. With AI, we should specialize a tiny, access-pattern-aware inlined reconciling strategy per DOM chunk instead. This section describes the important set of state-to-DOM projection strategies the AI should pick from
 
-Use the simplest thing that matches the chunk:
+Understand that `domCache` is a caching layer. You should feel free to mutate the nodes in it as you see fit, during the projection in `render`. But avoid partial conditional mutations (described in the earlier style setting examples), e.g. in render, avoid `node.style.display` being set in one branch and not another.
+Obviously, you shouldn't cache & reuse an overly generic node, while setting random subsets of attributes at random times (it wouldn't even work this well, if you abide by our guidelines, since it implies setting the union of all used attributes for that node, which is large).
+Think more in terms of types, or component. A node has a purpose of e.g. LogoNode or LabelNode, with a finite static set of mutated attributes. You wouldn't join them into a SuperNode
+
+In `render`, use the simplest thing that matches the access pattern. But first, note that if your node is stateful (this incudes `<video />` and others, but also any DOM node that can receive selection, which is state!), you should exclude the strategies that wipes or even just detach nodes, as they'll bug selection:
 
 1. Keep a few permanent nodes in `domCache`, then project dynamic props onto them every `render`.
 Works well for fixed chrome and bounded mostly-static chunks.
 
 2. Wipe with e.g. `textContent = ''`, then recreate and reappend the nodes.
-Suitable for tiny bounded stateless chunks.
+Suitable, and the simplest, for tiny bounded stateless chunks.
 
-3. Just-in-time create and attach nodes on first visibility, then remove them on occlusion.
+3. Just-in-time create and attach nodes on first visibility, then detach and optionally remove them from `domCache`'s (supposedly array/map here) on occlusion.
 This is the most versatile strategy. Especially useful for dynamic virtualized lists.
 
-4. Preserve some nodes, rebuild others.
-Useful when a chunk contains stateful nodes like `video`, `canvas`, or a focused input.
+4. Preserve some nodes in render, attach & detach others.
+Useful when a chunk contains stateful nodes like `video`, a focused input, or a selectable element.
 
 5. Pool / recycle detached nodes.
 Reach for this only after simpler visible-node caching loses. On the web it's often premature optimization.
@@ -262,8 +266,9 @@ Reach for this only after simpler visible-node caching loses. On the web it's of
 Strategies like `2` traditionally don't work well, because every component actually destroying their nodes is expensive. However, it's possible and desirable, given that you have:
 - A good virtualization/occlusion logic, which reduces the nodes count to an extremely low amount, bounded by visibility rather than document size
 - A shallow DOM tree with few nodes
+- Non-stateful nodes
 
-Both of these can be unlocked by having the layout logic done in JS!
+We do emphasize, from a layout perspective, that we do occlusion (virtualization). So strategy `3` will be increasingly dominant. However, detaching node from DOM would potentially wipe selection. This is a fine tradeoff, and we'll be specifying how to manage selection in userland instead.
 
 ### DOM Nodes Ownership
 
@@ -278,6 +283,8 @@ Do heavily borrow from shader/pytorch/vector primitives, e.g. vec2/3/4 (either a
 For JIT DOM creation with variable-height content: **never** use estimated heights for unmeasured rows. Use a tight **lower bound** bigger than 0. This guarantees you never miss rendering a visible row.
 
 JS-based layout & positioning isn't as scary as you'd think. It enables JS animations, easy occlusion culling (virtualization in web speak), cooler layouts, etc. When you do so, be careful about interleaving JS and CSS layout logic; don't have JS decide placement or fit of, say, a label pill's text width and height, while CSS quietly adds margins, padding, or other spacing that changes the result. That either gives you wrong layout, or forces you to crawl dimensions back out of the DOM/CSS later, which violates our data flow principles.
+
+Since we encourage JS-based layout, text measurement is a bottleneck that is solved through `@chenglou/pretext` npm package. Use it to bypass DOM measurements for text
 
 ## Hit Testing
 
