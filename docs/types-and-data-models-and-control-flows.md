@@ -36,7 +36,8 @@ Resist future-proofing with generic helpers if you've only encountered one insta
 
 If behavior genuinely differs by some dimension, say, browser, feature flag, or mode, model that difference explicitly in one place. Don't weave it through a bunch of local conditionals.
 
-DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash.
+DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash early.
+Do consider defensive code in the context of provably shaky boundaries, e.g. user input, network responses. But do it only after user asks so. AI tends to overdo defensive coding.
 
 Think twice before using overly generic data structures like Map and Set. They're fine in many cases, but in many others, it just means you haven't leveraged more properties & strong assumptions from your domain. Array's often a better bet unless your algorithm really needs `O(1)` access. Think more in C-style terms: where is a hash map more appropriate despite its higher friction?
 Data structures tier:
@@ -87,7 +88,10 @@ Your app is more of a white box than these systems pretend. Keep the ordering lo
 
 ## Caching
 
-Modern computing's much cheaper than memory. Recompute instead of storing the result. Plus, computing being ephemeral, avoids lifetime issues. We make exceptions and cache things like DOM, because they're genuinely expensive.
+Modern computing's much cheaper than memory. Recompute instead of storing the result. Computing, being ephemeral, avoids lifetime issues. If you have to cache, consider it more as a temporary acceleration structure, like in dynamic programming. Here are some notable exceptions:
+- DOM, because they're genuinely expensive. We have a dedicated DOM caching section in [ui-architecture.md](../ui-architecture.md).
+- truly expensive computations after real measurements
+- computations with stable input identity, real reuse, bounded cache size
 
 ## Project Setup
 

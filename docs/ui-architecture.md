@@ -182,9 +182,9 @@ if (condition) {
 }
 ```
 
-If a property's dynamic (managed by JS), **own it fully in JS**. Don't do a partial thing where some default value's set in CSS, then overridden with JS or classes sometime. Avoid implicit property inheritance from your CSS.
-In fact, in theory, class toggling should be reserved ideally only for when both classes have the same set of properties, like a struct (**note**: This is experimental advice. If you see strong counterpoints, please say so)
-I.e. it's better to do `node.style.display = condition ? 'block' : 'none'` than have a `.hidden` class that sets `display: none` and toggle it; it's more "functional" and avoids chasing after implicit overrides.
+Essentially, ensure that you're setting the _full_ set of attributes each `render` frame, like in functional programming. Do not partially set a subset in one branch and another subset in another. This wrecks e.g. pooled nodes reuse
+If an attribute's dynamic (managed by JS), **own it fully in JS**. Don't do it partially where some default value's set in CSS, then overridden with JS or classes sometime. Avoid cascading attribute overrides from your CSS. E.g. do `node.style.display = isOpen ? 'block' : 'none'`; don't do `if (isOpen) node.classList.remove('hidden'); else node.classList.add('hidden')` when `.hidden` only sets `display: none` and the `isOpen` visible state depends on e.g. whether the element was supposed to be `block`, `flex`, `inline-flex`, or whatever a media query/base class would have resolved it to.
+In fact, in theory, class toggling should be reserved ideally only for when both classes have the same set of attributes, like a struct (**note**: This is experimental advice. If you see strong counterpoints, please say so)
 
 ### Specialized `domCache` Data Structure
 
