@@ -75,18 +75,17 @@ export function hnCommentDocToPlainText(doc: HNCommentDoc, blockSeparator = ''):
 
 export function renderHNCommentDoc(doc: HNCommentDoc): DocumentFragment {
   const fragment = document.createDocumentFragment()
-  let paragraphCount = 0
 
-  for (const block of doc.blocks) {
+  for (let blockIndex = 0; blockIndex < doc.blocks.length; blockIndex++) {
+    const block = doc.blocks[blockIndex]!
     switch (block.kind) {
       case 'paragraph':
-        if (paragraphCount === 0) appendRuns(fragment, block.runs)
+        if (blockIndex === 0) appendRuns(fragment, block.runs)
         else {
           const paragraph = document.createElement('p')
           appendRuns(paragraph, block.runs)
           fragment.appendChild(paragraph)
         }
-        paragraphCount++
         break
 
       case 'codeBlock': {

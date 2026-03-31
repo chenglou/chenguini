@@ -66,6 +66,7 @@
     .comment {
       position: absolute;
       font-size: 12px;
+      line-height: 14px;
       overflow: hidden;
     }
     .comment a {
@@ -77,6 +78,18 @@
     .comment p {
       margin-top: 8px;
       margin-bottom: 0;
+    }
+    .comment pre {
+      margin-top: 8px;
+      margin-bottom: 0;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      font-family: monospace;
+      font-size: 12px;
+      line-height: 14px;
+    }
+    .comment pre:first-child {
+      margin-top: 0;
     }
   </style>
   <script type="module" src="./index.ts"></script>

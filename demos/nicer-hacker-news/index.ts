@@ -1,4 +1,5 @@
 import {dataRaw} from './data'
+import {measureHNCommentDoc, prepareHNCommentDoc, type PreparedHNCommentDoc} from './hn-comment-layout'
 import {hnCommentDocToPlainText, parseHNCommentHTML, renderHNCommentDoc, type HNCommentDoc} from './hn-comment-parser'
 
 const thread = dataRaw[0]!
@@ -117,11 +118,12 @@ type RowData = {
   userName: string
   age: string
   commentDoc: HNCommentDoc
-  commentHTML: string
+  commentLayout: PreparedHNCommentDoc
   commentText: string
   heightAnimation: 'grow' | 'shrink'
   height: number
   commentHeightNatural: number
+  commentWidthMeasured: number
 }
 
 // cache lifetime: same as data
@@ -136,11 +138,12 @@ const data: RowData[] = []; {
       userName: row.user,
       age: row.age,
       commentDoc,
-      commentHTML: row.comment,
+      commentLayout: prepareHNCommentDoc(commentDoc),
       commentText: hnCommentDocToPlainText(commentDoc),
       heightAnimation: 'grow',
       height: rowHeightNaturalF(commentHeightNaturalEstimate),
       commentHeightNatural: commentHeightNaturalEstimate,
+      commentWidthMeasured: -1,
     })
   }
 }
@@ -249,11 +252,25 @@ function scheduleRender() {
     // Aka we bounce not the content, but the entire scroller
     const scrollTopCap = Math.max(0, scrollTop)
 
+    const windowHeight = document.documentElement.clientHeight
+    const windowWidth = document.documentElement.clientWidth
+    const containerWidth = containerWidthF(windowWidth)
+    const containerLeft = (windowWidth - containerWidth) / 2 // center on the page
+
     let rowsHeightNatural = 0
-    for (let i = 0; i < data.length; i++) rowsHeightNatural += rowHeightNaturalF(data[i]!.commentHeightNatural)
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i]!
+      const commentWidth = commentWidthF(containerWidth, row.indent * indentWidth)
+      if (commentWidth !== row.commentWidthMeasured) {
+        const rowHeightNaturalPrevious = rowHeightNaturalF(row.commentHeightNatural)
+        row.commentWidthMeasured = commentWidth
+        row.commentHeightNatural = measureHNCommentDoc(row.commentLayout, commentWidth)
+        if (Math.abs(row.height - rowHeightNaturalPrevious) < 0.001) row.height = rowHeightNaturalF(row.commentHeightNatural)
+      }
+      rowsHeightNatural += rowHeightNaturalF(row.commentHeightNatural)
+    }
 
     // submission, comments, vertical sizing logic
-    const windowHeight = document.documentElement.clientHeight
     let submissionLine1Top: number
     let submissionHeight: number
     let scrollerHeightNatural: number
@@ -296,9 +313,6 @@ function scheduleRender() {
     // When rows animate, the cursor's target might change over time. E.g. a pressed row A shrinks
     // to 0 -> cursor now targets row B -> row B makes row A expand back; infinite cycle.
     // **Views should be decoupled from their hitboxes!** Here, the hitboxes ignore animating states
-    const windowWidth = document.documentElement.clientWidth
-    const containerWidth = containerWidthF(windowWidth)
-    const containerLeft = (windowWidth - containerWidth) / 2 // center on the page
     let pointer: Pointer = {on: null}
     const pageXLocal = inputs.pointerXY.pageX/*c*/ - containerLeft
     if (0 <= pageXLocal && pageXLocal < containerWidth) {
@@ -413,7 +427,6 @@ function scheduleRender() {
     // --- Pass 1: walk visible range, JIT-create nodes, append to DOM ---
     let rowTop = rowsScrollerTopGap + scrollerPeekUp/*c*/ - scrollTopCap
     let indexFirstVisible: number | undefined, indexLastVisible: number | undefined, indexFirstVisibleTop: number | undefined
-    const newlyCreated: number[] = [] // indices of rows created this frame, needing clientHeight measurement
     for (let i = 0; i < data.length; i++) {
       const row = data[i]!
       const rowBottom = rowTop + row.height
@@ -444,12 +457,11 @@ function scheduleRender() {
           comment.style.left = `${commentLeftF(indentsWidth)}px`
           // Safari: select from right of comment toward left sets caretRangeFromPoint range.startOffset to 0, which is weird
           comment.style.paddingRight = `${commentRightGap}px`
-          comment.style.width = `${commentWidthF(containerWidth, indentsWidth)}px`
+          comment.style.width = `${row.commentWidthMeasured}px`
           comment.appendChild(renderHNCommentDoc(row.commentDoc))
 
           cached = {user, comment}
           domCache.set(i, cached)
-          newlyCreated.push(i)
         }
 
         threadView.commentsDisplay.appendChild(cached.user) // turns out append(user, comment) is very slow... don't do that in hot paths
@@ -458,17 +470,7 @@ function scheduleRender() {
       rowTop += row.height
     }
 
-    // --- Pass 2: batch-read clientHeight for newly created elements ---
-    // First clientHeight read triggers one layout reflow; subsequent reads hit clean cache
-    for (let k = 0; k < newlyCreated.length; k++) {
-      const idx = newlyCreated[k]!
-      const row = data[idx]!
-      row.commentHeightNatural = domCache.get(idx)!.comment.clientHeight
-      row.height = rowHeightNaturalF(row.commentHeightNatural) // snap to real height (no animation for first measurement)
-    }
-
-    // --- Pass 3: set position/size styles, draw gutters ---
-    // Re-walk all rows with now-accurate heights for correct positions
+    // --- Pass 2: set position/size styles, draw gutters ---
     rowTop = rowsScrollerTopGap + scrollerPeekUp/*c*/ - scrollTopCap
     for (let i = 0; i < data.length; i++) {
       const row = data[i]!
@@ -478,9 +480,6 @@ function scheduleRender() {
 
       const cached = domCache.get(i)
       if (cached != null && cached.user.parentNode != null) { // visible and in DOM
-        // update indexFirstVisible/indexFirstVisibleTop with corrected heights (may have changed in pass 2)
-        if (indexFirstVisible === i) indexFirstVisibleTop = rowTop
-
         const user = cached.user
         user.style.top = `${userTop}px`
         user.style.height = `${userHeight}px`
@@ -497,6 +496,7 @@ function scheduleRender() {
         const commentFadeSize = // fade grows from 1x to 3x of bottom gap size (hide enough comment text to be perceptible)
           commentBottomGapNatural + Math.min(row.commentHeightNatural - commentHeight, commentBottomGapNatural * 2)
         comment.style.top = `${rowTop + userHeightNatural + commentUserGapNatural}px`
+        comment.style.width = `${row.commentWidthMeasured}px`
         comment.style.height = `${commentHeight}px`
         comment.style.maskImage = comment.style.webkitMaskImage =
           `linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) ${commentFadeSize}px)`
