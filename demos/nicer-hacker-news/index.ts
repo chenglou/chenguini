@@ -1,4 +1,5 @@
 import {dataRaw} from './data'
+import {hnCommentDocToPlainText, parseHNCommentHTML, renderHNCommentDoc, type HNCommentDoc} from './hn-comment-parser'
 
 const thread = dataRaw[0]!
 const regexChars = "[\\^$.*+?()[]{}|]"
@@ -115,6 +116,7 @@ type RowData = {
   indent: number
   userName: string
   age: string
+  commentDoc: HNCommentDoc
   commentHTML: string
   commentText: string
   heightAnimation: 'grow' | 'shrink'
@@ -126,16 +128,16 @@ type RowData = {
 const domCache = new Map<number, {user: HTMLDivElement; comment: HTMLDivElement}>()
 
 const data: RowData[] = []; {
-  const tempDiv = document.createElement('div')
   for (let i = 0; i < thread.comments.length; i++) {
     const row = thread.comments[i]!
-    tempDiv.innerHTML = row.comment
+    const commentDoc = parseHNCommentHTML(row.comment)
     data.push({
       indent: row.indent,
       userName: row.user,
       age: row.age,
+      commentDoc,
       commentHTML: row.comment,
-      commentText: tempDiv.textContent ?? '', // oxlint-disable-line no-unnecessary-condition -- textContent is typed as string|null in DOM spec
+      commentText: hnCommentDocToPlainText(commentDoc),
       heightAnimation: 'grow',
       height: rowHeightNaturalF(commentHeightNaturalEstimate),
       commentHeightNatural: commentHeightNaturalEstimate,
@@ -443,7 +445,7 @@ function scheduleRender() {
           // Safari: select from right of comment toward left sets caretRangeFromPoint range.startOffset to 0, which is weird
           comment.style.paddingRight = `${commentRightGap}px`
           comment.style.width = `${commentWidthF(containerWidth, indentsWidth)}px`
-          comment.innerHTML = row.commentHTML
+          comment.appendChild(renderHNCommentDoc(row.commentDoc))
 
           cached = {user, comment}
           domCache.set(i, cached)

@@ -1783,8 +1783,8 @@ export let dataRaw: HNThread[] = [
   },
 ]
 
-dataRaw[0]!.comments.splice(30, 9999)
-dataRaw = dataRaw.concat(dataRaw)
-dataRaw = dataRaw.concat(dataRaw)
+// dataRaw[0]!.comments.splice(30, 9999)
+// dataRaw = dataRaw.concat(dataRaw)
+// dataRaw = dataRaw.concat(dataRaw)
 // for (let i = 0; i < 4; i++) dataRaw[0]!.comments = dataRaw[0]!.comments.concat(dataRaw[0]!.comments)
 // dataRaw[0]!.comments.forEach((c, i) => c.user = `${i} ${c.user}`)
