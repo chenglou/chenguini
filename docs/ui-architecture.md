@@ -88,9 +88,7 @@ Only events and render's final step can schedule a next render.
 
 If a UI is only correct after some derived state exists, then the data ordering's wrong. This'd cause initial page flashes.
 
-Don't paint placeholders and let the first RAF fix them. Don't hide the UI to paper over the gap either. Use the same upstream facts for first and subsequent renders (See types-and-data-models-and-control-flows.md). Examples:
-- `viewport width -> available text width -> line breaks -> DOM`
-- `scroll position -> visible row range -> DOM`
+Don't paint placeholders and let the first RAF fix them. Don't hide the UI to paper over the gap either. Use the same upstream facts for first and subsequent renders (See types-and-data-models-and-control-flows.md) to collapse the first and subsequent renders with the same logic to avoid divergence. However, if the code operates on DOM that needs static snippets for SEO purposes, it's ok to have some bit of divergence; view those snippets as a data format, then reuse principled data manipulation techniques to control complexity
 
 If correctness depends on some derived fact before paint, run that same derivation before paint. The startup path and the steady-state path should follow the same dependency order.
 
