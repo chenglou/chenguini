@@ -1,4 +1,4 @@
-This repo documents all the code patterns we want to codify for a new era of UI apps written with AI. Demos at `demos/` and docs at `docs/`. Read the latter in full before working.
+This repo documents all the code patterns we want to codify for a new era of UI apps written with AI. Demos at `demos/` and docs at `docs/`. Read the docs in full, especially `docs/verification.md`, before working.
 
 `bun check` for linting, `bun start` for running the demos. Their url is the respective folder, e.g. `http://localhost:3000/photo-gallery/`
 
