@@ -114,22 +114,40 @@ Good things to assert:
 - whether a collapsed boundary space was paid or dropped
 - whether a known fragile width keeps or loses a particular word on a line
 
-For text layout, browser-free verification is often enough to catch the interesting regressions:
+For public demos, prefer browser-backed semantic reports.
 
-- line wrapping drift
-- line count drift
-- mixed-style fragment topology drift
-- disagreements between a cheap measurer and a richer layout path
+Good:
 
-This is especially good when the text engine can measure deterministically in-process.
+- the page waits for its real ready moment
+- the page computes a compact JSON report
+- the runner only sets inputs, waits, and reads that report back
 
-But know the blind spots:
+Examples:
+
+- a rich note reports line fragments and a fragile width like `556px`
+- a masonry page reports visible card indices and the first positioned cards after a deep scroll
+- an editorial page reports headline lines, sampled body lines, and obstacle positions
+
+Pure in-process checks are still useful, but keep them in their lane:
+
+- white-box policy canaries
+- normalization and segmentation invariants
+- cheap algebraic laws that don't need browser truth
+
+Don't let a fake measurement backend become the authority for demo layout. It can be a cheap local harness. It is not the oracle.
+
+Know the blind spots:
 
 - browser-free tests won't catch CSS drift by themselves
 - if TS says a pill has `22px` of chrome and CSS now renders `26px`, pure layout tests may still pass
 - a fake measurement backend can miss threshold-sensitive wraps
+- even a real Node canvas won't save you from a wrong line-walker policy
 
-So either keep layout-relevant constants in one place, or add a targeted browser check when box-model coupling matters.
+So:
+
+- keep layout-relevant constants in one place when you can
+- use tiny white-box tests for policy seams
+- use browser-backed semantic reports for the demos people will actually open
 
 ## Semantic Snapshots
 
@@ -153,6 +171,17 @@ Also add at least one sensitivity check. Intentionally perturb one meaningful fa
 
 When a real bug shows up at a fragile threshold, keep that width. Don't just keep the broad "desktop", "tablet", and "mobile" snapshots.
 
+Also strip per-run noise before snapshotting.
+
+Good:
+
+- keep `requestId` for transport correctness
+- drop `requestId` from the checked-in snapshot
+
+Bad:
+
+- treating a transport nonce as part of the demo behavior
+
 ## White-Box Policy Canaries
 
 Black-box demo snapshots are not enough on their own.
@@ -167,6 +196,13 @@ Good examples:
 - keep an atomic chip whole even when it overflows
 
 This is still outcome-focused testing. Don't assert that some private branch ran. Assert the policy outcome on a minimal repro.
+
+Use this especially when the bug smells like policy rather than measurement.
+
+Examples:
+
+- the next word should stay on the current line because it already has a good break inside it
+- a pending collapsed space should disappear at line start rather than stealing width from the next word
 
 ## Local Seams, Not Mandatory Architecture
 
@@ -229,6 +265,23 @@ Use the browser when the browser is the thing under test:
 - browser-specific typography quirks
 
 When doing that, keep the runner dumb and the page smart. See `ai-automating-browsers.md`.
+
+For demos, this should usually mean semantic reports, not screenshots.
+
+Examples:
+
+- line fragments
+- visible row ranges
+- positioned card summaries
+- sampled headline/body lines
+
+If the page is stochastic or time-based, the page should also own the freeze strategy.
+
+Examples:
+
+- a fixed seed
+- a fixed frame count
+- a one-frame commit before animation begins
 
 ## What "Done" Means
 
