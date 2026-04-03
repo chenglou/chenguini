@@ -1,0 +1,166 @@
+:root {
+  --page-bg-top: #f7efde;
+  --page-bg-bottom: #e6d8bf;
+  --card-bg: rgba(255, 249, 240, 0.82);
+  --card-border: rgba(92, 68, 39, 0.16);
+  --card-shadow: 0 28px 40px rgba(109, 85, 58, 0.14);
+  --caption-color: #362715;
+  --muted-color: rgba(54, 39, 21, 0.66);
+  --overlay-bg: rgba(10, 12, 16, 0.96);
+  --overlay-card-bg: rgba(246, 239, 226, 0.1);
+  --overlay-border: rgba(255, 255, 255, 0.08);
+  --overlay-caption: rgba(247, 243, 235, 0.92);
+  --outline: rgba(255, 255, 255, 0.26);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 36%),
+    linear-gradient(180deg, var(--page-bg-top) 0%, var(--page-bg-bottom) 100%);
+  color: var(--caption-color);
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+}
+
+#gallery-root {
+  position: relative;
+  min-height: 100vh;
+}
+
+#grid-layer {
+  position: relative;
+}
+
+#line-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(244, 223, 182, 0.16), transparent 32%),
+    var(--overlay-bg);
+  backdrop-filter: blur(14px);
+}
+
+.grid-card {
+  position: absolute;
+  overflow: visible;
+}
+
+.grid-card-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: 26px;
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+.grid-card-image-hit {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  border-radius: 26px;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 255, 255, 0.64);
+  cursor: zoom-in;
+}
+
+.grid-card-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.grid-card-caption {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  overflow: hidden;
+  color: var(--caption-color);
+  font-size: 17px;
+  line-height: 22px;
+  letter-spacing: 0.01em;
+  cursor: text;
+  user-select: text;
+}
+
+.grid-card-caption::selection {
+  background: rgba(104, 72, 24, 0.24);
+}
+
+.line-scrim {
+  position: absolute;
+  inset: 0;
+}
+
+.line-strip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100px;
+}
+
+.line-strip-left {
+  left: 0;
+  cursor: w-resize;
+}
+
+.line-strip-right {
+  right: 0;
+  cursor: e-resize;
+}
+
+.line-strip-middle {
+  left: 100px;
+  right: 100px;
+  cursor: zoom-out;
+}
+
+.line-item {
+  position: absolute;
+  overflow: visible;
+}
+
+.line-item-frame {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  border-radius: 30px;
+  border: 1px solid var(--overlay-border);
+  background: var(--overlay-card-bg);
+  box-shadow: 0 32px 64px rgba(0, 0, 0, 0.38);
+}
+
+.line-item-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.line-item-caption {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  overflow: hidden;
+  color: var(--overlay-caption);
+  font-size: 22px;
+  line-height: 30px;
+  letter-spacing: 0.01em;
+}

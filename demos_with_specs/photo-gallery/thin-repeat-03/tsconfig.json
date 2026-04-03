@@ -1,0 +1,10 @@
+{
+  "extends": "/Users/chenglou/github/vibescript/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "./gallery-model.ts",
+    "./index.ts"
+  ]
+}

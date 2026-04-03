@@ -1,0 +1,199 @@
+:root {
+  color-scheme: dark;
+  --page-bg: #07111f;
+  --card-bg: #0d192b;
+  --card-edge: rgba(255, 255, 255, 0.06);
+  --card-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+  --text: rgba(244, 249, 255, 0.94);
+  --muted: rgba(224, 232, 245, 0.72);
+  --accent: #8ad7ff;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: radial-gradient(circle at top, #10213a 0%, var(--page-bg) 42%, #04070d 100%);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+body.line-mode {
+  overflow: hidden;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.chrome-link {
+  position: fixed;
+  right: 20px;
+  top: 20px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(9, 17, 31, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: white;
+  text-decoration: none;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(10px);
+}
+
+.grid-stage {
+  position: relative;
+  width: 100%;
+}
+
+.card {
+  position: absolute;
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--card-edge);
+  transform-origin: center center;
+}
+
+.card-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.image-shell {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.image-shell img,
+.image-shell .bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.image-shell .bg {
+  background-size: cover;
+  background-position: center;
+  filter: saturate(0.95) contrast(1.02);
+}
+
+.hero-img {
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+
+.card.focused .hero-img,
+.card.high-res .hero-img {
+  opacity: 1;
+}
+
+.caption {
+  padding: 12px 14px 8px;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.caption-grid {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 52px;
+  max-height: 52px;
+}
+
+.caption-line {
+  max-height: 72px;
+  overflow-y: auto;
+}
+
+.grid-hover {
+  cursor: zoom-in;
+}
+
+.grid-hover .card.hovered {
+  transform: translate3d(var(--hover-dx, 0px), var(--hover-dy, 0px), 0) scale(1.02);
+}
+
+.line-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  background: rgba(4, 8, 16, 0.72);
+  backdrop-filter: blur(14px);
+  cursor: zoom-out;
+}
+
+.line-stage {
+  position: absolute;
+  left: 0;
+  top: 40px;
+  height: calc(100% - 40px);
+  white-space: nowrap;
+}
+
+.line-card {
+  position: absolute;
+  top: 0;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--card-shadow);
+}
+
+.line-card.dimmed {
+  opacity: 0.42;
+  filter: saturate(0.8) brightness(0.88);
+}
+
+.line-card.focused {
+  opacity: 1;
+}
+
+.line-card .caption {
+  padding-top: 14px;
+  padding-bottom: 8px;
+}
+
+.line-card .caption-line {
+  max-height: 72px;
+}
+
+.line-strip {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 25;
+  cursor: zoom-in;
+}
+
+.line-strip.left {
+  left: 0;
+  width: 100px;
+}
+
+.line-strip.right {
+  right: 0;
+  width: 100px;
+}
+
+.report-node {
+  display: none;
+}

@@ -106,3 +106,44 @@ If you want one default template, use this:
 7. Optional pure-seam hints
 
 `NEW PATTERN DETECTED`: for fresh subagents, a scenario-first spec with exact numbers and one supporting diagram works better than either a picture-only spec or a fully code-shaped spec.
+
+For `gpt-5.4 xhigh`, the default packet now lives in `minimum-viable-demo-spec.md`.
+
+## Add Overlays By Seam Type
+
+After the baseline spec is in place, add one small overlay based on where the fragile truth lives.
+
+Good overlays:
+
+- `oracle contract` for browser-boundary truth like hash routing, text selection, scroll restore, and mounted-count semantics
+- `seed corpus` for deterministic helpers like midpoint reorder and release velocity
+- `contrastive boundary pairs` when tiny target changes should cause different outcomes, such as image click vs caption click
+- `temporal trace tape` when the truth happens in the middle of an interaction, such as reorder before release or top-until-settle
+- `two-pass` when helper hints are useful but likely to bias reconstruction too early
+
+Good rule of thumb:
+
+- start with the baseline
+- add one overlay for the dominant seam
+- if helper hints are risky, delay them to a second pass instead of deleting them
+
+## Stronger Models Can Use Thinner Specs
+
+With a stronger worker model, try thinning the packet before you assume you need more overlays.
+
+The first things to remove are:
+
+- helper hints
+- seed examples
+- extra oracle scaffolding in the per-demo packet
+
+The last things to remove are:
+
+- exact numeric constants
+- the fragile user-visible seams
+- the concrete browser-backed scenarios that prove those seams
+
+Counterintuitive but important:
+
+- more packet detail is not always better
+- a stronger model may do better with a smaller, cleaner packet than with a richer one that nudges it toward the wrong reconstruction

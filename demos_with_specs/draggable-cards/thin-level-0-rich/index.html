@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thin Level 0 Rich Draggable Cards</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.7), transparent 35%),
+          linear-gradient(180deg, #f6efe7 0%, #f1dfd0 45%, #dfc7b5 100%);
+        color: #3f261c;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 24px 0 80px;
+      }
+
+      .intro {
+        width: min(620px, calc(100vw - 32px));
+        margin: 0 auto 10px;
+        text-align: center;
+      }
+
+      .eyebrow {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        opacity: 0.72;
+      }
+
+      .intro h1 {
+        margin: 10px 0 8px;
+        font-size: clamp(28px, 5vw, 52px);
+        line-height: 0.94;
+      }
+
+      .intro p {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.5;
+        opacity: 0.78;
+      }
+
+      .scene {
+        position: relative;
+        min-height: 700px;
+        width: 100%;
+      }
+
+      .card {
+        position: absolute;
+        left: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 6px;
+        border: 0;
+        border-radius: 26px;
+        padding: 18px 20px 20px;
+        box-shadow:
+          0 10px 24px rgba(79, 40, 18, 0.12),
+          inset 0 1px 0 rgba(255, 255, 255, 0.55);
+        color: #2c180f;
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+        text-align: left;
+        transform-origin: center center;
+        will-change: transform, opacity;
+      }
+
+      .card:active {
+        cursor: grabbing;
+      }
+
+      .card-index {
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+
+      .card-title {
+        font-size: 28px;
+        line-height: 0.95;
+        font-weight: 700;
+      }
+
+      .card-size {
+        font-size: 13px;
+        opacity: 0.72;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="intro">
+        <p class="eyebrow">Thin Level 0 Rich</p>
+        <h1>Drag a stack until the order gives way.</h1>
+        <p>The card under your pointer reorders mid-drag, keeps its momentum on release, and stays on top until it settles.</p>
+      </header>
+      <section data-demo-root></section>
+    </main>
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>

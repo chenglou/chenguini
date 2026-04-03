@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Thin Draggable Cards</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.7), transparent 42%),
+          linear-gradient(180deg, #fff6e7 0%, #f4ede0 58%, #e8dcc6 100%);
+        color: #23180d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      #app {
+        min-height: 100vh;
+      }
+
+      .scene {
+        position: relative;
+        width: 100%;
+        padding: 24px 0 48px;
+      }
+
+      .scene__subtitle {
+        margin: 0;
+        padding: 0 24px;
+        font-size: 14px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(35, 24, 13, 0.58);
+      }
+
+      .card-stack {
+        position: relative;
+        width: 100%;
+      }
+
+      .card {
+        position: absolute;
+        left: 0;
+        top: 0;
+        border-radius: 28px;
+        padding: 22px 22px 20px;
+        color: #23180d;
+        transform-origin: center center;
+        transition: box-shadow 140ms ease;
+      }
+
+      .card__title {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1;
+      }
+
+      .card__caption {
+        position: absolute;
+        left: 22px;
+        bottom: 18px;
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgba(35, 24, 13, 0.64);
+      }
+
+      .card__accent {
+        position: absolute;
+        top: 18px;
+        right: 20px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: rgba(35, 24, 13, 0.48);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>

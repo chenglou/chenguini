@@ -341,3 +341,35 @@ Rules for the experiment:
   - photo liked `scenario-first` best
   - `spatial-ascii` worked as a supplement, but was not the strongest whole-spec style
   - the best overall shape looks hybrid: scenario-first spine, exact numbers, one picture where needed, and only light hints about pure helper seams
+
+## Spec Overlay Experiments
+
+- A follow-up overlay comparison now lives in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/spec-overlay-experiments/RESULTS.md`
+- Short version:
+  - all 6 overlay conditions passed from the main thread
+  - photo liked `oracle-contract` best
+  - draggable liked `two-pass` and `seed-corpus` best
+  - `two-pass` looks like the most reusable cross-cutting overlay because it let helper hints help without pulling the gallery toward the wrong harness too early
+
+## Spec Thinning Experiments
+
+- A model-upgrade thinning comparison now lives in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/spec-thinning-experiments/RESULTS.md`
+- This round used `gpt-5.4` with `xhigh` reasoning instead of `gpt-5.4-mini`.
+- Short version:
+  - draggable passed at rich, medium, and thin levels
+  - photo passed at medium and thin levels
+  - photo rich unexpectedly failed the dismiss-to-row seam twice from the main thread
+- The strongest new signal is that the stronger model can spec much less than the mini model could, as long as the exact numbers and fragile truths stay explicit.
+
+## Thin Spec Repeatability
+
+- We then repeated the thinnest successful packet with fresh `gpt-5.4 xhigh` agents.
+- Result:
+  - draggable thin packet: `4/4` main-thread passes including the original
+  - photo thin packet: `4/5` main-thread passes including the original
+- The only repeatability miss on the photo side was again the dismiss-to-row seam.
+- Current read:
+  - thin is now the real default for `gpt-5.4 xhigh`
+  - photo still has a slightly smaller stability margin than draggable, but not enough to justify going back to a richer default packet

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Draggable Cards Thin Repeat 03</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f4ece3;
+        --ink: #2a1b1f;
+        --muted: rgba(42, 27, 31, 0.68);
+        --card-width: 320px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.85), transparent 40%),
+          linear-gradient(180deg, #efe4d7 0%, var(--paper) 48%, #e8ddd1 100%);
+        color: var(--ink);
+        touch-action: none;
+      }
+
+      #app {
+        min-height: 100vh;
+      }
+
+      .shell {
+        min-height: 100vh;
+        padding: 28px 0 56px;
+      }
+
+      .intro {
+        margin: 0 auto 26px;
+        width: min(680px, calc(100vw - 48px));
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 0.8rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.75rem);
+        line-height: 0.96;
+        font-weight: 600;
+      }
+
+      .intro p {
+        margin: 12px 0 0;
+        max-width: 38rem;
+        font-size: 1.05rem;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .stack {
+        position: relative;
+        width: 100%;
+      }
+
+      .card {
+        position: absolute;
+        left: 0;
+        width: var(--card-width);
+        padding: 20px 24px 24px;
+        border: 1px solid rgba(87, 48, 28, 0.12);
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 42%),
+          hsl(24 70% var(--card-lightness));
+        box-shadow:
+          0 28px 44px rgba(82, 47, 35, 0.16),
+          inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        user-select: none;
+        cursor: grab;
+        will-change: transform;
+      }
+
+      .card[data-active="true"] {
+        cursor: grabbing;
+      }
+
+      .card-label {
+        margin: 0 0 12px;
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(42, 27, 31, 0.6);
+      }
+
+      .card h2 {
+        margin: 0;
+        max-width: 12ch;
+        font-size: 1.6rem;
+        line-height: 1;
+      }
+
+      .card p {
+        margin: 14px 0 0;
+        max-width: 18ch;
+        font-size: 0.98rem;
+        line-height: 1.4;
+        color: rgba(42, 27, 31, 0.78);
+      }
+
+      .card-note {
+        position: absolute;
+        right: 18px;
+        bottom: 18px;
+        font-size: 0.82rem;
+        color: rgba(42, 27, 31, 0.56);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>
