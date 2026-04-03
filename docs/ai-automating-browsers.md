@@ -1,171 +1,168 @@
-## AI Automating Browsers
+# AI Automating Browsers
 
-When AI automates a browser, the browser page itself should be the source of truth as much as possible. The automation runner should be dumb:
+When AI automates a browser, the page should own the answer.
 
-- open the page
-- pass inputs
-- wait for a machine-readable result
+The runner should mostly:
+
+- start a deterministic local server
+- open one browser run for one scenario
+- navigate to `?scenario=...&requestId=...`
+- wait for one machine-readable report
 - read it back
 - tear everything down
 
-Do not make the runner interpret the page more than necessary. The page already has the DOM, fonts, layout engine, and rendering context. Let the page compute the answer.
+If the runner starts feeling like a second layout engine, it is already too complicated.
 
-This is especially important for:
+## Default Shape
 
-- visual correctness checks
-- layout verification
-- browser-specific typography behavior
-- benchmark snapshots
+This is the boring shape we want by default:
 
-### Main Principle
+1. Start a deterministic local server.
+2. Pick a loopback host that actually responds.
+3. Open one browser target for one scenario.
+4. Pass `scenario` and a unique `requestId` in the URL.
+5. Let the page run the scenario.
+6. Let the page publish a compact report with phase markers.
+7. Wait for the matching `requestId` to reach `phase: 'ready'`.
+8. Close the browser target and server.
 
-Push intelligence into the page, not the runner.
+Keep the scenario in the page. Keep transport in the runner.
 
-Good:
+## What The Page Owns
 
-- page computes a JSON report
-- page encodes it in a stable place
-- runner waits for the report
+The page should:
 
-Bad:
+- read `scenario`
+- read `requestId`
+- run the scripted flow
+- compute the semantic result
+- publish one compact report
 
-- runner scrapes random DOM text
-- runner infers layout state from visible pixels
-- runner executes ad hoc JS in the active tab to inspect fragile local variables
-
-## The Pattern
-
-The most reliable shape is:
-
-1. Start or find a deterministic local server.
-2. Open a dedicated browser tab or window.
-3. Navigate to a page URL containing a unique `requestId` and any other parameters.
-4. Let the page compute the answer.
-5. Have the page publish the answer in a machine-readable way.
-6. Poll for that answer until the matching `requestId` appears.
-7. Close the tab and shut down any temporary server.
-
-### Good Result Channel
-
-The page should produce a small report object like:
+Example:
 
 ```ts
 type Report = {
-  status: 'ready' | 'error'
+  phase: 'loading' | 'running' | 'ready' | 'error'
   requestId: string
-  height?: number
-  lineCount?: number
+  scenario: string
+  selectedText?: string
+  visibleRowRange?: [number, number]
+  orderedCardIds?: string[]
+  lastDraggedId?: string | null
   message?: string
 }
 ```
 
-And then publish it somewhere stable, for example in the URL hash:
+Good channels:
 
-```ts
-location.hash = `report=${encodeURIComponent(JSON.stringify(report))}`
-```
+- `location.hash` when the runner can read live page state
+- a hidden `<script type="application/json">` when a one-shot dump is simpler
 
-This works well because:
+Pick one stable place. Don't scatter the same truth across the DOM, console logs, and random globals.
 
-- it is easy for simple automation to read back
-- it survives reloads cleanly
-- it does not require a special JS bridge
-
-### Phase Markers For Hangs
-
-If a page can take non-trivial time, publish a coarse phase marker in addition to the final report.
-
-For example:
-
-- `loading`
-- `measuring`
-- `ready`
-- `error`
-
-This helps distinguish:
-
-- page never loaded
-- page loaded but never started work
-- page hung in a particular phase
-- runner timed out after real progress
-
-For debugging, console logs at semantic boundaries are fine too. But keep the actual regression runner keyed to structured page state, not ad hoc log parsing.
-
-## Compare Like With Like
-
-If you're checking layout or typography, make sure the browser reference is actually the same kind of thing as the target.
-
-Good:
-
-- compare a normal text `div` against another normal text `div`
-- compare two elements with the same font, padding, border, width, and `white-space`
-
-Bad:
-
-- compare a `textarea` against a `div`
-- compare two boxes that differ by `1px` border or padding and then trust threshold-width results
-
-This matters more than it sounds. Near a line-wrap threshold, a tiny box-model mismatch can create a fake bug. And some elements, like form controls, simply do not follow the same layout behavior as ordinary app text.
-
-## Why `requestId` Matters
+## `requestId`
 
 Always include a unique `requestId`.
 
-Without it, AI automation can easily read:
+Without it, the runner can easily read:
 
 - a stale report from an earlier run
-- a previous tab's state
-- a partially reloaded page
+- another tab's state
+- a page that reloaded halfway through
 
 Good:
 
 ```ts
 const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-const url = `${baseUrl}?report=1&requestId=${encodeURIComponent(requestId)}`
+const url = `${baseUrl}?scenario=dismiss-to-row&requestId=${encodeURIComponent(requestId)}`
 ```
 
-Then the runner should reject any report whose `requestId` does not match.
+Then ignore any report whose `requestId` does not match.
 
-## Dedicated Tabs, Not Active Tabs
+## Phase Markers
 
-Use a dedicated browser tab or window owned by the automation run.
+If the scenario takes real time, publish coarse phases:
 
-Do not drive the user’s active tab if you can avoid it.
+- `loading`
+- `running`
+- `ready`
+- `error`
 
-Why:
+This makes hangs much easier to read:
 
-- fewer accidental interactions with the user
-- less focus churn
-- lower chance of reading the wrong page
-- easier cleanup
+- never loaded
+- loaded but never started
+- started but got stuck
+- finished with an explicit failure
 
-For correctness checks, background-safe tabs are usually fine.
+## What The Runner Owns
 
-For benchmark runs, keep them foregrounded. Background tabs can be throttled and produce fake numbers.
+The runner can do transport work such as:
 
-## Deterministic Page Servers
+- start the server
+- open the browser
+- poll `location.hash`
+- read one report node
+- take a screenshot for debugging
 
-Use temporary page servers for scripted runs.
+It should not:
 
-For example:
+- reimplement gesture policy
+- guess at "done" from sleeps
+- infer layout from pixels when the page can already report the semantic answer
+- treat browser exit as truth when the page can already say `ready` or `error`
+
+The runner should feel dumb on purpose.
+
+## One Scenario Run, One Browser Run
+
+Keep the page alive while the runner waits.
+
+If you use `--dump-dom`, start one Chrome process for that scenario, wait for the final report, then kill it.
+
+If you use CDP or Playwright, same idea:
+
+- open one browser process
+- open one target for that scenario
+- wait for the final report
+- close it
+
+Don't relaunch Chrome inside a polling loop. Don't keep starting fresh tabs just to ask the page whether it is done yet.
+
+## Tiny CDP Poller Is Fine
+
+A tiny Chrome CDP poller is a good default when you want no extra dependency.
+
+That can be as small as:
+
+- launch headless Chrome with remote debugging
+- create a target for the scenario URL
+- poll `location.hash` through `Runtime.evaluate`
+- stop when the page reports the matching `requestId` and `phase: 'ready'`
+
+This is still the same pattern. CDP is just transport.
+
+Playwright is fine when you really need richer browser control. It is not the default just because it is familiar.
+
+## Deterministic Servers
+
+Prefer a deterministic page server, e.g.:
 
 ```sh
-bun --port=3210 --no-hmr pages/*.html
+bun --port 3210 --no-hmr pages/*.html
 ```
 
-Do not run scripted correctness/benchmark checks against a hot-reloading dev server if you can avoid it.
+Don't run correctness automation against an HMR session if you can avoid it.
 
-Reason:
+HMR preserves too much state:
 
-- HMR preserves too much state
-- stale modules are common
-- layout tooling can look "wrong" when the real problem is stale runtime state
+- stale modules
+- old page state
+- confusing reload timing
 
-For human development, full reload is fine. For automated runs, use a deterministic temporary server.
+## Probe Loopback Hosts
 
-## Prefer Loopback Probing Over Assumptions
-
-Do not assume one loopback hostname will always work.
+Don't assume one loopback hostname will work everywhere.
 
 Probe:
 
@@ -175,189 +172,72 @@ Probe:
 
 and use the one that actually responds.
 
-This matters more than it sounds. Browser automation and local servers can disagree about IPv4 vs IPv6 loopback in annoying ways.
+## Keep Asset Timing Out Of It
 
-## Serialize Browser Automation Per Browser
+If the thing under test is routing, selection, scroll position, z-order, or occlusion, don't let CDN timing decide pass or fail.
 
-Do not run multiple browser-automation jobs in parallel against the same visible browser instance.
+In report mode, it is fine to swap remote images for a tiny local placeholder if the assets themselves are not under test.
 
-Use a per-browser lock.
+## Correctness vs Benchmarks
 
-Why:
+Correctness runs and benchmark runs are different.
 
-- runs fight over tabs
-- stale reports become easier to read accidentally
-- focus and window ordering become flaky
+Correctness runs:
 
-If Chrome automation is already running, the next Chrome job should wait.
+- are mostly about whether the semantic report is right
+- are fine with a minimal dumb runner
 
-Safari should have its own separate lock.
+Benchmark runs:
 
-If you use a lock file, store the owner metadata in it, at least:
+- care about focus, throttling, and `requestAnimationFrame`
+- should not trust numbers from a background tab
 
-- `pid`
-- `startedAt`
+Don't mix those goals by accident.
 
-Then if a later run finds an existing lock, it can check whether that process is still alive. If not, remove the stale lock and continue. Dead-owner locks are common enough that a lock without self-healing will eventually confuse a healthy system.
+## Common Automation Artifacts
 
-## Accuracy Runs vs Benchmark Runs
+Some things look scary but are just cleanup noise:
 
-These are different classes of automation.
+- `ERR_CONNECTION_REFUSED` after a temporary server exits
+- an early `loading` report before the final `ready` report
+- a stale report with the wrong `requestId`
+- the automation tab disappearing during teardown
 
-### Accuracy / layout / corpus / screenshot runs
+Don't treat these as product failures by default.
 
-Usually okay to run in a background-safe tab.
-
-Main concern:
-
-- correctness of the page’s computed report
-
-Focus is not usually required for correctness, only for convenience or stability.
-
-### Benchmark runs
-
-Keep them foregrounded.
-
-Main concern:
-
-- timer throttling
-- scheduling changes
-- `requestAnimationFrame` behavior
-- browser deprioritizing background work
-
-If you care about benchmark numbers, allow the run to momentarily steal focus rather than trust a background tab.
-
-## Environment Fingerprinting
-
-If the thing being measured can change with display or browser environment, record the environment in the report.
-
-At minimum:
-
-- browser
-- devicePixelRatio
-- viewport width and height
-- outer window width and height
-- `visualViewport.scale` if relevant
-- screen width and height
-
-Why:
-
-- helps detect stale runs
-- helps compare different displays
-- helps explain "it changed when I moved the window to another screen"
-
-## Screenshots Are Debugging, Not Truth
-
-Use screenshots for:
-
-- visual sanity checks
-- overlap debugging
-- composition tuning
-
-Do not use screenshots as the primary data source if the page can compute the answer exactly.
-
-For example, if a page can already compute:
-
-- `height`
-- `lineCount`
-- `firstMismatch`
-
-then the runner should read that report, not try to infer it from screenshots.
-
-## Chrome DevTools / Rich Automation Tools
-
-Use richer tools like Chrome DevTools automation or MCP-style browser tooling for:
-
-- debugging
-- performance traces
-- DOM inspection
-- console inspection
-- screenshots
-
-Do not automatically replace a simple page-report runner with a richer protocol.
-
-The richer tool is often a better debugger, but not necessarily a better regression runner.
-
-For repeatable tests:
-
-- simpler is often more reliable
-
-## Expected Failure Modes
-
-Some things look like bugs but are just automation artifacts:
-
-- `ERR_CONNECTION_REFUSED` on a temporary checker port after the run exits
-- an automation tab disappearing when cleanup happens
-- stale pages when using HMR/hot reload
-- focus briefly changing during browser session setup
-
-Do not immediately treat these as measurement failures.
-
-## DOs
-
-- Do generate a unique `requestId` for every run.
-- Do let the page compute the answer itself.
-- Do use dedicated tabs or windows for automation.
-- Do serialize runs per browser.
-- Do use deterministic temporary servers for scripted runs.
-- Do record environment data in the report when it matters.
-- Do keep benchmark runs foregrounded.
-- Do make the runner as dumb as possible.
-- Do use screenshots and richer browser tooling for debugging, not as the default truth source.
-
-## DON’Ts
-
-- Don’t scrape visible DOM text when the page can emit a structured report.
-- Don’t drive the user’s active tab unless you truly have to.
-- Don’t use HMR state as the basis for correctness automation.
-- Don’t run multiple Chrome automation jobs at once in the same browser instance.
-- Don’t benchmark in a background tab and trust the number.
-- Don’t omit `requestId`.
-- Don’t hide browser-specific environment differences from the report.
-
-## Example: Good Browser Automation Shape
+## Example
 
 Page:
 
 ```ts
-const requestId = new URLSearchParams(location.search).get('requestId') ?? ''
+const params = new URLSearchParams(location.search)
+const scenario = params.get('scenario') ?? ''
+const requestId = params.get('requestId') ?? ''
 
-const report = {
-  status: 'ready',
-  requestId,
-  height,
-  lineCount,
+function publishReport(report: Report) {
+  location.hash = `report=${encodeURIComponent(JSON.stringify(report))}`
 }
 
-location.hash = `report=${encodeURIComponent(JSON.stringify(report))}`
+publishReport({phase: 'loading', requestId, scenario})
+
+// ...run the scenario...
+
+publishReport({
+  phase: 'ready',
+  requestId,
+  scenario,
+  selectedText,
+})
 ```
 
 Runner:
 
 ```ts
-const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-const url = `${baseUrl}?report=1&requestId=${encodeURIComponent(requestId)}`
+const requestId = crypto.randomUUID()
+const url = `${baseUrl}?scenario=caption-selection&requestId=${encodeURIComponent(requestId)}`
 
-session.navigate(url)
+await openChrome(url)
 
-for (;;) {
-  const report = readReportFromHash()
-  if (report.requestId === requestId) {
-    return report
-  }
-  await sleep(100)
-}
+const report = await waitForMatchingReadyReport(requestId)
+expect(report.selectedText).toBe(expectedPrompt)
 ```
-
-This pattern is boring, and that is exactly why it is good.
-
-## Final Taste
-
-Browser automation should feel like:
-
-- one owned browser session
-- one deterministic page
-- one explicit report
-- one teardown
-
-If the runner starts feeling like a second layout engine, or a second source of truth, it is already too complicated.

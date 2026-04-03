@@ -81,7 +81,13 @@ const above = d++
 
 ### Drag & Release
 
-For z-index patterns specific to drag interactions (dragged item on top, animating-back item still elevated), see [Input.md § Z-Index During Drag & Release](Input.md#z-index-during-drag--release).
+For drag interactions, local z-order is usually just:
+
+- dragged item
+- last released item
+- everyone else
+
+See [Input.md § Z-Index During Drag & Release](Input.md#z-index-during-drag--release).
 
 ### Gotchas
 

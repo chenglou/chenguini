@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Draggable Cards</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+        background: linear-gradient(180deg, #f1f1f1 0%, #e7e7e7 100%);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #stage {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        isolation: isolate;
+      }
+
+      .card {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 18px;
+        color: #fff;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        border: 1px solid rgba(255, 255, 255, 0.26);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+        transform-origin: top left;
+        touch-action: none;
+        will-change: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="stage"></main>
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>

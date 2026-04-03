@@ -73,6 +73,26 @@ while (i >= 0 && now - pointer[i].time <= 100) i-- // last ~100ms
 let vx = (pointerLast.x - pointer[i].x) / (now - pointer[i].time) * 1000 // px/s
 ```
 
+### Z-Index During Drag & Release
+
+For drag interactions, depth usually wants 3 bands:
+
+- the actively dragged item above everything
+- the just-released item still above the rest while it animates back
+- the remaining items in their stable order underneath
+
+Don't drop the released item back into normal z-order on `pointerup`. The snap-back looks wrong.
+
+```js
+function cardZIndex(cardId) {
+  if (draggedCardId === cardId) return 300
+  if (draggedCardId == null && lastDraggedCardId === cardId) return 200
+  return 10 + orderedCardIds.indexOf(cardId)
+}
+```
+
+Then clear `lastDraggedCardId` once that item's x/y/scale are all basically settled.
+
 ### CSS for Drag
 
 ```css

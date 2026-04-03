@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Draggable Cards Round 07</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+        background: rgb(235, 238, 242);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, rgb(244, 246, 249), rgb(228, 232, 237));
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      #app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        isolation: isolate;
+      }
+
+      .card {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 320px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        color: white;
+        touch-action: none;
+        transform-origin: center center;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

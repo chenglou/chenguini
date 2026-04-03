@@ -1,0 +1,8 @@
+{
+  "name": "draggable-cards-round-01",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}

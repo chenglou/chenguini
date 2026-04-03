@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Draggable Cards Round 05</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        background: #edf1f5;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.9), transparent 45%),
+          linear-gradient(180deg, #f4f7fb 0%, #e8edf4 100%);
+      }
+
+      .card {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 18px;
+        border: 1px solid transparent;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: rgba(255, 255, 255, 0.94);
+        touch-action: none;
+        transform-origin: 50% 50%;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

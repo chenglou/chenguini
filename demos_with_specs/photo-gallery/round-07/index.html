@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Photo Gallery</title>
+    <style>
+      :root {
+        --bg: #07111d;
+        --bg-top: #11243a;
+        --card: rgba(8, 13, 24, 0.92);
+        --card-edge: rgba(193, 212, 255, 0.11);
+        --text: #edf4ff;
+        --muted: rgba(237, 244, 255, 0.7);
+        --shadow: 0 22px 70px rgba(0, 0, 0, 0.38);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top, rgba(101, 150, 255, 0.14), transparent 38%),
+          linear-gradient(180deg, var(--bg-top), var(--bg) 24%, #040913 100%);
+        font-family:
+          "Avenir Next", Avenir, "Segoe UI", sans-serif;
+      }
+
+      body {
+        overflow-x: hidden;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      #app {
+        position: relative;
+      }
+
+      #grid-stage {
+        position: relative;
+        min-height: 100vh;
+      }
+
+      .grid-card {
+        position: absolute;
+        border-radius: 24px;
+        overflow: clip;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 26%),
+          rgba(5, 10, 20, 0.92);
+        border: 1px solid var(--card-edge);
+        box-shadow: var(--shadow);
+        transform-origin: center center;
+      }
+
+      .grid-card-inner {
+        position: relative;
+        border-radius: 24px;
+        overflow: clip;
+      }
+
+      .grid-image-shell,
+      .line-image-shell {
+        position: relative;
+        overflow: clip;
+        border-radius: 20px;
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+      }
+
+      .grid-image-shell::after,
+      .line-image-shell::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.11), transparent 24%),
+          linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.18));
+        pointer-events: none;
+      }
+
+      .grid-caption,
+      .line-caption {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        color: var(--muted);
+        letter-spacing: 0.01em;
+      }
+
+      .grid-caption {
+        height: 52px;
+        padding: 10px 14px 8px;
+        font-size: 13px;
+        line-height: 1.35;
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        user-select: text;
+      }
+
+      .line-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: none;
+        background: rgba(4, 8, 15, 0.78);
+        backdrop-filter: blur(20px);
+      }
+
+      .line-backdrop {
+        position: absolute;
+        inset: 0;
+      }
+
+      .line-nav-strip {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100px;
+        z-index: 12;
+        cursor: zoom-in;
+      }
+
+      .line-nav-strip.left {
+        left: 0;
+      }
+
+      .line-nav-strip.right {
+        right: 0;
+      }
+
+      .line-card {
+        position: absolute;
+        border-radius: 28px;
+        overflow: clip;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 24%),
+          var(--card);
+        border: 1px solid rgba(193, 212, 255, 0.13);
+        box-shadow: 0 26px 90px rgba(0, 0, 0, 0.42);
+        transform-origin: center center;
+      }
+
+      .line-card .line-caption {
+        max-height: 64px;
+        padding: 12px 18px 8px;
+        font-size: 15px;
+        line-height: 1.42;
+        overflow: auto;
+      }
+
+      .line-high-res {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .github-link {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 20;
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: rgba(8, 15, 28, 0.72);
+        border: 1px solid rgba(193, 212, 255, 0.12);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+      }
+
+      .github-link svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+
+      #scenario-status {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(4, 8, 15, 0.75);
+        color: rgba(237, 244, 255, 0.65);
+        font-size: 12px;
+        z-index: 30;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .line-layer {
+          backdrop-filter: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a
+      class="github-link"
+      href="https://github.com/chenglou/vibescript"
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Open GitHub"
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49C4 14.09 3.48 13.23 3.32 12.78c-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.5 7.5 0 0 1 8 4.61c.68 0 1.37.09 2.01.26 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+        ></path>
+      </svg>
+    </a>
+    <div id="app">
+      <div id="grid-stage" aria-live="polite"></div>
+      <div class="line-layer" id="line-layer">
+        <div class="line-backdrop" id="line-backdrop"></div>
+        <div class="line-nav-strip left" id="nav-left"></div>
+        <div class="line-nav-strip right" id="nav-right"></div>
+      </div>
+    </div>
+    <div id="scenario-status">idle</div>
+    <script id="scenario-report" type="application/json">
+      {"phase":"loading","status":"ok","scenario":"","requestId":""}
+    </script>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>
