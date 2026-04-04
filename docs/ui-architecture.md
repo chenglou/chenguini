@@ -284,6 +284,8 @@ JS-based layout & positioning isn't as scary as you'd think. It enables JS anima
 
 Since we encourage JS-based layout, text measurement is a bottleneck that is solved through `@chenglou/pretext` npm package. Use it to bypass DOM measurements for text
 
+Use the minimum number amount of DOM nodes you can get away with. Absolute positioning is the best way to accomplish this since there's no extra wrappers for CSS layout needs
+
 ## Hit Testing
 
 Manually managed layout means we can do simple hit testing by iterating through the relevant element's bounding boxes and check containment; UI's simple enough to not even need generic binary space partitioning.
