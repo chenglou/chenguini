@@ -7,7 +7,7 @@ import {
   type LayoutCursor,
   type PreparedText,
   type PreparedTextWithSegments,
-} from '../../../pretext/src/layout'
+} from '@chenglou/pretext'
 import {type HNCommentDoc, type HNRun} from './hn-comment-parser'
 
 const COMMENT_LINE_HEIGHT = 14
