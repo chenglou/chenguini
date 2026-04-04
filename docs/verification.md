@@ -111,6 +111,31 @@ A good semantic snapshot is small, readable, and obviously tied to user-visible 
 
 Also add at least one sensitivity check. Change one meaningful input and make sure the snapshot changes too. Otherwise the snapshot may just be too weak.
 
+## Model Geometry Must Match Render Geometry
+
+Some bugs are not really "the line breaker is wrong". They are "the model measured against one width, then the DOM rendered at another width."
+
+Common shape:
+
+- measure a bubble, card, or text block against width A
+- then CSS or a later projection step clamps it to width B
+- now the wrapping looks wrong even if the layout policy itself is fine
+
+Treat this as its own verification class.
+
+Good browser-backed probe:
+
+- model width
+- rendered container width
+- widest rendered row or fragment edge
+- a simple assertion like `widestRow <= renderedInnerWidth`
+
+This is often much better than a screenshot diff.
+
+Screenshots are still great for discovery and debugging. But the durable oracle should usually be a small geometry report the page computes itself.
+
+If the system does "measure first, then shrink/clamp in CSS", assume that is a verification smell until proven otherwise.
+
 ## Measurement Bug vs Policy Bug
 
 This distinction matters.
