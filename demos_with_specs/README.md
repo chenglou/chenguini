@@ -26,10 +26,20 @@ This keeps the main repo loop clean while preserving failed rounds as data.
 ## Structure
 
 - `NOTES.md`: cross-round findings and gaps
-- `<demo>/SPEC.md`: the current spec for that demo
-- `<demo>/round-XX/`: one isolated reconstruction attempt
+- `<demo>/SPEC.md`: the current reusable spec packet for that demo
+- `<demo>/DATA.md`: shared exact data when a spec would otherwise get bloated
+- `<demo>/round-XX/`: early one-off reconstruction attempts
+- `<demo>/style-*/`: broad spec-writing comparisons
+- `<demo>/overlay-*/`: targeted overlay experiments
+- `<demo>/thin-level-*/`: thinning matrix conditions
+- `<demo>/thin-repeat-*/`: repeatability checks for the thinnest successful packet
+- `spec-writing-experiments/`, `spec-overlay-experiments/`, `spec-thinning-experiments/`: cross-demo experiment summaries
 
-## Round Rules
+`bun run start:specs` serves any experiment folder with an `index.html`, including rounds, style variants, overlays, and thin-packet repeats.
+
+The current default packet shape lives in `docs/minimum-viable-demo-spec.md`.
+
+## Rules
 
 - Use fresh agents for each round.
 - Agents read `docs/verification.md` first.

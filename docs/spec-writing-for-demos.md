@@ -2,6 +2,10 @@
 
 When writing a demo spec for a fresh AI, lead with behavior, not implementation.
 
+This doc is mainly about what we learned from the experiments.
+
+For the current default packet, see `minimum-viable-demo-spec.md`.
+
 The most reliable shape we found was:
 
 1. one short product summary
@@ -93,21 +97,20 @@ That means the demo spec should not keep re-explaining:
 
 That belongs in the shared docs.
 
-## Default Recommendation
+## Baseline We Started From
 
-If you want one default template, use this:
+The first strong baseline was:
 
 1. Summary
 2. Scenarios
 3. Metrics
 4. One diagram if needed
-5. Visual direction
-6. Tests must prove
-7. Optional pure-seam hints
+5. Tests must prove
+6. Optional pure-seam hints
 
 `NEW PATTERN DETECTED`: for fresh subagents, a scenario-first spec with exact numbers and one supporting diagram works better than either a picture-only spec or a fully code-shaped spec.
 
-For `gpt-5.4 xhigh`, the default packet now lives in `minimum-viable-demo-spec.md`.
+For `gpt-5.4 xhigh`, we later shrank that into the thinner default in `minimum-viable-demo-spec.md`.
 
 ## Add Overlays By Seam Type
 
