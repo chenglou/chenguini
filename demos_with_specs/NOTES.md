@@ -373,3 +373,62 @@ Rules for the experiment:
 - Current read:
   - thin is now the real default for `gpt-5.4 xhigh`
   - photo still has a slightly smaller stability margin than draggable, but not enough to justify going back to a richer default packet
+
+## Life Calendar Transfer Test
+
+- We started a third-demo transfer test on:
+  - `/Users/chenglou/github/vibescript/demos/life-calendar`
+- The current spec packet is:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/life-calendar/SPEC.md`
+- Round 1 used a fresh `gpt-5.4 xhigh` worker and produced:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/life-calendar/round-01`
+- Round 1 result:
+  - the worker created the right file shape and a plausible test shape
+  - but it stopped at scaffolding and placeholder stubs instead of finishing the loop
+  - so there is no meaningful main-thread pass/fail result yet
+- Round 2 used another fresh `gpt-5.4 xhigh` worker targeting `round-02`.
+- Round 2 result:
+  - the worker stalled before writing any files
+- Round 3 used another fresh `gpt-5.4 xhigh` worker targeting `round-03`.
+- Round 3 result:
+  - the worker stalled before writing any files
+- Round 4 used a fresh `gpt-5.4 high` worker targeting `round-04` as a diagnostic.
+- Round 4 result:
+  - the worker also stalled before writing any files
+
+Current read:
+
+- this does not yet look like a clean spec failure
+- the first worker understood the demo well enough to choose reasonable seams:
+  - geometry snapshot
+  - hit testing
+  - age/final-day hover tooltips
+  - custom-dot persistence
+- the bottleneck here looks more like startup/completion reliability for a fresh stronger-model worker on a new demo than a clear miss in the thin packet itself
+- the diagnostic `high` round makes that read stronger: this is probably not just an `xhigh` overthinking issue
+- `life-calendar` is also a meaningfully different category:
+  - canvas-first
+  - exact geometry formula
+  - localStorage persistence
+  - almost no DOM surface beyond one tooltip input
+
+Tentative next move:
+
+- keep the thin spec
+- if we continue, either:
+  - try a much smaller faster worker prompt that inlines only the life-calendar packet plus 2 doc excerpts, or
+  - accept this as a separate experiment axis: stateless reconstruction quality is one thing, worker startup/completion reliability is another
+
+### Main-Thread Repro Check
+
+- We then tried the same demo locally from the main model in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/life-calendar/round-05`
+- Main-thread verification passed:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/life-calendar/round-05`
+  - `bun check`
+
+Updated read:
+
+- the demo and thin packet are good enough for the main model to complete the loop
+- this makes the earlier `life-calendar` blockage look much more like subagent startup/completion reliability than a spec gap
+- so we should be careful not to overfit the spec based on those stalled worker rounds alone
