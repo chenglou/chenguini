@@ -432,3 +432,18 @@ Updated read:
 - the demo and thin packet are good enough for the main model to complete the loop
 - this makes the earlier `life-calendar` blockage look much more like subagent startup/completion reliability than a spec gap
 - so we should be careful not to overfit the spec based on those stalled worker rounds alone
+
+### Compressed Prompt Matrix
+
+- We then kept the same `life-calendar` packet but stopped asking fresh workers to discover docs from the repo.
+- Results live in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/life-calendar/COMPRESSED_PROMPT_RESULTS.md`
+- Short version:
+  - `round-06`: partial
+  - `round-07`: main-thread pass
+  - `round-08`: near-complete but browser-harness fail
+
+Updated read:
+
+- compressed prompts helped completion reliability materially
+- this makes the earlier no-write stalls look even more like worker startup/context-loading problems rather than a hard demo/spec problem
