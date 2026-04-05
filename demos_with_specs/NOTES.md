@@ -581,3 +581,50 @@ Updated template read:
 - `reference-app` currently looks strongest for outcome plus shape on app-shell demos
 - `gesture-stack` currently looks strongest for keeping the interaction lifetime together on gesture demos
 - that is strong enough to let some docs start pointing at template slices instead of fully restating the same structure in prose
+
+## Prompt Guidance Experiment
+
+- We then tested whether the extra template extraction guidance should live in worker prompts, beyond plain template access.
+- Results live in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/prompt-guidance-experiments/RESULTS.md`
+
+The matrix was:
+
+- raw: docs plus thin spec only
+- template: docs plus thin spec plus template access
+- guided: docs plus thin spec plus template access plus explicit extraction guidance
+
+Targets:
+
+- `scroll-anchor`
+- `gesture-flick-snap-target`
+
+### Main-Thread Results
+
+- all six prompt conditions passed from the main thread
+- `bun check` passed
+
+### Updated Read
+
+- This was not a correctness win for extra guidance.
+- The useful difference was mostly architecture shape.
+
+On `scroll-anchor`:
+
+- raw still leaned more ad hoc
+- template and guided both stayed closer to the intended app-shell structure
+- guided did not materially improve outcome beyond plain template access
+
+On `gesture-flick-snap-target`:
+
+- all three conditions landed the required behavior
+- template and guided stayed closer to the intended gesture-stack lifetime
+- guided copied that slice more literally, including `lastDragged` depth, but that did not buy a better result on this one-card demo
+
+**NEW PATTERN DETECTED**: explicit extraction guidance currently looks more like a shape nudge than a correctness unlock once template access is already available.
+
+Current read:
+
+- keep this guidance in worker prompts
+- do not promote it into canonical docs yet
+- template access is still the bigger lever

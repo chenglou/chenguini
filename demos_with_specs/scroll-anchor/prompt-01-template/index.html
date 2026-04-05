@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<body>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Menlo, Monaco, "Courier New", monospace;
+      background: #0a0d12;
+      color: #d7dde8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(39, 51, 71, 0.65), transparent 40%),
+        linear-gradient(180deg, #0b1016 0%, #111824 100%);
+    }
+
+    button,
+    body {
+      font: inherit;
+    }
+
+    .page {
+      display: grid;
+      gap: 16px;
+      justify-items: center;
+      padding: 24px 16px 28px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .controls button {
+      border: 1px solid #334155;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: rgba(17, 24, 39, 0.92);
+      color: #dbe4f3;
+      cursor: pointer;
+    }
+
+    .controls button:hover {
+      border-color: #4b89c8;
+    }
+
+    .viewport-shell {
+      position: relative;
+      width: min(720px, calc(100vw - 24px));
+      height: min(360px, calc(100vh - 180px));
+      min-height: 260px;
+      border: 1px solid #223043;
+      border-radius: 16px;
+      background: rgba(9, 14, 22, 0.96);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+      overflow: clip;
+    }
+
+    .scroller {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-color: #31465f #0b111a;
+      scrollbar-width: thin;
+    }
+
+    .content {
+      position: relative;
+      width: 100%;
+    }
+
+    .reference-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.5);
+      pointer-events: none;
+      transform: translateY(-0.5px);
+    }
+
+    .reference-line::before {
+      content: "reference line";
+      position: absolute;
+      right: 12px;
+      top: -11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(13, 18, 28, 0.9);
+      color: #9fb2cb;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .header {
+      position: absolute;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      color: #8fa2bb;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .item {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      display: grid;
+      align-content: center;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      color: #f8fafc;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .item-label {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .item-meta {
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .info {
+      width: min(720px, calc(100vw - 24px));
+      min-height: 44px;
+      border: 1px solid #223043;
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: rgba(9, 14, 22, 0.84);
+      color: #afc1d9;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+  </style>
+
+  <div class="page">
+    <div class="controls">
+      <button id="scroll-to-700">Scroll to 700</button>
+      <button id="add-3-above">Add 3 above</button>
+      <button id="add-rapid">Add 1, then 2 rapid</button>
+    </div>
+
+    <div class="viewport-shell">
+      <div id="scroller" class="scroller">
+        <div id="content" class="content"></div>
+      </div>
+      <div class="reference-line"></div>
+    </div>
+
+    <div id="info" class="info"></div>
+  </div>
+
+  <script type="module" src="./index.js"></script>
+</body>
