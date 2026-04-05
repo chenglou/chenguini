@@ -628,3 +628,42 @@ Current read:
 - keep this guidance in worker prompts
 - do not promote it into canonical docs yet
 - template access is still the bigger lever
+
+## Repeatability Experiment: Scroll Anchor
+
+- We then ran a repeatability pass on `scroll-anchor` to see whether the prompt conditions differ in stability.
+- Results live in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/repeatability-experiments/RESULTS.md`
+
+The matrix was:
+
+- raw: docs plus thin spec only
+- template: docs plus thin spec plus template access
+- guided: docs plus thin spec plus template access plus explicit extraction guidance
+
+Each condition got 3 fresh `gpt-5.4 xhigh` workers.
+
+### Main-Thread Results
+
+- raw:
+  - `3/3` passes
+- template:
+  - `3/3` passes
+- guided:
+  - `3/3` passes
+- `bun check`:
+  - pass
+
+### Updated Read
+
+- This repeatability pass did not show a stability advantage for template access or extra extraction guidance.
+- That means the earlier raw `scroll-anchor` miss now looks more like one unlucky round than a stable raw-docs weakness.
+- The useful difference that still remains is architecture shape:
+  - template tends to keep the app-shell structure closer to `reference-app`
+  - guided tends to copy that structure more literally
+
+So the safest current read is:
+
+- templates are still the architecture surface
+- extra extraction guidance still belongs in worker prompts
+- but neither currently deserves to be sold as a proven repeatability unlock on `scroll-anchor`
