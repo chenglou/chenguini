@@ -493,3 +493,46 @@ Updated read:
   - if we compress, keep the delivery constraint explicit too, e.g. stay on `bun test` and the page-owned semantic report path unless the experiment is specifically about another harness
 
 **NEW PATTERN DETECTED**: prompt compression and pattern compression are not the same thing. A compressed packet can preserve product truth while quietly dropping repo-preferred delivery constraints.
+
+## Template Experiment: Scroll Anchor
+
+- We then tested the new `demo_templates/` surface on a third kind of demo:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/scroll-anchor/SPEC.md`
+- Results live in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/template-experiments/RESULTS.md`
+
+The comparison was:
+
+- `round-01-raw`: docs plus thin spec only
+- `round-01-template`: docs plus thin spec plus `demo_templates/reference-app`
+
+### Main-Thread Results
+
+- `scroll-anchor/round-01-raw`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/scroll-anchor/round-01-raw`
+  - fail
+  - the pure model tests passed, but the browser-backed `add-1 then 2 rapid` scenario failed
+- `scroll-anchor/round-01-template`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/scroll-anchor/round-01-template`
+  - pass
+- `bun check`:
+  - pass
+
+### Updated Read
+
+- This is the first concrete transfer result in favor of the template surface.
+- The raw worker understood the anchor law, but still missed one live seam under rapid two-step prepend.
+- The template worker stayed much closer to the intended app-shell shape:
+  - one global state object
+  - staged events
+  - explicit `domCache`
+  - render-ordering closer to `reference-app`
+- So the useful gain was both:
+  - better outcome
+  - less architecture drift
+
+Tentative follow-on thought:
+
+- if the template surface keeps holding up, some docs can probably get shorter
+- the docs would still carry doctrine and tradeoffs
+- but some structural guidance could point at the template slices instead of re-explaining the same code shape in prose

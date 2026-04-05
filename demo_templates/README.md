@@ -69,3 +69,5 @@ The experiments so far suggest:
 - the worker should copy and trim, not imitate from memory
 
 This folder is the first pass at that split.
+
+If this surface keeps holding up in fresh-worker experiments, some docs can get shorter. The docs should still carry rules and tradeoffs, but some architecture guidance can point at template slices instead of spelling out the same shape again in prose.

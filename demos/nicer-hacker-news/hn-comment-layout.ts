@@ -1,7 +1,8 @@
 import {
-  measureRichInline,
+  materializeRichInlineLineRange,
+  measureRichInlineStats,
   prepareRichInline,
-  walkRichInlineLines,
+  walkRichInlineLineRanges,
   type PreparedRichInline,
 } from '../../../pretext/src/rich-inline'
 import {
@@ -87,7 +88,7 @@ export function measureHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: number)
 
     switch (block.kind) {
       case 'paragraph':
-        height += measureRichInline(block.flow, maxWidth, COMMENT_LINE_HEIGHT).height
+        height += measureRichInlineStats(block.flow, maxWidth).lineCount * COMMENT_LINE_HEIGHT
         break
 
       case 'codeBlock':
@@ -111,7 +112,8 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
     switch (block.kind) {
       case 'paragraph': {
         const lines: HNCommentLayoutLine[] = []
-        const lineCount = walkRichInlineLines(block.flow, safeWidth, line => {
+        const lineCount = walkRichInlineLineRanges(block.flow, safeWidth, range => {
+          const line = materializeRichInlineLineRange(block.flow, range)
           const fragments = line.fragments.map(fragment => ({
             gapBefore: fragment.gapBefore,
             kind: block.runs[fragment.itemIndex]!.kind,
