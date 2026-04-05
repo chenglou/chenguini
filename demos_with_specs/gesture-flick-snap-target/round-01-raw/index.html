@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gesture Flick Snap Target</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --page-top: #0f1c36;
+        --page-bottom: #050a17;
+        --panel-face: rgba(213, 228, 255, 0.14);
+        --panel-border: rgba(213, 228, 255, 0.28);
+        --panel-shadow: rgba(0, 0, 0, 0.42);
+        --marker: rgba(217, 231, 255, 0.9);
+        --marker-glow: rgba(217, 231, 255, 0.22);
+        --rest-marker: #39a6ff;
+        --rest-marker-glow: rgba(57, 166, 255, 0.45);
+        --text: #f6f8ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      body {
+        font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(104, 149, 255, 0.18), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(48, 89, 160, 0.32), transparent 36%),
+          linear-gradient(180deg, var(--page-top), var(--page-bottom));
+      }
+
+      [data-app] {
+        position: fixed;
+        inset: 0;
+      }
+
+      [data-corner-marker],
+      [data-rest-marker] {
+        position: fixed;
+        inset: 0 auto auto 0;
+        border-radius: 999px;
+        pointer-events: none;
+      }
+
+      [data-corner-marker] {
+        width: 16px;
+        height: 16px;
+        border: 1px solid rgba(217, 231, 255, 0.9);
+        background: rgba(217, 231, 255, 0.1);
+        box-shadow: 0 0 24px var(--marker-glow);
+      }
+
+      [data-rest-marker] {
+        width: 10px;
+        height: 10px;
+        background: var(--rest-marker);
+        box-shadow: 0 0 18px var(--rest-marker-glow);
+      }
+
+      [data-pip-card] {
+        position: fixed;
+        inset: 0 auto auto 0;
+        width: 120px;
+        height: 80px;
+        display: grid;
+        place-items: center;
+        border-radius: 20px;
+        border: 1px solid var(--panel-border);
+        background:
+          linear-gradient(180deg, rgba(223, 236, 255, 0.18), rgba(223, 236, 255, 0.08)),
+          rgba(12, 22, 44, 0.56);
+        box-shadow:
+          0 24px 48px -24px var(--panel-shadow),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        cursor: grab;
+        touch-action: none;
+        backdrop-filter: blur(14px);
+      }
+
+      [data-pip-card]:active {
+        cursor: grabbing;
+      }
+    </style>
+  </head>
+  <body>
+    <main data-app>
+      <div data-corner-marker="top-left"></div>
+      <div data-corner-marker="top-right"></div>
+      <div data-corner-marker="bottom-left"></div>
+      <div data-corner-marker="bottom-right"></div>
+      <div data-rest-marker hidden></div>
+      <div data-pip-card>PiP</div>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

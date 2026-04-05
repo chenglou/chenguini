@@ -67,6 +67,9 @@ The experiments so far suggest:
 - docs are still the doctrine
 - template demos should be the architecture surface
 - the worker should copy and trim, not imitate from memory
+- the current templates are helping in different ways:
+  - `reference-app` helped both outcome and shape on `scroll-anchor`
+  - `gesture-stack` helped keep the gesture lifetime together on `gesture-flick-snap-target`, even though the raw path also passed
 
 This folder is the first pass at that split.
 

@@ -49,6 +49,8 @@ const pointerYLocal = pointer.y + scrollY
 
 See quirks at the beginning of the doc, when you craft drag interactions.
 
+If you want the repo's default gesture slice instead of restitching it from prose, start from `demo_templates/gesture-stack` and trim. That template keeps pointer history, release velocity, and post-release depth together.
+
 ### Pinning Springs During Drag
 
 During active drag, **set both `pos` and `dest`** on the dragged element's springs:

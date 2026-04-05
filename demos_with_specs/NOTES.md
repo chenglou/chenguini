@@ -536,3 +536,48 @@ Tentative follow-on thought:
 - if the template surface keeps holding up, some docs can probably get shorter
 - the docs would still carry doctrine and tradeoffs
 - but some structural guidance could point at the template slices instead of re-explaining the same code shape in prose
+
+## Template Experiment: Gesture Flick Snap Target
+
+- We then tested the gesture template on a demo that still needs drag, flick, and snap behavior:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/gesture-flick-snap-target/SPEC.md`
+- Results live in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/template-experiments/RESULTS.md`
+
+The comparison was:
+
+- `round-01-raw`: docs plus thin spec only
+- `round-01-template`: docs plus thin spec plus `demo_templates/gesture-stack`
+
+### Main-Thread Results
+
+- `gesture-flick-snap-target/round-01-raw`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/gesture-flick-snap-target/round-01-raw`
+  - pass
+- `gesture-flick-snap-target/round-01-template`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/gesture-flick-snap-target/round-01-template`
+  - pass
+- `bun check`:
+  - pass
+
+### Updated Read
+
+- This was not another pass/fail split like `scroll-anchor`.
+- The useful difference was architecture shape:
+  - the raw worker built a good standalone gesture model with direct callbacks
+  - the template worker stayed much closer to the repo's staged-event gesture lifetime
+- So `gesture-stack` looks useful even when the raw path already passes, because it keeps:
+  - pointer history
+  - release velocity
+  - settle behavior
+  - just-released depth
+  - one render-loop-centric input interpretation
+  together instead of scattering them
+
+**NEW PATTERN DETECTED**: template wins can show up as less architecture drift even when raw docs plus spec already pass.
+
+Updated template read:
+
+- `reference-app` currently looks strongest for outcome plus shape on app-shell demos
+- `gesture-stack` currently looks strongest for keeping the interaction lifetime together on gesture demos
+- that is strong enough to let some docs start pointing at template slices instead of fully restating the same structure in prose

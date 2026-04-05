@@ -84,6 +84,8 @@ scheduleRender()
 
 Only events and render's final step can schedule a next render.
 
+If you want the repo's default app-shell slice instead of rebuilding this shape from prose, start from `demo_templates/reference-app` and trim. That template already bundles `scheduleRender`, staged `st.events`, one global state object, `domCache`, and end-of-render side effects.
+
 ### First Paint Uses The Same Data Flow
 
 If a UI is only correct after some derived state exists, then the data ordering's wrong. This'd cause initial page flashes.
@@ -106,6 +108,8 @@ function handleClick(e) { /* everything here */ };
 - resolve one tap while another finger is held down
 - press a key while mouse's hovering over a special section for pro user actions
 - resolve two directional controls on a game pad composing into a new action
+
+If you want the concrete slice, see `demo_templates/reference-app`. That's the copy-trimmable version of this rule.
 
 So, allowed in event callbacks:
 

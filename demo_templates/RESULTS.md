@@ -54,6 +54,9 @@ So the current template set uses:
 - The right split still looks like:
   - one rich default DOM app
   - one opt-in gesture template
+- The first transfer results are now:
+  - `reference-app` helped both outcome and shape on `scroll-anchor`
+  - `gesture-stack` helped reduce gesture-architecture drift on `gesture-flick-snap-target`
 - If we later add an even more boring app shell than `nicer-hacker-news`, it can replace `reference-app` without changing the overall folder strategy.
 
 **NEW PATTERN DETECTED**: template portability is not only about folder boundaries. It is also about keeping the referenced sibling APIs current, so the copy-pasteable specimen stays alive instead of fossilizing.

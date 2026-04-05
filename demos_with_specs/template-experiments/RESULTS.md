@@ -1,21 +1,17 @@
 # Template Experiment Results
 
-This matrix tested whether `demo_templates/reference-app` helps on a new demo that is not just photo-gallery or draggable-cards.
+This matrix tests whether `demo_templates/` helps on new demos that are not just the original template sources.
 
-The demo was:
+Both workers in each comparison were fresh `gpt-5.4 xhigh` agents and were forbidden from reading `demos/`.
 
-- `scroll-anchor`
+## `scroll-anchor`
 
-Both workers were fresh `gpt-5.4 xhigh` agents.
-
-The comparison was:
+Comparison:
 
 - `round-01-raw`: docs plus thin spec only
 - `round-01-template`: docs plus thin spec plus `demo_templates/reference-app`
 
-Both workers were forbidden from reading `demos/`.
-
-## Main-Thread Results
+### Main-Thread Results
 
 - `scroll-anchor/round-01-raw`:
   - `bun test /Users/chenglou/github/vibescript/demos_with_specs/scroll-anchor/round-01-raw`
@@ -23,10 +19,8 @@ Both workers were forbidden from reading `demos/`.
 - `scroll-anchor/round-01-template`:
   - `bun test /Users/chenglou/github/vibescript/demos_with_specs/scroll-anchor/round-01-template`
   - pass
-- `bun check`:
-  - pass
 
-## `round-01-raw`
+### `round-01-raw`
 
 - pure model tests passed
 - two browser scenarios passed
@@ -43,7 +37,7 @@ Main-thread read:
   - no persistent DOM cache
   - more direct node recreation with `replaceChildren`
 
-## `round-01-template`
+### `round-01-template`
 
 - pure model tests passed
 - all browser scenarios passed
@@ -58,22 +52,73 @@ Main-thread read:
   - read-once scroll anchoring inside the render loop
 - this looks much closer to “copy and trim from `reference-app`” than “invent a structure from scratch”
 
+## `gesture-flick-snap-target`
+
+Comparison:
+
+- `round-01-raw`: docs plus thin spec only
+- `round-01-template`: docs plus thin spec plus `demo_templates/gesture-stack`
+
+### Main-Thread Results
+
+- `gesture-flick-snap-target/round-01-raw`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/gesture-flick-snap-target/round-01-raw`
+  - pass
+- `gesture-flick-snap-target/round-01-template`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/gesture-flick-snap-target/round-01-template`
+  - pass
+- `bun check`:
+  - pass
+
+### `round-01-raw`
+
+- pure gesture math tests passed
+- all browser scenarios passed
+- the worker also covered `mouseup`, `touchend`, and `touchcancel` in the browser-driven paths
+
+Main-thread read:
+
+- the worker landed the product truth cleanly
+- the code shape was more ad hoc than the repo default:
+  - a local model object
+  - direct event callbacks that call `beginDrag`, `moveDrag`, and `finishDrag`
+  - no staged `events` object feeding one render loop
+- this is a respectable implementation, but it looks more like “build a neat standalone demo” than “copy the repo’s gesture slice”
+
+### `round-01-template`
+
+- pure logic tests passed
+- all browser scenarios passed
+
+Main-thread read:
+
+- the worker stayed much closer to the intended gesture-stack shape
+- it kept:
+  - pointer history
+  - release-velocity estimation
+  - `lastDragged` depth
+  - staged event interpretation inside one render loop
+- the template version was narrower in one place:
+  - the automated browser scenarios only covered the mouse path
+  - `touchend` and `touchcancel` are implemented in the page, but not directly exercised by the browser checks
+
 ## Updated Read
 
-- On `scroll-anchor`, the template helped.
-- The useful difference was not just pass/fail. It was shape:
-  - raw landed the anchoring idea but missed one live seam
-  - template landed both the seam and the repo-preferred structure
-- This is the first concrete signal that the template surface can reduce architecture drift on a new demo.
+- The template surface now has two different kinds of wins:
+  - `reference-app` helped both outcome and shape on `scroll-anchor`
+  - `gesture-stack` mainly helped shape on `gesture-flick-snap-target`, because the raw worker already passed
+- So the useful question is not only “did the template make it pass?”
+- It is also:
+  - did it keep the worker closer to the repo’s intended architecture?
+  - did it keep the fragile interaction lifetime together?
 
-Tentative next read:
+**NEW PATTERN DETECTED**: templates can reduce architecture drift even when the raw docs-plus-spec path already passes.
+
+Current read:
 
 - keep `reference-app` as the default template
 - keep `gesture-stack` as opt-in
 - add more templates only if another repeated gap shows up
-
-One likely second-order effect:
-
-- if the template surface keeps holding up, some docs can get shorter
-- the docs would still carry doctrine and tradeoffs
-- but some “how to structure the code” guidance could point at template slices instead of restating the same architecture in prose
+- docs can start yielding some structure prose to template pointers, but carefully:
+  - docs should still carry rules and tradeoffs
+  - templates should carry the concrete code shape
