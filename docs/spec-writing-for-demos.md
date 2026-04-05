@@ -1,12 +1,11 @@
 # Spec Writing For Demos
 
-When writing a demo spec for a fresh AI, lead with behavior, not implementation.
+For the current workflow, see `ai-demo-reconstruction.md`.
+For the exact default packet, see `minimum-viable-demo-spec.md`.
 
-This doc is mainly about what we learned from the experiments.
+This doc keeps the packet-writing lessons that are still useful when the thin default starts wobbling.
 
-For the current default packet, see `minimum-viable-demo-spec.md`.
-
-The most reliable shape we found was:
+The strongest baseline we found before the thinner default was:
 
 1. one short product summary
 2. a small set of scenarios
@@ -97,18 +96,7 @@ That means the demo spec should not keep re-explaining:
 
 That belongs in the shared docs.
 
-## Baseline We Started From
-
-The first strong baseline was:
-
-1. Summary
-2. Scenarios
-3. Metrics
-4. One diagram if needed
-5. Tests must prove
-6. Optional pure-seam hints
-
-`NEW PATTERN DETECTED`: for fresh subagents, a scenario-first spec with exact numbers and one supporting diagram works better than either a picture-only spec or a fully code-shaped spec.
+`NEW PATTERN DETECTED`: for fresh subagents, a scenario-first spec with exact numbers and one supporting diagram worked better than either a picture-only spec or a fully code-shaped spec.
 
 For `gpt-5.4 xhigh`, we later shrank that into the thinner default in `minimum-viable-demo-spec.md`.
 
@@ -150,3 +138,5 @@ Counterintuitive but important:
 
 - more packet detail is not always better
 - a stronger model may do better with a smaller, cleaner packet than with a richer one that nudges it toward the wrong reconstruction
+
+If the thin default already works, don't add this older baseline back in just because it feels safer.

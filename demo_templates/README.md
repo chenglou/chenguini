@@ -70,7 +70,17 @@ The experiments so far suggest:
 - the current templates are helping in different ways:
   - `reference-app` helped both outcome and shape on `scroll-anchor`
   - `gesture-stack` helped keep the gesture lifetime together on `gesture-flick-snap-target`, even though the raw path also passed
+- the current evidence is still mostly about shape, not pass-rate
 
 This folder is the first pass at that split.
 
 If this surface keeps holding up in fresh-worker experiments, some docs can get shorter. The docs should still carry rules and tradeoffs, but some architecture guidance can point at template slices instead of spelling out the same shape again in prose.
+
+## Bootstrap Notes
+
+The original `reference-app` bootstrap exposed a real dependency drift:
+
+- `nicer-hacker-news` still imported the old `pretext` `inline-flow` helper
+- `pretext` had moved that surface to `rich-inline`
+
+We fixed that seam directly instead of routing around it. That is part of the template contract too: a good template has to stay alive, not fossilize.

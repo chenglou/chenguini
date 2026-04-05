@@ -2,48 +2,37 @@
 
 This folder is an experiment harness for spec-driven demo reconstruction.
 
-## Intent
+## Start Here
 
-We write specs from the original demos, then use fresh agents to rebuild from:
+- `NOTES.md`: current read, current workflow, and experiment index
+- `NOTES_ARCHIVE.md`: full chronological research notes
+- `docs/ai-demo-reconstruction.md`: the current repo-level workflow
 
-- `docs/`
-- one demo-specific spec
+## What Lives Here
 
-The rebuild agents must not inspect `demos/`.
+- `<demo>/SPEC.md`: the current reusable packet for that demo
+- `<demo>/DATA.md`: shared exact data when the packet would otherwise get bloated
+- `<demo>/round-*`: one-off reconstruction attempts
+- `<demo>/style-*`, `<demo>/overlay-*`, `<demo>/thin-*`, `<demo>/prompt-*`, `<demo>/repeat-*`: focused experiment conditions
+- `*-experiments/RESULTS.md`: cross-demo summaries
 
-## Why This Folder Is Separate
+## Why This Folder Stays Separate
 
-Historical rounds are evidence. Some of them fail. That is useful.
+Historical failures are evidence.
 
 Because of that:
 
 - the repo's default `bun check` still covers only `demos/`
 - the repo's default `bun start` still serves only `demos/`
-- experimental rounds are served through `bun run start:specs`
+- experimental runs are served through `bun run start:specs`
 
-This keeps the main repo loop clean while preserving failed rounds as data.
+That keeps the main repo loop clean while preserving the misses that taught us something.
 
-## Structure
+## Core Rule
 
-- `NOTES.md`: cross-round findings and gaps
-- `<demo>/SPEC.md`: the current reusable spec packet for that demo
-- `<demo>/DATA.md`: shared exact data when a spec would otherwise get bloated
-- `<demo>/round-XX/`: early one-off reconstruction attempts
-- `<demo>/style-*/`: broad spec-writing comparisons
-- `<demo>/overlay-*/`: targeted overlay experiments
-- `<demo>/thin-level-*/`: thinning matrix conditions
-- `<demo>/thin-repeat-*/`: repeatability checks for the thinnest successful packet
-- `spec-writing-experiments/`, `spec-overlay-experiments/`, `spec-thinning-experiments/`: cross-demo experiment summaries
+Fresh workers rebuild from:
 
-`bun run start:specs` serves any experiment folder with an `index.html`, including rounds, style variants, overlays, and thin-packet repeats.
+- `docs/`
+- one demo packet
 
-The current default packet shape lives in `docs/minimum-viable-demo-spec.md`.
-
-## Rules
-
-- Use fresh agents for each round.
-- Agents read `docs/verification.md` first.
-- Agents then read only `docs/` plus the spec.
-- Agents write tests first.
-- Agents then implement the demo.
-- The main thread compares results against the originals and records the misses.
+They must not inspect `demos/`.

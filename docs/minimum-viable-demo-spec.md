@@ -2,12 +2,8 @@
 
 Use this as the default packet for a fresh `gpt-5.4 xhigh` worker when the shared docs are already strong.
 
-The repeatability read behind this doc is:
-
-- draggable thin packet: `4/4` main-thread passes
-- photo thin packet: `4/5` main-thread passes
-
-So this is the default now.
+For the broader workflow, see `ai-demo-reconstruction.md`.
+For older packet shapes and overlays, see `spec-writing-for-demos.md`.
 
 ## Default Shape
 
@@ -78,7 +74,7 @@ Use this exact data:
 - <one browser-backed semantic scenario>
 ````
 
-## What To Keep Exact
+## Keep These Exact
 
 Keep these exact unless you have a very good reason not to:
 
@@ -87,8 +83,6 @@ Keep these exact unless you have a very good reason not to:
 - the exact browser-facing seam, e.g. `caption click selects the full text and stays in grid mode`
 - what each browser-backed scenario must prove
 
-## What To Leave Out
-
 Leave these in shared docs, not the per-demo packet:
 
 - `requestId`
@@ -96,7 +90,7 @@ Leave these in shared docs, not the per-demo packet:
 - acceptable browser transport
 - why the runner should stay dumb
 
-## When To Add One Diagram
+## Add One Diagram Only If It Helps
 
 Add a diagram only when the geometry is easy to misread in prose.
 
@@ -115,7 +109,7 @@ next layer      just released item while settling
 base layers     all remaining items
 ```
 
-## When To Add One Overlay
+## Add One Overlay Only If Needed
 
 Default: no overlay.
 
@@ -142,8 +136,3 @@ It usually does not need:
 - extra architecture hints
 - repeated browser doctrine
 - long packets explaining what the shared docs already cover
-
-One important nuance from the repeats:
-
-- photo still has a slightly smaller stability margin than draggable
-- if the dismiss-to-row seam is especially important, that is the first place to add one extra overlay or one extra browser witness

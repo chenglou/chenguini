@@ -263,7 +263,8 @@ It should not keep re-explaining:
 
 Keep that shared machinery in the docs so every new spec does not fork the repo's verification style.
 
-For how to write the demo spec itself, see `spec-writing-for-demos.md`.
+For how to run this workflow end to end, see `ai-demo-reconstruction.md`.
+For how to shape the demo packet itself, see `minimum-viable-demo-spec.md` and `spec-writing-for-demos.md`.
 
 ## What "Done" Means
 
