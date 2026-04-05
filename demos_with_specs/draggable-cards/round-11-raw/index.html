@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Draggable Cards Round 11</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        background: #ececec;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        background: #ececec;
+        color: white;
+        overflow-x: hidden;
+      }
+
+      .demo-root {
+        min-height: 100vh;
+        position: relative;
+        width: 100%;
+      }
+
+      .card {
+        align-items: center;
+        border-radius: 20px;
+        box-shadow: 0 18px 40px rgba(18, 43, 92, 0.16);
+        display: flex;
+        justify-content: center;
+        left: 0;
+        position: absolute;
+        top: 0;
+        touch-action: none;
+        user-select: none;
+        will-change: transform, opacity;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

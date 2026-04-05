@@ -4,6 +4,8 @@
   "scripts": {
     "start": "bun ./demos/*/index.html",
     "start:lan": "bun ./demos/*/index.html --host=0.0.0.0 --port=3000",
+    "start:templates": "bun ./demo_templates/*/index.html",
+    "start:templates:lan": "bun ./demo_templates/*/index.html --host=0.0.0.0 --port=3000",
     "start:specs": "bun ./demos_with_specs/*/round-*/index.html ./demos_with_specs/*/style-*/index.html ./demos_with_specs/*/overlay-*/index.html ./demos_with_specs/*/thin-level-*/index.html ./demos_with_specs/*/thin-repeat-*/index.html",
     "start:specs:lan": "bun ./demos_with_specs/*/round-*/index.html ./demos_with_specs/*/style-*/index.html ./demos_with_specs/*/overlay-*/index.html ./demos_with_specs/*/thin-level-*/index.html ./demos_with_specs/*/thin-repeat-*/index.html --host=0.0.0.0 --port=3000",
     "check": "tsgo && oxlint --type-aware demos --ignore-pattern '*.js'"

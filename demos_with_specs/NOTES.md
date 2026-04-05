@@ -447,3 +447,49 @@ Updated read:
 
 - compressed prompts helped completion reliability materially
 - this makes the earlier no-write stalls look even more like worker startup/context-loading problems rather than a hard demo/spec problem
+
+## Prompt Compression Comparison On Photo Gallery And Draggable Cards
+
+- We then reran the two older demos with fresh `gpt-5.4 xhigh` workers in a clean raw-vs-compressed A/B.
+- Results live in:
+  - `/Users/chenglou/github/vibescript/demos_with_specs/prompt-compression-experiments/RESULTS.md`
+- Each demo got:
+  - one `raw` round that read repo docs plus the current thin packet
+  - one `compressed` round that got the demo truth and a tiny verification/browser excerpt inline
+
+### Main-Thread Results
+
+- `photo-gallery/round-11-raw`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/photo-gallery/round-11-raw`
+  - pass
+- `photo-gallery/round-11-compressed`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/photo-gallery/round-11-compressed`
+  - fail at the folder level because the round introduced a Playwright-style spec file that Bun tried to load
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/photo-gallery/round-11-compressed/gallery.unit.test.ts`
+  - pass
+  - `bunx playwright test /Users/chenglou/github/vibescript/demos_with_specs/photo-gallery/round-11-compressed/browser.semantic.spec.ts --config /Users/chenglou/github/vibescript/demos_with_specs/photo-gallery/round-11-compressed/playwright.config.ts`
+  - pass
+- `draggable-cards/round-11-raw`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/draggable-cards/round-11-raw`
+  - pass
+- `draggable-cards/round-11-compressed`:
+  - `bun test /Users/chenglou/github/vibescript/demos_with_specs/draggable-cards/round-11-compressed`
+  - pass
+- `bun check`:
+  - pass
+
+### Updated Read
+
+- For demos that were already healthy under raw docs plus thin spec, compression did not buy a pass-rate improvement.
+- Raw packets stayed closer to the repo's preferred Bun-native verification shape.
+- The photo compressed round is the useful warning:
+  - the worker mostly landed the product truth
+  - but it drifted into Playwright and a round-local config
+  - so the compression preserved semantics better than it preserved repo-local toolchain constraints
+- Draggable stayed aligned under both formats, so compression was not harmful there. It just was not clearly better either.
+- Current read:
+  - keep raw docs plus thin spec as the default for demos that already reconstruct well
+  - keep compressed packets as a rescue lever for harder demos like `life-calendar`
+  - if we compress, keep the delivery constraint explicit too, e.g. stay on `bun test` and the page-owned semantic report path unless the experiment is specifically about another harness
+
+**NEW PATTERN DETECTED**: prompt compression and pattern compression are not the same thing. A compressed packet can preserve product truth while quietly dropping repo-preferred delivery constraints.

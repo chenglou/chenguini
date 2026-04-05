@@ -1,9 +1,9 @@
 import {
-  measureInlineFlow,
-  prepareInlineFlow,
-  walkInlineFlowLines,
-  type PreparedInlineFlow,
-} from '../../../pretext/src/inline-flow'
+  measureRichInline,
+  prepareRichInline,
+  walkRichInlineLines,
+  type PreparedRichInline,
+} from '../../../pretext/src/rich-inline'
 import {
   layout,
   layoutWithLines,
@@ -22,7 +22,7 @@ export const COMMENT_ITALIC_FONT = 'italic 12px Verdana, Geneva, sans-serif'
 export const COMMENT_CODE_FONT = '12px monospace'
 
 type PreparedCommentBlock =
-  | {kind: 'paragraph'; flow: PreparedInlineFlow; runs: HNRun[]}
+  | {kind: 'paragraph'; flow: PreparedRichInline; runs: HNRun[]}
   | {kind: 'codeBlock'; prepared: PreparedTextWithSegments}
 
 export type PreparedHNCommentDoc = {
@@ -87,7 +87,7 @@ export function measureHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: number)
 
     switch (block.kind) {
       case 'paragraph':
-        height += measureInlineFlow(block.flow, maxWidth, COMMENT_LINE_HEIGHT).height
+        height += measureRichInline(block.flow, maxWidth, COMMENT_LINE_HEIGHT).height
         break
 
       case 'codeBlock':
@@ -111,7 +111,7 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
     switch (block.kind) {
       case 'paragraph': {
         const lines: HNCommentLayoutLine[] = []
-        const lineCount = walkInlineFlowLines(block.flow, safeWidth, line => {
+        const lineCount = walkRichInlineLines(block.flow, safeWidth, line => {
           const fragments = line.fragments.map(fragment => ({
             gapBefore: fragment.gapBefore,
             kind: block.runs[fragment.itemIndex]!.kind,
@@ -152,8 +152,8 @@ export function layoutHNCommentDoc(doc: HNCommentDoc, maxWidth: number): HNComme
   return layoutPreparedHNCommentDoc(prepareHNCommentDoc(doc), maxWidth)
 }
 
-function prepareParagraphFlow(runs: HNRun[]): PreparedInlineFlow {
-  return prepareInlineFlow(
+function prepareParagraphFlow(runs: HNRun[]): PreparedRichInline {
+  return prepareRichInline(
     runs.map(run => ({
       text: run.text,
       font: run.kind === 'italic' ? COMMENT_ITALIC_FONT : COMMENT_BODY_FONT,
