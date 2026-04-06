@@ -17,7 +17,7 @@
 - (Not a bug, just a warning) when scrolling, a container's `pointermove`/`touchmove`/`mousemove` obviously don't always trigger; some stored `event.offsetX/Y` (coordinates local to container) would be stale
 - pointer values can exceed document bounds, thus have legal negative values
 - On page load, there's no way to render a first cursor state.
-- Font size on inputs must be >= 16px, otherwise iOS Safari auto-zooms the viewport on focus
+- Font size on inputs must be >= 16px, otherwise iOS Safari auto-zooms the viewport on focus. To have smaller input without the zoom, you can set it at 16px then scale down with CSS
 
 ## Timing
 
