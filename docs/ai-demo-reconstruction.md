@@ -6,7 +6,7 @@ The short version is:
 
 - docs are the doctrine
 - one thin demo packet carries the exact product truth
-- `demo_templates/` is the architecture surface
+- `drafts/demo_templates/` is the architecture surface
 - extra prompt guidance is optional and mostly affects shape, not correctness
 
 For the exact default packet, see `minimum-viable-demo-spec.md`.
@@ -19,7 +19,7 @@ Use each layer for a different job:
 - `docs/verification.md`: what counts as a trustworthy oracle
 - `docs/ai-automating-browsers.md`: how the browser runner should work
 - one demo packet: exact numbers, fragile seams, required scenarios
-- `demo_templates/`: concrete code shape when a worker should copy and trim instead of improvising
+- `drafts/demo_templates/`: concrete code shape when a worker should copy and trim instead of improvising
 
 That split held up better than either extreme:
 
@@ -69,8 +69,8 @@ Templates are useful, but the current evidence says they mainly help architectur
 
 Current templates:
 
-- `demo_templates/reference-app`
-- `demo_templates/gesture-stack`
+- `drafts/demo_templates/reference-app`
+- `drafts/demo_templates/gesture-stack`
 
 Current read:
 
@@ -142,9 +142,9 @@ What still feels narrower:
 
 ## Where The Research Lives
 
-For the current research summary, see `demos_with_specs/NOTES.md`.
+For the current research summary, see `drafts/demos_with_specs/NOTES.md`.
 
 For the full chronology, including early misses and dead ends, see:
 
-- `demos_with_specs/NOTES_ARCHIVE.md`
-- `demos_with_specs/*/RESULTS.md`
+- `drafts/demos_with_specs/NOTES_ARCHIVE.md`
+- `drafts/demos_with_specs/*/RESULTS.md`
