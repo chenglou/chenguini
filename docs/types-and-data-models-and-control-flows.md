@@ -9,6 +9,10 @@ Parse and normalize early but don't _interpret_ too early. Interpret data at a n
 Strings are the `any` of data. If you're parsing, splitting, or regex-matching a string repeatedly, it should have been a structured type upstream. If there's already such data type and you're still forced to use the original unparsed string, then that data type was modeled too tightly and lost necessary info. Fix that instead
 Careful making a composite key through string concat of parts (e.g. `` `${id}-${index}` `` as a Set key). In a hot loop this allocates a string per lookup
 
+Two systems want different data representations. Expect data shape pressure at those boundaries. A text layout helper, canvas renderer, or search index may want data grouped, flattened, indexed, or split differently than your app does. As much as you can, own your data shapes and be very careful delegating those to a library.
+
+A good helper should create _local_, not global, shape pressure. Quick design test: if you removed the helper tomorrow, would you only delete one adapter, or would you have to remodel your app state and control flow? If only the adapter breaks, the helper fits. If the whole app now has to carry the helper's shape around, the API is too prescriptive.
+
 Guideline for typing potentially nullable string:
 
 - If the nullable string has no valid `''` state (e.g. mandatory non-empty username), model it as `string | null`
