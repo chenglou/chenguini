@@ -1,4 +1,3 @@
-- dictate st and domcache by making a skeleton
 - Actually describe vibeui and do a pass over the demos to make sure they respect it
 - fuse docs maybe?
 - bring over a proper claude.md
@@ -21,7 +20,4 @@
 - Safari
   - CSS for Drag section: recheck overflow: hidden vs clip
   - redo Safari Scroll Container Quirk and overflow-x section
-  - put DOM Reads in layout maybe
-  - Event Consumption should prolly just be baked into the scheduleRender skeleton
-  - rewrite render loop doc
   - redo input Pointer Coordinates section
