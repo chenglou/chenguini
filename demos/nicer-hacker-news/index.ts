@@ -155,6 +155,7 @@ const st = {
     clicked: false,
     copied: false, // browser copy event
   },
+  pointerDownStartTarget: null as EventTarget | null,
   pointerDownTarget: 'whateverElse' as 'whateverElse' | Element | 'text',
   commentsScrollTopPrevious: 0,
   commentsScrollDeltaPrevious: 0,
@@ -175,14 +176,17 @@ const reusedRange = document.createRange() // reuse a single range. Creating man
 window.addEventListener('resize', () => { scheduleRender() })
 window.addEventListener('mouseup', () => { // can't use pointerup, which isn't triggered when pointer panned
   st.inputs.pointerState = 'up'
+  st.pointerDownStartTarget = null
   scheduleRender()
 })
 window.addEventListener('touchend', () => {
   st.inputs.pointerState = 'up'
+  st.pointerDownStartTarget = null
   scheduleRender()
 })
 window.addEventListener('touchcancel', () => {
   st.inputs.pointerState = 'up'
+  st.pointerDownStartTarget = null
   scheduleRender()
 })
 window.addEventListener('click', () => {
@@ -201,6 +205,7 @@ window.addEventListener('copy', (e) => {
 })
 window.addEventListener('contextmenu', () => {
   st.inputs.pointerState = 'up'
+  st.pointerDownStartTarget = null
   scheduleRender()
 })
 window.addEventListener('scroll', () => { scheduleRender() }, true)
@@ -216,6 +221,7 @@ window.addEventListener('pointerdown', (e) => {
   st.inputs.pointerState = 'firstDown'
   // also update position. Maybe pointer never moved (page refresh, right click, move, then left click to dismiss, etc.)
   st.inputs.pointerXY.pageX = e.pageX; st.inputs.pointerXY.pageY = e.pageY
+  st.pointerDownStartTarget = e.target
   scheduleRender()
 })
 window.addEventListener('input', () => { scheduleRender() })
@@ -343,6 +349,10 @@ function render() {
       rowTop += height
     }
   }
+  const pointerDownStartedOnScroller =
+    st.inputs.pointerState !== 'up' &&
+    st.pointerDownStartTarget === threadView.commentsScroller
+  if (pointerDownStartedOnScroller) pointer = {on: null}
 
   // animation state changes
   for (let i = 0; i < data.length; i++) {
