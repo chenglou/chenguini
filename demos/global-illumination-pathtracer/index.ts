@@ -129,15 +129,12 @@ const diprog = make_fullscreen_program(`
   precision mediump float;
   uniform vec2 canvasSize;
   uniform vec2 cursorPosition;
-  uniform vec2 noiseOffset;
   in vec2 vuv;
   uniform sampler2D minimapTexture;
-  uniform sampler2D bluenoiseTexture;
   uniform sampler2D lightTexture;
   out vec4 color;
   void main() {
     vec2 o = vuv * canvasSize;
-    vec4 noise = textureLod(bluenoiseTexture, o * (1./512.) + noiseOffset, 0.);
     o.y = canvasSize.y - o.y;
     vec2 sc = 1. / canvasSize;
     vec2 vec2light = o - cursorPosition;
@@ -224,6 +221,7 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+gl.clearColor(0., 0., 0., 1.0)
 
 const minimap = document.createElement('canvas')
 const minimap2d = minimap.getContext('2d')!
@@ -324,18 +322,14 @@ function resizeCanvas() {
 
   const fbo = gl.createFramebuffer()!
   gl.useProgram(mipblurprog)
-  const csl = gl.getUniformLocation(mipblurprog, 'canvasSize')
-  const mtl = gl.getUniformLocation(mipblurprog, 'minimapTexture')
-  const mll = gl.getUniformLocation(mipblurprog, 'minimapLevel')
   for (let mip = 1; mip <= maxmip; ++mip) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, extraTexture, 0)
     const mipwidth = (minimap.width >> mip) || 1
     const mipheight = (minimap.height >> mip) || 1
     gl.viewport(0, 0, mipwidth, mipheight)
-    gl.uniform2f(csl, mipwidth, mipheight)
-    gl.uniform1i(mtl, 0)
-    gl.uniform1i(mll, mip - 1)
+    gl.uniform2f(mipblurCanvasSizeLocation, mipwidth, mipheight)
+    gl.uniform1i(mipblurLevelLocation, mip - 1)
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
     gl.drawArrays(gl.TRIANGLES, 0, 6)
@@ -344,6 +338,12 @@ function resizeCanvas() {
     gl.copyTexSubImage2D(gl.TEXTURE_2D, mip, 0, 0, 0, 0, mipwidth, mipheight)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   }
+
+  gl.useProgram(prog)
+  gl.uniform2f(canvasSizeLocation, canvas.width, canvas.height)
+  gl.useProgram(diprog)
+  gl.uniform2f(dicanvasSizeLocation, canvas.width, canvas.height)
+
   animate()
 }
 
@@ -361,9 +361,32 @@ const noiseOffsetLocation = gl.getUniformLocation(prog, 'noiseOffset')
 const dicanvasSizeLocation = gl.getUniformLocation(diprog, 'canvasSize')
 const dicursorPositionLocation = gl.getUniformLocation(diprog, 'cursorPosition')
 const diminimapTextureLocation = gl.getUniformLocation(diprog, 'minimapTexture')
-const dibluenoiseTextureLocation = gl.getUniformLocation(diprog, 'bluenoiseTexture')
 const dilightTextureLocation = gl.getUniformLocation(diprog, 'lightTexture')
-const dinoiseOffsetLocation = gl.getUniformLocation(diprog, 'noiseOffset')
+
+// Uniform locations for final composite
+const giTextureLocation = gl.getUniformLocation(finalcompprog, 'giTexture')
+const diTextureLocation = gl.getUniformLocation(finalcompprog, 'diTexture')
+
+// Uniform locations for mip blur
+const mipblurCanvasSizeLocation = gl.getUniformLocation(mipblurprog, 'canvasSize')
+const mipblurTextureLocation = gl.getUniformLocation(mipblurprog, 'minimapTexture')
+const mipblurLevelLocation = gl.getUniformLocation(mipblurprog, 'minimapLevel')
+
+gl.useProgram(mipblurprog)
+gl.uniform1i(mipblurTextureLocation, 0)
+
+gl.useProgram(prog)
+gl.uniform1i(minimapTextureLocation, 0)
+gl.uniform1i(bluenoiseTextureLocation, 1)
+gl.uniform1i(lightTextureLocation, 2)
+
+gl.useProgram(diprog)
+gl.uniform1i(diminimapTextureLocation, 0)
+gl.uniform1i(dilightTextureLocation, 2)
+
+gl.useProgram(finalcompprog)
+gl.uniform1i(diTextureLocation, 0)
+gl.uniform1i(giTextureLocation, 1)
 
 // R2 quasi-random sequence for well-distributed temporal samples
 let frameCount = 0
@@ -374,8 +397,6 @@ function animate() {
   if (needclear < 0) return
   frameCount++
 
-  gl.clearColor(0., 0., 0., 1.0)
-
   const noiseX = (0.5 + R2_A1 * frameCount) % 1.0
   const noiseY = (0.5 + R2_A2 * frameCount) % 1.0
 
@@ -385,11 +406,7 @@ function animate() {
   if (needclear !== 0) gl.clear(gl.COLOR_BUFFER_BIT)
   gl.useProgram(prog)
   gl.uniform2f(noiseOffsetLocation, noiseX, noiseY)
-  gl.uniform2f(canvasSizeLocation, canvas.width, canvas.height)
   gl.uniform2f(cursorPositionLocation, cursorPosition.x * canvasres, cursorPosition.y * canvasres)
-  gl.uniform1i(minimapTextureLocation, 0)
-  gl.uniform1i(bluenoiseTextureLocation, 1)
-  gl.uniform1i(lightTextureLocation, 2)
   gl.activeTexture(gl.TEXTURE2)
   gl.bindTexture(gl.TEXTURE_2D, ditexture)
   gl.activeTexture(gl.TEXTURE1)
@@ -407,16 +424,9 @@ function animate() {
   gl.viewport(0, 0, canvas.width, canvas.height)
   if (needclear !== 0) gl.clear(gl.COLOR_BUFFER_BIT)
   gl.useProgram(diprog)
-  gl.uniform2f(dinoiseOffsetLocation, noiseX + 0.5, noiseY + 0.5)
-  gl.uniform2f(dicanvasSizeLocation, canvas.width, canvas.height)
   gl.uniform2f(dicursorPositionLocation, cursorPosition.x * canvasres, cursorPosition.y * canvasres)
-  gl.uniform1i(diminimapTextureLocation, 0)
-  gl.uniform1i(dibluenoiseTextureLocation, 1)
-  gl.uniform1i(dilightTextureLocation, 2)
   gl.activeTexture(gl.TEXTURE2)
   gl.bindTexture(gl.TEXTURE_2D, gitexture)
-  gl.activeTexture(gl.TEXTURE1)
-  gl.bindTexture(gl.TEXTURE_2D, bluenoise)
   gl.activeTexture(gl.TEXTURE0)
   gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
   gl.drawArrays(gl.TRIANGLES, 0, 6)
@@ -426,10 +436,6 @@ function animate() {
   gl.viewport(0, 0, canvas.width, canvas.height)
   if (needclear !== 0) gl.clear(gl.COLOR_BUFFER_BIT)
   gl.useProgram(finalcompprog)
-  const giTextureLocation = gl.getUniformLocation(finalcompprog, 'giTexture')
-  gl.uniform1i(giTextureLocation, 1)
-  const diTextureLocation = gl.getUniformLocation(finalcompprog, 'diTexture')
-  gl.uniform1i(diTextureLocation, 0)
   gl.activeTexture(gl.TEXTURE0)
   gl.bindTexture(gl.TEXTURE_2D, ditexture)
   gl.activeTexture(gl.TEXTURE1)
