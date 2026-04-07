@@ -75,6 +75,20 @@ Examples of good browser-backed checks:
 
 Pure tests are great for policy and math. Browser checks are great for "what does a real opened demo do?"
 
+## Internal Invariants Want Pure Tests
+
+If the bug is "our line boundary bookkeeping skipped text", don't wait for a browser canary to stumble into it.
+
+Add a tiny pure test for the invariant itself.
+
+Examples:
+
+- joining all reported line slices should recover the original normalized text
+- walking lines one by one should produce the same line count as the batch layout path
+- splitting one rich inline run into equivalent adjacent runs should not change the fragment sequence
+
+Then keep the browser check focused on the user-visible seam, e.g. height, selected text, or visible item ids.
+
 ## Assert The Fragile Seam Directly
 
 If the bug hides in one tiny interaction, assert that interaction directly.
@@ -110,6 +124,37 @@ Bad:
 A good semantic snapshot is small, readable, and obviously tied to user-visible behavior.
 
 Also add at least one sensitivity check. Change one meaningful input and make sure the snapshot changes too. Otherwise the snapshot may just be too weak.
+
+If the snapshot is meant to be consulted by machines, check in the machine-readable file directly.
+
+Good:
+
+- `chrome-step10.json`
+- `status/dashboard.json`
+- one compact per-scenario report
+
+Bad:
+
+- hand-copied markdown tables
+- prose counts that can drift from the real sweep
+
+If you still want a human summary, derive it from the checked-in JSON. Don't make humans keep two truths aligned by hand.
+
+## Batch The Cheap Homogeneous Cases
+
+If the cases only differ by one boring dimension such as width, locale, or one seeded scenario id, batch them inside one opened page.
+
+Good:
+
+- one corpus page load that measures widths `300..900 step=10`
+- one note-layout page load that reports visible row ranges for several fixed scroll positions
+
+Bad:
+
+- relaunching the browser for every width
+- rebuilding the same text state 61 times just to collect 61 heights
+
+Keep the batch homogeneous. If the shape of the work changes, start a new page run.
 
 ## Model Geometry Must Match Render Geometry
 
@@ -217,6 +262,28 @@ Bad:
 - "mixed-script boundaries, arbitrary rechunking, and different inline policies should match a plain-text path exactly"
 
 If a differential oracle keeps failing for honest cases, narrow it until it becomes true.
+
+## Switch Verifiers By Mechanical Diff
+
+If you want to replace one verifier transport or browser driver with another, prove they agree before switching.
+
+Good:
+
+- generate a temporary Chrome corpus sweep JSON with Playwright
+- mechanically diff it against the checked-in Chrome sweep JSON
+- only switch once the diff is empty
+
+Bad:
+
+- "the numbers seem close"
+- eyeballing a few rows
+- silently writing a new baseline just because the transport changed
+
+This is especially important when swapping:
+
+- headed vs headless browser modes
+- AppleScript vs Playwright vs CDP
+- one snapshot format vs another
 
 ## Timeout Budget Is Part Of The Verifier
 

@@ -5,7 +5,7 @@ When AI automates a browser, the page should own the answer.
 The runner should mostly:
 
 - start a deterministic local server
-- open one browser run for one scenario
+- open one browser run for one scenario or one homogeneous batch
 - navigate to `?scenario=...&requestId=...`
 - wait for one machine-readable report
 - read it back
@@ -19,9 +19,9 @@ This is the boring shape we want by default:
 
 1. Start a deterministic local server.
 2. Pick a loopback host that actually responds.
-3. Open one browser target for one scenario.
-4. Pass `scenario` and a unique `requestId` in the URL.
-5. Let the page run the scenario.
+3. Open one browser target for one scenario or one homogeneous batch.
+4. Pass the scenario inputs and a unique `requestId` in the URL.
+5. Let the page run the scenario or batch.
 6. Let the page publish a compact report with phase markers.
 7. Wait for the matching `requestId` to reach `phase: 'ready'`.
 8. Close the browser target and server.
@@ -32,7 +32,7 @@ Keep the scenario in the page. Keep transport in the runner.
 
 The page should:
 
-- read `scenario`
+- read `scenario` or another compact input like `widths=300,310,320`
 - read `requestId`
 - run the scripted flow
 - compute the semantic result
@@ -55,10 +55,11 @@ type Report = {
 
 Good channels:
 
-- `location.hash` when the runner can read live page state
-- a hidden `<script type="application/json">` when a one-shot dump is simpler
+- `location.hash` for small live reports
+- a local POST endpoint for large batched reports
+- one in-page debug object if a richer protocol runner wants to read page state directly
 
-Pick one stable place. Don't scatter the same truth across the DOM, console logs, and random globals.
+Keep one source of truth for the report object. It can have more than one transport, but don't make the transports disagree.
 
 ## `requestId`
 
@@ -95,6 +96,8 @@ This makes hangs much easier to read:
 - started but got stuck
 - finished with an explicit failure
 
+If the page has a real transport step, say posting a large report back to the runner, add one more specific phase such as `posting`.
+
 ## What The Runner Owns
 
 The runner can do transport work such as:
@@ -102,6 +105,7 @@ The runner can do transport work such as:
 - start the server
 - open the browser
 - poll `location.hash`
+- wait for one POSTed report
 - read one report node
 - take a screenshot for debugging
 
@@ -114,7 +118,7 @@ It should not:
 
 The runner should feel dumb on purpose.
 
-## One Scenario Run, One Browser Run
+## One Page Run, One Browser Run
 
 Keep the page alive while the runner waits.
 
@@ -123,11 +127,23 @@ If you use `--dump-dom`, start one Chrome process for that scenario, wait for th
 If you use CDP or Playwright, same idea:
 
 - open one browser process
-- open one target for that scenario
+- open one target for that scenario or homogeneous batch
 - wait for the final report
 - close it
 
 Don't relaunch Chrome inside a polling loop. Don't keep starting fresh tabs just to ask the page whether it is done yet.
+
+If you need many cheap subcases, batch them in the page instead of in the runner.
+
+Good:
+
+- one corpus page load that measures widths `300..900 step=10`
+- one gallery page load that reports visible item ids for a few fixed scroll positions
+
+Bad:
+
+- 61 separate browser navigations for 61 widths
+- a runner loop that keeps refreshing the same page just to collect one more row
 
 ## Tiny CDP Poller Is Fine
 
@@ -143,6 +159,29 @@ That can be as small as:
 This is still the same pattern. CDP is just transport.
 
 Playwright is fine when you really need richer browser control. It is not the default just because it is familiar.
+
+## Headless Is A Different Environment Until Proven Otherwise
+
+Don't assume headed and headless are equivalent just because they use the same browser binary.
+
+If you want to switch a checked-in correctness sweep from headed Chrome to headless Chrome:
+
+- pin the headless screen environment explicitly
+- generate the full machine-readable report
+- mechanically diff it against the trusted snapshot
+
+If the diff is not empty, the answer is "not equivalent yet", not "close enough".
+
+Good:
+
+- `--screen-info={3024x1964 devicePixelRatio=2}` with a matching Playwright context
+- a zero-diff compare against the trusted Chrome sweep JSON
+
+Bad:
+
+- "same Chrome version, so it must match"
+- silently rerunning headed after headless disagrees
+- updating the baseline before proving parity
 
 ## Deterministic Servers
 
@@ -186,13 +225,33 @@ Correctness runs:
 
 - are mostly about whether the semantic report is right
 - are fine with a minimal dumb runner
+- are often great candidates for in-page batching
 
 Benchmark runs:
 
 - care about focus, throttling, and `requestAnimationFrame`
 - should not trust numbers from a background tab
+- should not casually switch browser driver or browser mode without a fresh benchmark baseline
 
 Don't mix those goals by accident.
+
+## Fail Loudly On Drift
+
+Don't hide transport drift or environment drift with silent fallbacks.
+
+Bad:
+
+- if Playwright headless disagrees, quietly rerun headed
+- if a POST report never arrives, pretend the hash report was good enough
+- if Safari times out, mark the run green because Chrome matched
+
+Good:
+
+- fail if the `requestId` never comes back
+- fail if the page never leaves `loading`
+- fail if the page gets stuck at `posting`
+- fail if the pinned headless width or DPR does not match what the page sees
+- fail in compare mode if the new runner's JSON differs from the trusted snapshot
 
 ## Common Automation Artifacts
 
@@ -240,4 +299,20 @@ await openChrome(url)
 
 const report = await waitForMatchingReadyReport(requestId)
 expect(report.selectedText).toBe(expectedPrompt)
+```
+
+Large batched report:
+
+```ts
+const requestId = crypto.randomUUID()
+const reportServer = await startPostedReportServer(requestId)
+const url =
+  `${baseUrl}?widths=${encodeURIComponent('300,310,320')}` +
+  `&requestId=${encodeURIComponent(requestId)}` +
+  `&reportEndpoint=${encodeURIComponent(reportServer.endpoint)}`
+
+await openChrome(url)
+
+const report = await reportServer.waitForReport()
+expect(report.rows).toHaveLength(3)
 ```
