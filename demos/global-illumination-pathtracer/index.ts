@@ -236,29 +236,63 @@ divs.forEach(function(div) {
     loadcount++
     const img = new Image()
     img.crossOrigin = 'anonymous'
-    img.src = bg.slice(4, -1).replace(/['"]/g, '')
     img.onload = function() {
       images[bg] = img
       loadcount--
       if (loadcount === 0) resizeCanvas()
     }
+    img.onerror = function() {
+      loadcount--
+      if (loadcount === 0) resizeCanvas()
+    }
+    img.src = bg.slice(4, -1).replace(/['"]/g, '')
   }
 })
 
 const minimapTexture = gl.createTexture()!
 const cursorPosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+const maxAccumulationFrames = 48
+let accumulatedFrames = 0
+let scheduledRaf: number | null = null
+// If this demo starts moving boxes around, keep it true while they move.
+let sceneIsAnimating = false
+
+function scheduleRender() {
+  if (scheduledRaf != null) return
+  scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender() {
+    scheduledRaf = null
+    if (animate()) scheduleRender()
+  })
+}
+
+function scheduleRefinement() {
+  if (needclear < 0) return
+  accumulatedFrames = 0
+  scheduleRender()
+}
+
+function invalidateScene() {
+  if (needclear < 0) return
+  needclear = 1
+  scheduleRefinement()
+}
+
+function updateCursorPosition(x: number, y: number) {
+  if (cursorPosition.x === x && cursorPosition.y === y) return
+  cursorPosition.x = x
+  cursorPosition.y = y
+  scheduleRefinement()
+}
 
 window.addEventListener('mousemove', function(event) {
-  cursorPosition.x = event.clientX
-  cursorPosition.y = event.clientY
+  updateCursorPosition(event.clientX, event.clientY)
 })
 
 function ontouch(event: TouchEvent) {
   event.preventDefault()
   const touch = event.touches[0] ?? event.changedTouches[0]
   if (touch == null) return
-  cursorPosition.x = touch.clientX
-  cursorPosition.y = touch.clientY
+  updateCursorPosition(touch.clientX, touch.clientY)
 }
 document.documentElement.style.touchAction = 'none'
 window.addEventListener('touchstart', ontouch)
@@ -269,26 +303,7 @@ window.addEventListener('touchmove', ontouch)
 let needclear = -1
 const canvasres = 1.
 
-function resizeCanvas() {
-  needclear = 1
-  const devicePixelRatio = canvasres
-  canvas.width = window.innerWidth * devicePixelRatio
-  canvas.height = window.innerHeight * devicePixelRatio
-  canvas.style.width = window.innerWidth + 'px'
-  canvas.style.height = window.innerHeight + 'px'
-
-  gl.bindFramebuffer(gl.FRAMEBUFFER, gifbo)
-  gl.bindTexture(gl.TEXTURE_2D, gitexture)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, canvas.width, canvas.height, 0, gl.RGBA, gl.HALF_FLOAT, null)
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gitexture, 0)
-
-  gl.bindFramebuffer(gl.FRAMEBUFFER, difbo)
-  gl.bindTexture(gl.TEXTURE_2D, ditexture)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, canvas.width, canvas.height, 0, gl.RGBA, gl.HALF_FLOAT, null)
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, ditexture, 0)
-
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
+function redrawMinimap() {
   minimap.width = window.innerWidth * scale
   minimap.height = window.innerHeight * scale
   minimap2d.clearRect(0, 0, minimap.width, minimap.height)
@@ -338,13 +353,38 @@ function resizeCanvas() {
     gl.copyTexSubImage2D(gl.TEXTURE_2D, mip, 0, 0, 0, 0, mipwidth, mipheight)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   }
+}
 
+function refreshScene() {
+  redrawMinimap()
+  invalidateScene()
+}
+
+function resizeCanvas() {
+  needclear = 1
+  const devicePixelRatio = canvasres
+  canvas.width = window.innerWidth * devicePixelRatio
+  canvas.height = window.innerHeight * devicePixelRatio
+  canvas.style.width = window.innerWidth + 'px'
+  canvas.style.height = window.innerHeight + 'px'
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gifbo)
+  gl.bindTexture(gl.TEXTURE_2D, gitexture)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, canvas.width, canvas.height, 0, gl.RGBA, gl.HALF_FLOAT, null)
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gitexture, 0)
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, difbo)
+  gl.bindTexture(gl.TEXTURE_2D, ditexture)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, canvas.width, canvas.height, 0, gl.RGBA, gl.HALF_FLOAT, null)
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, ditexture, 0)
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   gl.useProgram(prog)
   gl.uniform2f(canvasSizeLocation, canvas.width, canvas.height)
   gl.useProgram(diprog)
   gl.uniform2f(dicanvasSizeLocation, canvas.width, canvas.height)
 
-  animate()
+  refreshScene()
 }
 
 window.addEventListener('resize', resizeCanvas, false)
@@ -394,7 +434,10 @@ const R2_A1 = 0.7548776662466927 // 1 / plastic constant
 const R2_A2 = 0.5698402909980532 // 1 / plastic constant^2
 
 function animate() {
-  if (needclear < 0) return
+  if (needclear < 0) return false
+  if (sceneIsAnimating) redrawMinimap()
+  if (sceneIsAnimating) accumulatedFrames = 0
+  if (sceneIsAnimating) needclear = 1
   frameCount++
 
   const noiseX = (0.5 + R2_A1 * frameCount) % 1.0
@@ -442,8 +485,9 @@ function animate() {
   gl.bindTexture(gl.TEXTURE_2D, gitexture)
   gl.drawArrays(gl.TRIANGLES, 0, 6)
 
+  accumulatedFrames += 1
   needclear = 0
-  requestAnimationFrame(animate)
+  return accumulatedFrames < maxAccumulationFrames
 }
 
 if (loadcount === 0) resizeCanvas()
