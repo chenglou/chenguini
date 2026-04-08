@@ -124,6 +124,47 @@ const mipblurprog = make_fullscreen_program(`
   }
 `)
 
+// GI denoise: small edge-aware blur to calm stochastic speckle
+const gidenoiseprog = make_fullscreen_program(`
+  precision mediump float;
+  uniform vec2 canvasSize;
+  uniform sampler2D giTexture;
+  uniform sampler2D minimapTexture;
+  in vec2 vuv;
+  out vec4 color;
+
+  float occupancyAt(vec2 uv) {
+    return textureLod(minimapTexture, vec2(uv.x, 1. - uv.y), 0.).w;
+  }
+
+  void addTap(inout vec3 sum, inout float weightSum, vec2 uv, float baseWeight, float centerOcc, vec3 centerColor) {
+    vec3 tapColor = textureLod(giTexture, uv, 0.).xyz;
+    float tapOcc = occupancyAt(uv);
+    float edgeWeight = max(0., 1. - abs(tapOcc - centerOcc) * 8.);
+    float colorWeight = 1. / (1. + length(tapColor - centerColor) * 6.);
+    float weight = baseWeight * edgeWeight * colorWeight;
+    sum += tapColor * weight;
+    weightSum += weight;
+  }
+
+  void main() {
+    vec2 px = 1. / canvasSize;
+    vec3 centerColor = textureLod(giTexture, vuv, 0.).xyz;
+    float centerOcc = occupancyAt(vuv);
+    vec3 sum = centerColor * 4.;
+    float weightSum = 4.;
+    addTap(sum, weightSum, vuv + vec2( px.x, 0.), 1.2, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x, 0.), 1.2, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(0.,  px.y), 1.2, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(0., -px.y), 1.2, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2( px.x,  px.y), 0.75, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x,  px.y), 0.75, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2( px.x, -px.y), 0.75, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x, -px.y), 0.75, centerOcc, centerColor);
+    color = vec4(sum / weightSum, 1.);
+  }
+`)
+
 // Direct illumination: trace toward cursor light
 const diprog = make_fullscreen_program(`
   precision mediump float;
@@ -215,6 +256,14 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
+const gidenoisefbo = gl.createFramebuffer()!
+const gidenoisetexture = gl.createTexture()!
+gl.bindTexture(gl.TEXTURE_2D, gidenoisetexture)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
 const difbo = gl.createFramebuffer()!
 const ditexture = gl.createTexture()!
 gl.bindTexture(gl.TEXTURE_2D, ditexture)
@@ -289,7 +338,7 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
 const cursorPosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
 const maxAccumulationFrames = 48
-const settleDelayMs = 120
+const settleDelayMs = 80
 let refinementFrames = 0
 let scheduledRaf: number | null = null
 // If this demo starts moving boxes around, keep it true while they move.
@@ -415,6 +464,11 @@ function resizeCanvas() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, canvas.width, canvas.height, 0, gl.RGBA, gl.HALF_FLOAT, null)
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gitexture, 0)
 
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gidenoisefbo)
+  gl.bindTexture(gl.TEXTURE_2D, gidenoisetexture)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, canvas.width, canvas.height, 0, gl.RGBA, gl.HALF_FLOAT, null)
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gidenoisetexture, 0)
+
   gl.bindFramebuffer(gl.FRAMEBUFFER, difbo)
   gl.bindTexture(gl.TEXTURE_2D, ditexture)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, canvas.width, canvas.height, 0, gl.RGBA, gl.HALF_FLOAT, null)
@@ -446,6 +500,11 @@ const dicursorPositionLocation = gl.getUniformLocation(diprog, 'cursorPosition')
 const diminimapTextureLocation = gl.getUniformLocation(diprog, 'minimapTexture')
 const dilightTextureLocation = gl.getUniformLocation(diprog, 'lightTexture')
 
+// Uniform locations for GI denoise pass
+const gidenoiseCanvasSizeLocation = gl.getUniformLocation(gidenoiseprog, 'canvasSize')
+const gidenoiseGiTextureLocation = gl.getUniformLocation(gidenoiseprog, 'giTexture')
+const gidenoiseMinimapTextureLocation = gl.getUniformLocation(gidenoiseprog, 'minimapTexture')
+
 // Uniform locations for final composite
 const giTextureLocation = gl.getUniformLocation(finalcompprog, 'giTexture')
 const diTextureLocation = gl.getUniformLocation(finalcompprog, 'diTexture')
@@ -466,6 +525,10 @@ gl.uniform1i(lightTextureLocation, 2)
 gl.useProgram(diprog)
 gl.uniform1i(diminimapTextureLocation, 0)
 gl.uniform1i(dilightTextureLocation, 2)
+
+gl.useProgram(gidenoiseprog)
+gl.uniform1i(gidenoiseMinimapTextureLocation, 0)
+gl.uniform1i(gidenoiseGiTextureLocation, 1)
 
 gl.useProgram(finalcompprog)
 gl.uniform1i(diTextureLocation, 0)
@@ -516,6 +579,18 @@ function animate(now: number) {
   gl.drawArrays(gl.TRIANGLES, 0, 6)
   gl.disable(gl.BLEND)
 
+  // GI denoise pass
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gidenoisefbo)
+  gl.viewport(0, 0, canvas.width, canvas.height)
+  if (needclear !== 0) gl.clear(gl.COLOR_BUFFER_BIT)
+  gl.useProgram(gidenoiseprog)
+  gl.uniform2f(gidenoiseCanvasSizeLocation, canvas.width, canvas.height)
+  gl.activeTexture(gl.TEXTURE1)
+  gl.bindTexture(gl.TEXTURE_2D, gitexture)
+  gl.activeTexture(gl.TEXTURE0)
+  gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
+  gl.drawArrays(gl.TRIANGLES, 0, 6)
+
   // Direct illumination pass
   gl.bindFramebuffer(gl.FRAMEBUFFER, difbo)
   gl.viewport(0, 0, canvas.width, canvas.height)
@@ -523,7 +598,7 @@ function animate(now: number) {
   gl.useProgram(diprog)
   gl.uniform2f(dicursorPositionLocation, cursorPosition.x * canvasres, cursorPosition.y * canvasres)
   gl.activeTexture(gl.TEXTURE2)
-  gl.bindTexture(gl.TEXTURE_2D, gitexture)
+  gl.bindTexture(gl.TEXTURE_2D, gidenoisetexture)
   gl.activeTexture(gl.TEXTURE0)
   gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
   gl.drawArrays(gl.TRIANGLES, 0, 6)
@@ -536,7 +611,7 @@ function animate(now: number) {
   gl.activeTexture(gl.TEXTURE0)
   gl.bindTexture(gl.TEXTURE_2D, ditexture)
   gl.activeTexture(gl.TEXTURE1)
-  gl.bindTexture(gl.TEXTURE_2D, gitexture)
+  gl.bindTexture(gl.TEXTURE_2D, gidenoisetexture)
   gl.drawArrays(gl.TRIANGLES, 0, 6)
 
   if (stableAccumulationActive) stableSampleCount += 1
