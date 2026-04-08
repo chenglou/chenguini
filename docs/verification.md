@@ -249,6 +249,27 @@ Guidelines:
 - reduce the failing case into a small permanent fixture when possible
 - prefer domain-shaped generation over arbitrary noise
 
+## Temporary Refactor Oracles
+
+If the question is "did this refactor preserve the old layout?", let the old code be the oracle for a bit.
+
+Generate a one-off report from the old code right before the refactor, then diff the new code against it on the same machine and browser.
+
+Good:
+
+- item `x/y/width/height`
+- per-line rects
+- per-token rects when wrapped text must stay exact
+- a few representative widths in one run
+
+Bad:
+
+- keeping the giant dump forever as the official test suite
+- comparing exact geometry across different browsers or machines
+- using screenshots when a small geometry dump would say the same thing more directly
+
+This is great for questions like "did this refactor move any text at all?" Keep the bulky oracle just long enough to earn confidence, then throw it away and keep the small permanent canaries.
+
 ## Differential Checks
 
 Differential checks are high leverage, but only when the compared systems are actually semantically equivalent.
