@@ -124,7 +124,7 @@ const mipblurprog = make_fullscreen_program(`
   }
 `)
 
-// GI denoise: small edge-aware blur to calm stochastic speckle
+// GI denoise: wider edge-aware blur to calm stochastic speckle
 const gidenoiseprog = make_fullscreen_program(`
   precision mediump float;
   uniform vec2 canvasSize;
@@ -140,8 +140,8 @@ const gidenoiseprog = make_fullscreen_program(`
   void addTap(inout vec3 sum, inout float weightSum, vec2 uv, float baseWeight, float centerOcc, vec3 centerColor) {
     vec3 tapColor = textureLod(giTexture, uv, 0.).xyz;
     float tapOcc = occupancyAt(uv);
-    float edgeWeight = max(0., 1. - abs(tapOcc - centerOcc) * 8.);
-    float colorWeight = 1. / (1. + length(tapColor - centerColor) * 6.);
+    float edgeWeight = max(0., 1. - abs(tapOcc - centerOcc) * 10.);
+    float colorWeight = 1. / (1. + length(tapColor - centerColor) * 3.5);
     float weight = baseWeight * edgeWeight * colorWeight;
     sum += tapColor * weight;
     weightSum += weight;
@@ -151,16 +151,24 @@ const gidenoiseprog = make_fullscreen_program(`
     vec2 px = 1. / canvasSize;
     vec3 centerColor = textureLod(giTexture, vuv, 0.).xyz;
     float centerOcc = occupancyAt(vuv);
-    vec3 sum = centerColor * 4.;
-    float weightSum = 4.;
-    addTap(sum, weightSum, vuv + vec2( px.x, 0.), 1.2, centerOcc, centerColor);
-    addTap(sum, weightSum, vuv + vec2(-px.x, 0.), 1.2, centerOcc, centerColor);
-    addTap(sum, weightSum, vuv + vec2(0.,  px.y), 1.2, centerOcc, centerColor);
-    addTap(sum, weightSum, vuv + vec2(0., -px.y), 1.2, centerOcc, centerColor);
-    addTap(sum, weightSum, vuv + vec2( px.x,  px.y), 0.75, centerOcc, centerColor);
-    addTap(sum, weightSum, vuv + vec2(-px.x,  px.y), 0.75, centerOcc, centerColor);
-    addTap(sum, weightSum, vuv + vec2( px.x, -px.y), 0.75, centerOcc, centerColor);
-    addTap(sum, weightSum, vuv + vec2(-px.x, -px.y), 0.75, centerOcc, centerColor);
+    vec3 sum = centerColor * 3.2;
+    float weightSum = 3.2;
+    addTap(sum, weightSum, vuv + vec2( px.x, 0.), 1.4, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x, 0.), 1.4, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(0.,  px.y), 1.4, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(0., -px.y), 1.4, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2( px.x,  px.y), 1.0, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x,  px.y), 1.0, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2( px.x, -px.y), 1.0, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x, -px.y), 1.0, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2( px.x * 2., 0.), 0.7, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x * 2., 0.), 0.7, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(0.,  px.y * 2.), 0.7, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(0., -px.y * 2.), 0.7, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2( px.x * 2.,  px.y * 2.), 0.45, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x * 2.,  px.y * 2.), 0.45, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2( px.x * 2., -px.y * 2.), 0.45, centerOcc, centerColor);
+    addTap(sum, weightSum, vuv + vec2(-px.x * 2., -px.y * 2.), 0.45, centerOcc, centerColor);
     color = vec4(sum / weightSum, 1.);
   }
 `)
