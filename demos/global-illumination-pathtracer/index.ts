@@ -225,19 +225,34 @@ gl.clearColor(0., 0., 0., 1.0)
 
 const minimap = document.createElement('canvas')
 const minimap2d = minimap.getContext('2d')!
-const divs = document.querySelectorAll('.styled-div')
+const divs = document.querySelectorAll<HTMLElement>('.styled-div')
 const scale = 0.5
+type SceneItem = {
+  bgImage: string | null
+  cornerRadius: number
+  div: HTMLElement
+  fillColor: string
+}
+const sceneItems: SceneItem[] = Array.from(divs, function(div) {
+  const style = getComputedStyle(div)
+  const bgImage = style.backgroundImage === 'none' ? null : style.backgroundImage
+  return {
+    bgImage,
+    cornerRadius: parseInt(style.borderRadius, 10) * scale,
+    div,
+    fillColor: style.backgroundColor,
+  }
+})
 
 const images: Record<string, HTMLImageElement> = {}
 let loadcount = 0
-divs.forEach(function(div) {
-  const bg = getComputedStyle(div).backgroundImage
-  if (bg !== 'none') {
+sceneItems.forEach(function(item) {
+  if (item.bgImage != null) {
     loadcount++
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = function() {
-      images[bg] = img
+      images[item.bgImage!] = img
       loadcount--
       if (loadcount === 0) resizeCanvas()
     }
@@ -245,7 +260,7 @@ divs.forEach(function(div) {
       loadcount--
       if (loadcount === 0) resizeCanvas()
     }
-    img.src = bg.slice(4, -1).replace(/['"]/g, '')
+    img.src = item.bgImage.slice(4, -1).replace(/['"]/g, '')
   }
 })
 
@@ -253,6 +268,8 @@ const minimapTexture = gl.createTexture()!
 const maxMinimapMip = 6
 const minimapBlurTexture = gl.createTexture()!
 const minimapBlurFbo = gl.createFramebuffer()!
+let minimapBlurWidth = 0
+let minimapBlurHeight = 0
 
 gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, maxMinimapMip)
@@ -323,27 +340,34 @@ const canvasres = 1.
 function redrawMinimap() {
   const minimapWidth = Math.max(1, Math.floor(window.innerWidth * scale))
   const minimapHeight = Math.max(1, Math.floor(window.innerHeight * scale))
-  if (minimap.width !== minimapWidth || minimap.height !== minimapHeight) {
+  const minimapSizeChanged = minimap.width !== minimapWidth || minimap.height !== minimapHeight
+  if (minimapSizeChanged) {
     minimap.width = minimapWidth
     minimap.height = minimapHeight
   }
   minimap2d.clearRect(0, 0, minimap.width, minimap.height)
 
-  divs.forEach(function(div) {
-    const rect = div.getBoundingClientRect()
-    const style = getComputedStyle(div)
-    const cornerRadius = parseInt(style.borderRadius, 10) * scale
-    const fillColor = style.backgroundColor
-    const bgImage = style.backgroundImage
-    drawRoundedRect(minimap2d, rect.left * scale + 1, rect.top * scale + 1, rect.width * scale - 2, rect.height * scale - 2, cornerRadius * scale, bgImage !== 'none' ? images[bgImage]! : fillColor)
+  sceneItems.forEach(function(item) {
+    const rect = item.div.getBoundingClientRect()
+    drawRoundedRect(minimap2d, rect.left * scale + 1, rect.top * scale + 1, rect.width * scale - 2, rect.height * scale - 2, item.cornerRadius * scale, item.bgImage != null ? images[item.bgImage]! : item.fillColor)
   })
 
   gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, minimap)
+  if (minimapSizeChanged) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, minimap)
+  } else {
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, minimap)
+  }
   gl.generateMipmap(gl.TEXTURE_2D)
 
-  gl.bindTexture(gl.TEXTURE_2D, minimapBlurTexture)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, Math.max(1, minimap.width >> 1), Math.max(1, minimap.height >> 1), 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+  const blurWidth = Math.max(1, minimap.width >> 1)
+  const blurHeight = Math.max(1, minimap.height >> 1)
+  if (blurWidth !== minimapBlurWidth || blurHeight !== minimapBlurHeight) {
+    minimapBlurWidth = blurWidth
+    minimapBlurHeight = blurHeight
+    gl.bindTexture(gl.TEXTURE_2D, minimapBlurTexture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, blurWidth, blurHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+  }
 
   gl.useProgram(mipblurprog)
   gl.bindFramebuffer(gl.FRAMEBUFFER, minimapBlurFbo)
@@ -357,8 +381,6 @@ function redrawMinimap() {
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
     gl.drawArrays(gl.TRIANGLES, 0, 6)
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, minimapBlurFbo)
-    gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
     gl.copyTexSubImage2D(gl.TEXTURE_2D, mip, 0, 0, 0, 0, mipwidth, mipheight)
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null)
