@@ -156,6 +156,7 @@ const diprog = make_fullscreen_program(`
 // GI pass: stochastic ray tracing with bounce
 const prog = make_fullscreen_program(`
   precision mediump float;
+  uniform float accumulationAlpha;
   uniform vec2 canvasSize;
   uniform vec2 cursorPosition;
   uniform vec2 noiseOffset;
@@ -198,7 +199,7 @@ const prog = make_fullscreen_program(`
       }
     }
     if (T >= T_target) c += 0.1 * mix(vec3(0.1), vec3(0.3, 0.4, 0.5), d.y * -0.5 + 0.5);
-    color = vec4(c, 0.1);
+    color = vec4(c, accumulationAlpha);
   }
 `)
 
@@ -270,6 +271,8 @@ const minimapBlurTexture = gl.createTexture()!
 const minimapBlurFbo = gl.createFramebuffer()!
 let minimapBlurWidth = 0
 let minimapBlurHeight = 0
+const movingAccumulationAlpha = 0.1
+const movingHistorySampleCount = Math.round(1 / movingAccumulationAlpha) - 1
 
 gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, maxMinimapMip)
@@ -286,47 +289,55 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
 const cursorPosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
 const maxAccumulationFrames = 48
-let accumulatedFrames = 0
+const settleDelayMs = 120
+let refinementFrames = 0
 let scheduledRaf: number | null = null
 // If this demo starts moving boxes around, keep it true while they move.
 let sceneIsAnimating = false
+let stableAccumulationActive = true
+let stableSampleCount = 0
+let lastCursorMoveAt = 0
 
 function scheduleRender() {
   if (scheduledRaf != null) return
-  scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender() {
+  scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) {
     scheduledRaf = null
-    if (animate()) scheduleRender()
+    if (animate(now)) scheduleRender()
   })
 }
 
 function scheduleRefinement() {
   if (needclear < 0) return
-  accumulatedFrames = 0
+  refinementFrames = 0
   scheduleRender()
 }
 
 function invalidateScene() {
   if (needclear < 0) return
   needclear = 1
+  stableAccumulationActive = true
+  stableSampleCount = 0
   scheduleRefinement()
 }
 
-function updateCursorPosition(x: number, y: number) {
+function updateCursorPosition(x: number, y: number, time: number) {
   if (cursorPosition.x === x && cursorPosition.y === y) return
   cursorPosition.x = x
   cursorPosition.y = y
+  lastCursorMoveAt = time
+  stableAccumulationActive = false
   scheduleRefinement()
 }
 
 window.addEventListener('mousemove', function(event) {
-  updateCursorPosition(event.clientX, event.clientY)
+  updateCursorPosition(event.clientX, event.clientY, event.timeStamp)
 })
 
 function ontouch(event: TouchEvent) {
   event.preventDefault()
   const touch = event.touches[0] ?? event.changedTouches[0]
   if (touch == null) return
-  updateCursorPosition(touch.clientX, touch.clientY)
+  updateCursorPosition(touch.clientX, touch.clientY, event.timeStamp)
 }
 document.documentElement.style.touchAction = 'none'
 window.addEventListener('touchstart', ontouch)
@@ -422,6 +433,7 @@ window.addEventListener('resize', resizeCanvas, false)
 
 // Uniform locations for GI pass
 const canvasSizeLocation = gl.getUniformLocation(prog, 'canvasSize')
+const accumulationAlphaLocation = gl.getUniformLocation(prog, 'accumulationAlpha')
 const cursorPositionLocation = gl.getUniformLocation(prog, 'cursorPosition')
 const minimapTextureLocation = gl.getUniformLocation(prog, 'minimapTexture')
 const bluenoiseTextureLocation = gl.getUniformLocation(prog, 'bluenoiseTexture')
@@ -464,21 +476,32 @@ let frameCount = 0
 const R2_A1 = 0.7548776662466927 // 1 / plastic constant
 const R2_A2 = 0.5698402909980532 // 1 / plastic constant^2
 
-function animate() {
+function animate(now: number) {
   if (needclear < 0) return false
-  if (sceneIsAnimating) redrawMinimap()
-  if (sceneIsAnimating) accumulatedFrames = 0
-  if (sceneIsAnimating) needclear = 1
+  if (sceneIsAnimating) {
+    redrawMinimap()
+    lastCursorMoveAt = now
+    stableAccumulationActive = false
+    needclear = 1
+    refinementFrames = 0
+  }
+  if (!sceneIsAnimating && !stableAccumulationActive && now - lastCursorMoveAt >= settleDelayMs) {
+    stableAccumulationActive = true
+    stableSampleCount = movingHistorySampleCount
+    refinementFrames = 0
+  }
   frameCount++
 
   const noiseX = (0.5 + R2_A1 * frameCount) % 1.0
   const noiseY = (0.5 + R2_A2 * frameCount) % 1.0
+  const accumulationAlpha = stableAccumulationActive ? 1 / (stableSampleCount + 1) : movingAccumulationAlpha
 
   // GI pass
   gl.bindFramebuffer(gl.FRAMEBUFFER, gifbo)
   gl.viewport(0, 0, canvas.width, canvas.height)
   if (needclear !== 0) gl.clear(gl.COLOR_BUFFER_BIT)
   gl.useProgram(prog)
+  gl.uniform1f(accumulationAlphaLocation, accumulationAlpha)
   gl.uniform2f(noiseOffsetLocation, noiseX, noiseY)
   gl.uniform2f(cursorPositionLocation, cursorPosition.x * canvasres, cursorPosition.y * canvasres)
   gl.activeTexture(gl.TEXTURE2)
@@ -516,9 +539,10 @@ function animate() {
   gl.bindTexture(gl.TEXTURE_2D, gitexture)
   gl.drawArrays(gl.TRIANGLES, 0, 6)
 
-  accumulatedFrames += 1
+  if (stableAccumulationActive) stableSampleCount += 1
+  refinementFrames += 1
   needclear = 0
-  return accumulatedFrames < maxAccumulationFrames
+  return sceneIsAnimating || !stableAccumulationActive || refinementFrames < maxAccumulationFrames
 }
 
 if (loadcount === 0) resizeCanvas()
