@@ -3,13 +3,46 @@
 // oxlint-disable strict-boolean-expressions -- WebGL getShaderParameter/getProgramParameter return any
 
 type Rect = {
-  image: HTMLImageElement | null
   backgroundColor: string
   borderRadius: number
+  image: HTMLImageElement | null
   x: number
   y: number
   sizeX: number
   sizeY: number
+}
+
+function getViewportSize() {
+  return {
+    height: document.documentElement.clientHeight,
+    width: document.documentElement.clientWidth,
+  }
+}
+
+function drawRoundedRect(context: CanvasRenderingContext2D, rect: Rect, scale: number) {
+  const x = rect.x * scale + 1
+  const y = rect.y * scale + 1
+  const sizeX = rect.sizeX * scale - 2
+  const sizeY = rect.sizeY * scale - 2
+  const borderRadius = rect.borderRadius * scale
+
+  context.beginPath()
+  context.moveTo(x + borderRadius, y)
+  context.arcTo(x + sizeX, y, x + sizeX, y + borderRadius, borderRadius)
+  context.arcTo(x + sizeX, y + sizeY, x + sizeX - borderRadius, y + sizeY, borderRadius)
+  context.arcTo(x, y + sizeY, x, y + sizeY - borderRadius, borderRadius)
+  context.arcTo(x, y, x + borderRadius, y, borderRadius)
+  context.closePath()
+
+  if (rect.image != null) {
+    context.save()
+    context.clip()
+    context.drawImage(rect.image, x, y, sizeX, sizeY)
+    context.restore()
+  } else {
+    context.fillStyle = rect.backgroundColor
+    context.fill()
+  }
 }
 
 function magicSetup(canvas: HTMLCanvasElement) {
@@ -18,6 +51,7 @@ function magicSetup(canvas: HTMLCanvasElement) {
   const vertexBuffer = gl.createBuffer()!
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
   gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW)
+
   const vertexShaderSource = `#version 300 es
     in vec2 position;
     out vec2 vuv;
@@ -26,19 +60,22 @@ function magicSetup(canvas: HTMLCanvasElement) {
       gl_Position = vec4(position, 0.0, 1.0);
     }
   `
+
   const vertexShader = gl.createShader(gl.VERTEX_SHADER)!
   gl.shaderSource(vertexShader, vertexShaderSource)
   gl.compileShader(vertexShader)
   if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
     console.error('Vertex shader failed to compile: \n' + gl.getShaderInfoLog(vertexShader))
   }
-  function make_fullscreen_program(fragmentShaderSource: string) {
+
+  function makeFullscreenProgram(fragmentShaderSource: string) {
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!
     gl.shaderSource(fragmentShader, '#version 300 es\n' + fragmentShaderSource)
     gl.compileShader(fragmentShader)
     if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
       console.error('Fragment shader failed to compile: \n' + gl.getShaderInfoLog(fragmentShader))
     }
+
     const shaderProgram = gl.createProgram()!
     gl.attachShader(shaderProgram, vertexShader)
     gl.attachShader(shaderProgram, fragmentShader)
@@ -46,6 +83,7 @@ function magicSetup(canvas: HTMLCanvasElement) {
     if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
       console.error('Shader program failed to link: \n' + gl.getProgramInfoLog(shaderProgram))
     }
+
     gl.useProgram(shaderProgram)
     const positionLocation = gl.getAttribLocation(shaderProgram, 'position')
     gl.enableVertexAttribArray(positionLocation)
@@ -53,7 +91,8 @@ function magicSetup(canvas: HTMLCanvasElement) {
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0)
     return shaderProgram
   }
-  const mipblurprog = make_fullscreen_program(`
+
+  const mipBlurProgram = makeFullscreenProgram(`
     precision mediump float;
     uniform vec2 canvasSize;
     uniform sampler2D minimapTexture;
@@ -62,9 +101,9 @@ function magicSetup(canvas: HTMLCanvasElement) {
     out vec4 color;
     void main() {
       vec2 uv = vuv;
-      vec2 o = vec2(0.75)/canvasSize;
-      vec2 p = o*1.6;
-      color=(
+      vec2 o = vec2(0.75) / canvasSize;
+      vec2 p = o * 1.6;
+      color = (
         textureLod(minimapTexture, uv + vec2( o.x,  o.y), float(minimapLevel)) +
         textureLod(minimapTexture, uv + vec2(-o.x,  o.y), float(minimapLevel)) +
         textureLod(minimapTexture, uv + vec2( o.x, -o.y), float(minimapLevel)) +
@@ -73,10 +112,11 @@ function magicSetup(canvas: HTMLCanvasElement) {
         textureLod(minimapTexture, uv + vec2(-p.x, 0.), float(minimapLevel)) +
         textureLod(minimapTexture, uv + vec2( p.x, -p.y), float(minimapLevel)) +
         textureLod(minimapTexture, uv + vec2( p.x,  p.y), float(minimapLevel))) * 0.5
-      ) * (1./6.);
+      ) * (1. / 6.);
     }
   `)
-  const prog = make_fullscreen_program(`
+
+  const program = makeFullscreenProgram(`
     precision mediump float;
     uniform vec2 canvasSize;
     uniform vec2 cursorPosition;
@@ -122,179 +162,252 @@ function magicSetup(canvas: HTMLCanvasElement) {
   const minimap = document.createElement('canvas')
   const minimap2d = minimap.getContext('2d')!
   const scale = 0.5
+  const canvasres = 0.5
   const minimapTexture = gl.createTexture()!
+  const minimapBlurTexture = gl.createTexture()!
+  const minimapBlurFbo = gl.createFramebuffer()!
+  const maxMinimapMip = 6
+  let minimapBlurWidth = 0
+  let minimapBlurHeight = 0
+  let rects: Rect[] = []
+  let sceneDirty = true
+  let scheduledRaf: number | null = null
+  const cursorPosition = { x: 0, y: 0 }
 
-  function redrawCanvas(rects: Rect[]) {
-    const dpr = 0.5
-    canvas.width = window.innerWidth * dpr
-    canvas.height = window.innerHeight * dpr
-    canvas.style.width = window.innerWidth + 'px'
-    canvas.style.height = window.innerHeight + 'px'
+  gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, maxMinimapMip)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
-    minimap.width = window.innerWidth * scale
-    minimap.height = window.innerHeight * scale
-    minimap2d.clearRect(0, 0, minimap.width, minimap.height)
-    rects.forEach(function(rect) {
-      const x = rect.x * scale + 1
-      const y = rect.y * scale + 1
-      const sizeX = rect.sizeX * scale - 2
-      const sizeY = rect.sizeY * scale - 2
-      const borderRadius = rect.borderRadius * scale
-      minimap2d.beginPath()
-      minimap2d.moveTo(x + borderRadius, y)
-      minimap2d.arcTo(x + sizeX, y, x + sizeX, y + borderRadius, borderRadius)
-      minimap2d.arcTo(x + sizeX, y + sizeY, x + sizeX - borderRadius, y + sizeY, borderRadius)
-      minimap2d.arcTo(x, y + sizeY, x, y + sizeY - borderRadius, borderRadius)
-      minimap2d.arcTo(x, y, x + borderRadius, y, borderRadius)
-      minimap2d.closePath()
-      if (rect.image != null) {
-        minimap2d.save()
-        minimap2d.clip()
-        minimap2d.drawImage(rect.image, x, y, sizeX, sizeY)
-        minimap2d.restore()
-      } else {
-        minimap2d.fillStyle = rect.backgroundColor
-        minimap2d.fill()
-      }
+  gl.bindTexture(gl.TEXTURE_2D, minimapBlurTexture)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+  const mipBlurCanvasSizeLocation = gl.getUniformLocation(mipBlurProgram, 'canvasSize')
+  const mipBlurTextureLocation = gl.getUniformLocation(mipBlurProgram, 'minimapTexture')
+  const mipBlurLevelLocation = gl.getUniformLocation(mipBlurProgram, 'minimapLevel')
+  const canvasSizeLocation = gl.getUniformLocation(program, 'canvasSize')
+  const cursorPositionLocation = gl.getUniformLocation(program, 'cursorPosition')
+  const minimapTextureLocation = gl.getUniformLocation(program, 'minimapTexture')
+
+  gl.useProgram(mipBlurProgram)
+  gl.uniform1i(mipBlurTextureLocation, 0)
+
+  gl.useProgram(program)
+  gl.uniform1i(minimapTextureLocation, 0)
+
+  function scheduleRender() {
+    if (scheduledRaf != null) return
+    scheduledRaf = requestAnimationFrame(function renderOnce() {
+      scheduledRaf = null
+      render()
     })
+  }
+
+  function redrawMinimap() {
+    const viewport = getViewportSize()
+    const minimapWidth = Math.max(1, Math.floor(viewport.width * scale))
+    const minimapHeight = Math.max(1, Math.floor(viewport.height * scale))
+    const minimapSizeChanged = minimap.width !== minimapWidth || minimap.height !== minimapHeight
+    if (minimapSizeChanged) {
+      minimap.width = minimapWidth
+      minimap.height = minimapHeight
+    }
+
+    minimap2d.clearRect(0, 0, minimap.width, minimap.height)
+    for (let i = 0; i < rects.length; ++i) {
+      drawRoundedRect(minimap2d, rects[i]!, scale)
+    }
+
     gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
-    const maxmip = 6
-    const imageData = minimap2d.getImageData(0, 0, minimap.width, minimap.height)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, maxmip)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    if (minimapSizeChanged) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, minimap)
+    } else {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, minimap)
+    }
     gl.generateMipmap(gl.TEXTURE_2D)
 
-    const extraTexture = gl.createTexture()!
-    gl.bindTexture(gl.TEXTURE_2D, extraTexture)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 1)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, minimap.width >> 1, minimap.height >> 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+    const blurWidth = Math.max(1, minimap.width >> 1)
+    const blurHeight = Math.max(1, minimap.height >> 1)
+    if (blurWidth !== minimapBlurWidth || blurHeight !== minimapBlurHeight) {
+      minimapBlurWidth = blurWidth
+      minimapBlurHeight = blurHeight
+      gl.bindTexture(gl.TEXTURE_2D, minimapBlurTexture)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, blurWidth, blurHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+    }
 
-    const fbo = gl.createFramebuffer()!
-    gl.useProgram(mipblurprog)
-    const canvasSizeLocation = gl.getUniformLocation(mipblurprog, 'canvasSize')
-    const minimapTextureLocation = gl.getUniformLocation(mipblurprog, 'minimapTexture')
-    const minimapLevelLocation = gl.getUniformLocation(mipblurprog, 'minimapLevel')
-    for (let mip = 1; mip <= maxmip; ++mip) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, extraTexture, 0)
-      const mipwidth = (minimap.width >> mip) || 1
-      const mipheight = (minimap.height >> mip) || 1
-      gl.viewport(0, 0, mipwidth, mipheight)
-      gl.uniform2f(canvasSizeLocation, mipwidth, mipheight)
-      gl.uniform1i(minimapTextureLocation, 0)
-      gl.uniform1i(minimapLevelLocation, mip - 1)
+    gl.useProgram(mipBlurProgram)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, minimapBlurFbo)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, minimapBlurTexture, 0)
+    for (let mip = 1; mip <= maxMinimapMip; ++mip) {
+      const mipWidth = (minimap.width >> mip) || 1
+      const mipHeight = (minimap.height >> mip) || 1
+      gl.viewport(0, 0, mipWidth, mipHeight)
+      gl.uniform2f(mipBlurCanvasSizeLocation, mipWidth, mipHeight)
+      gl.uniform1i(mipBlurLevelLocation, mip - 1)
       gl.activeTexture(gl.TEXTURE0)
       gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
       gl.drawArrays(gl.TRIANGLES, 0, 6)
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo)
-      gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
-      gl.copyTexSubImage2D(gl.TEXTURE_2D, mip, 0, 0, 0, 0, mipwidth, mipheight)
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      gl.copyTexSubImage2D(gl.TEXTURE_2D, mip, 0, 0, 0, 0, mipWidth, mipHeight)
     }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    sceneDirty = false
   }
 
-  const canvasSizeLocation = gl.getUniformLocation(prog, 'canvasSize')
-  const cursorPositionLocation = gl.getUniformLocation(prog, 'cursorPosition')
-  const minimapTextureLocation = gl.getUniformLocation(prog, 'minimapTexture')
-
-  function magicAnimate(pointerX: number, pointerY: number, rects: Rect[]) {
-    redrawCanvas(rects)
+  function render() {
+    if (sceneDirty) redrawMinimap()
     gl.viewport(0, 0, canvas.width, canvas.height)
-    gl.clearColor(1.0, 0.5, 0.0, 1.0)
     gl.clear(gl.COLOR_BUFFER_BIT)
-    gl.useProgram(prog)
-    gl.uniform2f(canvasSizeLocation, canvas.width, canvas.height)
-    gl.uniform2f(cursorPositionLocation, pointerX * 0.5, pointerY * 0.5)
-    gl.uniform1i(minimapTextureLocation, 0)
+    gl.useProgram(program)
+    gl.uniform2f(cursorPositionLocation, cursorPosition.x, cursorPosition.y)
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
     gl.drawArrays(gl.TRIANGLES, 0, 6)
   }
-  return magicAnimate
+
+  function resizeCanvas() {
+    const viewport = getViewportSize()
+    canvas.width = viewport.width * canvasres
+    canvas.height = viewport.height * canvasres
+    canvas.style.width = viewport.width + 'px'
+    canvas.style.height = viewport.height + 'px'
+    gl.useProgram(program)
+    gl.uniform2f(canvasSizeLocation, canvas.width, canvas.height)
+    sceneDirty = true
+    scheduleRender()
+  }
+
+  function setRects(nextRects: Rect[]) {
+    rects = nextRects
+    sceneDirty = true
+    scheduleRender()
+  }
+
+  function setCursorPosition(x: number, y: number) {
+    const nextX = x * canvasres
+    const nextY = y * canvasres
+    if (cursorPosition.x === nextX && cursorPosition.y === nextY) return
+    cursorPosition.x = nextX
+    cursorPosition.y = nextY
+    scheduleRender()
+  }
+
+  gl.clearColor(0., 0., 0., 1.)
+
+  return {
+    resizeCanvas,
+    setCursorPosition,
+    setRects,
+  }
 }
 
-// --- Demo setup ---
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
-const magicAnimate = magicSetup(canvas)
-let mouseX = window.innerWidth / 2
-let mouseY = window.innerHeight / 2
-
-document.addEventListener('mousemove', function(e) {
-  mouseX = e.clientX
-  mouseY = e.clientY
-})
-
-// Small thumbnails for the shader (color/occlusion source), big ones for display
-const thumbs: HTMLImageElement[] = []
-const IMAGE_COUNT = 20
+const renderer = magicSetup(canvas)
 const grid = document.getElementById('grid')!
+const thumbs: HTMLImageElement[] = []
 const domImages: HTMLImageElement[] = []
+const IMAGE_COUNT = 20
+let rects: Rect[] = []
+let mouseX = getViewportSize().width / 2
+let mouseY = getViewportSize().height / 2
+
+function refreshScene() {
+  renderer.setRects(rects)
+}
 
 for (let i = 0; i < IMAGE_COUNT; i++) {
   const thumb = new Image()
   thumb.crossOrigin = 'anonymous'
+  thumb.onload = refreshScene
+  thumb.onerror = refreshScene
   thumb.src = 'https://picsum.photos/seed/' + (i + 10) + '/128/128'
   thumbs.push(thumb)
 
   const domImg = document.createElement('img')
+  domImg.draggable = false
   domImg.src = 'https://picsum.photos/seed/' + (i + 10) + '/400/400'
   grid.appendChild(domImg)
   domImages.push(domImg)
 }
 
-function layoutGrid(): Rect[] {
-  const w = window.innerWidth
-  const h = window.innerHeight
+function layoutGrid() {
+  const viewport = getViewportSize()
   const cols = 5
   const rows = 4
   const gap = 24
   const marginX = 60
   const marginY = 60
-  const cellW = (w - marginX * 2 - gap * (cols - 1)) / cols
-  const cellH = (h - marginY * 2 - gap * (rows - 1)) / rows
+  const cellW = (viewport.width - marginX * 2 - gap * (cols - 1)) / cols
+  const cellH = (viewport.height - marginY * 2 - gap * (rows - 1)) / rows
 
-  const rects: Rect[] = []
+  const nextRects: Rect[] = []
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const idx = row * cols + col
       const x = marginX + col * (cellW + gap)
       const y = marginY + row * (cellH + gap)
+      const domImg = domImages[idx]!
+      const thumb = thumbs[idx]
 
-      // position DOM image
-      const el = domImages[idx]!
-      el.style.left = x + 'px'
-      el.style.top = y + 'px'
-      el.style.width = cellW + 'px'
-      el.style.height = cellH + 'px'
+      domImg.style.left = x + 'px'
+      domImg.style.top = y + 'px'
+      domImg.style.width = cellW + 'px'
+      domImg.style.height = cellH + 'px'
 
-      // rect for shader
-      const t = thumbs[idx]
-      rects.push({
-        image: (t != null && t.complete && t.naturalWidth > 0) ? t : null,
+      nextRects.push({
         backgroundColor: '#333',
         borderRadius: 8,
-        x,
-        y,
+        image: thumb != null && thumb.complete && thumb.naturalWidth > 0 ? thumb : null,
         sizeX: cellW,
         sizeY: cellH,
+        x,
+        y,
       })
     }
   }
-  return rects
+  rects = nextRects
+  renderer.setRects(rects)
 }
 
-let rects = layoutGrid()
-window.addEventListener('resize', function() { rects = layoutGrid() })
-
-function loop() {
-  rects = layoutGrid()
-  magicAnimate(mouseX, mouseY, rects)
-  requestAnimationFrame(loop)
+function updateCursorPosition(x: number, y: number) {
+  if (mouseX === x && mouseY === y) return
+  mouseX = x
+  mouseY = y
+  renderer.setCursorPosition(x, y)
 }
-requestAnimationFrame(loop)
+
+document.addEventListener('pointermove', function(event) {
+  updateCursorPosition(event.clientX, event.clientY)
+})
+
+document.addEventListener('mousemove', function(event) {
+  if ('PointerEvent' in window) return
+  updateCursorPosition(event.clientX, event.clientY)
+})
+
+function ontouch(event: TouchEvent) {
+  event.preventDefault()
+  const touch = event.touches[0] ?? event.changedTouches[0]
+  if (touch == null) return
+  updateCursorPosition(touch.clientX, touch.clientY)
+}
+
+document.documentElement.style.touchAction = 'none'
+window.addEventListener('touchstart', ontouch)
+window.addEventListener('touchend', ontouch)
+window.addEventListener('touchcancel', ontouch)
+window.addEventListener('touchmove', ontouch)
+
+window.addEventListener('resize', function() {
+  renderer.resizeCanvas()
+  layoutGrid()
+  renderer.setCursorPosition(mouseX, mouseY)
+})
+
+renderer.resizeCanvas()
+layoutGrid()
+renderer.setCursorPosition(mouseX, mouseY)
