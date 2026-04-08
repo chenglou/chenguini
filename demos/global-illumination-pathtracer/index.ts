@@ -250,6 +250,23 @@ divs.forEach(function(div) {
 })
 
 const minimapTexture = gl.createTexture()!
+const maxMinimapMip = 6
+const minimapBlurTexture = gl.createTexture()!
+const minimapBlurFbo = gl.createFramebuffer()!
+
+gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, maxMinimapMip)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+gl.bindTexture(gl.TEXTURE_2D, minimapBlurTexture)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
 const cursorPosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
 const maxAccumulationFrames = 48
 let accumulatedFrames = 0
@@ -304,8 +321,12 @@ let needclear = -1
 const canvasres = 1.
 
 function redrawMinimap() {
-  minimap.width = window.innerWidth * scale
-  minimap.height = window.innerHeight * scale
+  const minimapWidth = Math.max(1, Math.floor(window.innerWidth * scale))
+  const minimapHeight = Math.max(1, Math.floor(window.innerHeight * scale))
+  if (minimap.width !== minimapWidth || minimap.height !== minimapHeight) {
+    minimap.width = minimapWidth
+    minimap.height = minimapHeight
+  }
   minimap2d.clearRect(0, 0, minimap.width, minimap.height)
 
   divs.forEach(function(div) {
@@ -318,28 +339,16 @@ function redrawMinimap() {
   })
 
   gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
-  const maxmip = 6
-  const imageData = minimap2d.getImageData(0, 0, minimap.width, minimap.height)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, maxmip)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, minimap)
   gl.generateMipmap(gl.TEXTURE_2D)
 
-  const extraTexture = gl.createTexture()!
-  gl.bindTexture(gl.TEXTURE_2D, extraTexture)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAX_LEVEL, 1)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, minimap.width >> 1, minimap.height >> 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+  gl.bindTexture(gl.TEXTURE_2D, minimapBlurTexture)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, Math.max(1, minimap.width >> 1), Math.max(1, minimap.height >> 1), 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
 
-  const fbo = gl.createFramebuffer()!
   gl.useProgram(mipblurprog)
-  for (let mip = 1; mip <= maxmip; ++mip) {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, extraTexture, 0)
+  gl.bindFramebuffer(gl.FRAMEBUFFER, minimapBlurFbo)
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, minimapBlurTexture, 0)
+  for (let mip = 1; mip <= maxMinimapMip; ++mip) {
     const mipwidth = (minimap.width >> mip) || 1
     const mipheight = (minimap.height >> mip) || 1
     gl.viewport(0, 0, mipwidth, mipheight)
@@ -348,11 +357,11 @@ function redrawMinimap() {
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
     gl.drawArrays(gl.TRIANGLES, 0, 6)
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo)
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, minimapBlurFbo)
     gl.bindTexture(gl.TEXTURE_2D, minimapTexture)
     gl.copyTexSubImage2D(gl.TEXTURE_2D, mip, 0, 0, 0, 0, mipwidth, mipheight)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 }
 
 function refreshScene() {
