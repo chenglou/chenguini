@@ -69,6 +69,8 @@ The latter's especially prominent (using objects as dynamic dispatch tables). It
 
 Loop invariants are extremely underutilized in reasoning. Understanding what doesn't change makes each iteration easy to verify, and makes static parts easier to lift outside of the loop.
 
+With while loops, make progress/index advancement intuitive
+
 Not all code reuse is good. Before extracting similar calls into helpers, consider whether the redundant work is actually a manifestation of a control flow that didn't properly compute the shared part before the downstream usage sites.
 
 ### Exceptions
