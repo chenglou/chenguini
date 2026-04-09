@@ -25,7 +25,7 @@ Unnecessary `null` in a type makes it hard to remove later. Future maintainers w
 
 If you wanna refactor a data structure that's used everywhere, and can't do it one shot, make the new data structure, have it side by side with the old, and gradually migrate to the new one. Ideally, don't make the new one into a new state, since old callsites mutating the old data structure wouldn't have their changes reflected in the new one, and vice versa. So derive the new one from the old one each time through some function. Naturally, the accessors modifying the new one should, under the hood, mutate the old one (then the new one is again, automatically derived from the old one). Unidirectional data flow.
 
-Avoid iterators. They're slow and alloc-heavy
+Avoid iterators if regular loops work. They hide extra work and allocs
 A single forEach or map over data is fine, but more than that, just convert to regular loops
 Avoid `reduce` in most cases except for simple cases like summing up numbers. Using reduce, especially with objects, likely means the data modeling is wrong. Likewise with flatMap most of the time.
 
