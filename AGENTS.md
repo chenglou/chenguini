@@ -14,6 +14,7 @@ We'll periodically refactor other codebases' code and extract lessons back into 
 - When a rule is broad, phrase it as the general rule plus one concrete category, e.g. `If behavior genuinely differs by some dimension, say, browser, feature flag, or mode, model that difference explicitly in one place.` Use "e.g.", "say", "such as", or some other clean turn of phrase
 - The above applies to generating doc comments for functions too
 - Leverage descriptive variable names that represent a whole category. If you come across a context-less example like "store events in state, e.g. pointerDownTime = ..." you still know that `pointerDownTime` is examplary among many other use-cases. Whereas a doc that says "e.g. ptAt = ..." is the _same_ variable but bakes in way less explanatory power
+- don't turn local lessons into universal rules, and vice-versa
 
 Example:
 - Preferred: `The image's position should be relative to the scroll view container's.`
