@@ -4,13 +4,13 @@ import {
   prepareRichInline,
   walkRichInlineLineRanges,
   type PreparedRichInline,
-} from '../../../pretext/src/rich-inline'
+} from '@chenglou/pretext/rich-inline'
 import {
   layout,
   layoutWithLines,
   prepareWithSegments,
   type PreparedTextWithSegments,
-} from '../../../pretext/src/layout'
+} from '@chenglou/pretext'
 import {type HNCommentDoc, type HNRun} from './hn-comment-parser'
 
 // This file doubles as the demo's layout helper and as a convenient seam for
