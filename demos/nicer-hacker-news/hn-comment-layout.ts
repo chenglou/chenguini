@@ -237,7 +237,8 @@ export function renderHNCommentLayout(layout: HNCommentLayout): DocumentFragment
     for (let lineIndex = 0; lineIndex < block.lines.length; lineIndex++) {
       const line = block.lines[lineIndex]!
       const lineNode = document.createElement('div')
-      lineNode.className = block.kind === 'codeBlock' ? 'comment-line comment-code-line' : 'comment-line'
+      lineNode.className = 'comment-line'
+      if (block.kind === 'codeBlock') lineNode.classList.add('comment-code-line')
       lineNode.dataset['textStart'] = String(line.textStart)
       lineNode.dataset['textEnd'] = String(line.textEnd)
       lineNode.style.top = `${line.top}px`
@@ -276,6 +277,51 @@ export function commentTextLength(layout: HNCommentLayout) {
     if (line != null) length = line.textEnd
   }
   return length
+}
+
+export function serializePreparedHNCommentDocSelection(
+  doc: PreparedHNCommentDoc,
+  start: number,
+  end: number,
+) {
+  const selectionStart = Math.max(0, Math.min(start, end))
+  const selectionEnd = Math.max(selectionStart, Math.max(start, end))
+  let offset = 0
+  const plainParts: string[] = []
+  const htmlParts: string[] = []
+
+  for (let blockIndex = 0; blockIndex < doc.blocks.length; blockIndex++) {
+    const block = doc.blocks[blockIndex]!
+    const blockText = block.kind === 'paragraph' ? block.runs.map(run => run.text).join('') : block.text
+    const blockStart = offset
+    const blockEnd = blockStart + blockText.length
+    offset = blockEnd
+    if (selectionEnd <= blockStart || selectionStart >= blockEnd) continue
+
+    const blockSelectionStart = selectionStart - blockStart
+    const blockSelectionEnd = selectionEnd - blockStart
+    switch (block.kind) {
+      case 'paragraph': {
+        const sliced = sliceParagraphRuns(block.runs, blockSelectionStart, blockSelectionEnd)
+        if (sliced.plainText === '') continue
+        plainParts.push(sliced.plainText)
+        htmlParts.push(`<p>${sliced.html}</p>`)
+        break
+      }
+      case 'codeBlock': {
+        const text = block.text.slice(Math.max(0, blockSelectionStart), Math.min(block.text.length, blockSelectionEnd))
+        if (text === '') continue
+        plainParts.push(text)
+        htmlParts.push(`<pre>${escapeHTML(text)}</pre>`)
+        break
+      }
+    }
+  }
+
+  return {
+    plainText: plainParts.join('\n\n'),
+    html: htmlParts.join(''),
+  }
 }
 
 export function findHNCommentTextOffsetInEmptySpace(layout: HNCommentLayout, x: number, y: number) {
@@ -489,6 +535,42 @@ function pushMergedRect(rects: HNCommentRect[], next: HNCommentRect) {
   rects.push(next)
 }
 
+function sliceParagraphRuns(runs: HNRun[], start: number, end: number) {
+  const selectionStart = Math.max(0, start)
+  const selectionEnd = Math.max(selectionStart, end)
+  let offset = 0
+  let plainText = ''
+  let html = ''
+
+  for (let runIndex = 0; runIndex < runs.length; runIndex++) {
+    const run = runs[runIndex]!
+    const runStart = offset
+    const runEnd = runStart + run.text.length
+    offset = runEnd
+    if (selectionEnd <= runStart || selectionStart >= runEnd) continue
+
+    const text = run.text.slice(
+      Math.max(0, selectionStart - runStart),
+      Math.min(run.text.length, selectionEnd - runStart),
+    )
+    if (text === '') continue
+    plainText += text
+    switch (run.kind) {
+      case 'text':
+        html += escapeHTML(text)
+        break
+      case 'italic':
+        html += `<i>${escapeHTML(text)}</i>`
+        break
+      case 'link':
+        html += `<a href="${escapeAttribute(run.href)}">${escapeHTML(text)}</a>`
+        break
+    }
+  }
+
+  return {plainText, html}
+}
+
 function resolveElementBoundary(parent: HTMLElement, childOffset: number) {
   if (childOffset <= 0) {
     const first = firstTextStartIn(parent)
@@ -563,4 +645,15 @@ function lastTextNodeIn(node: Node) {
 
 function clamp(min: number, v: number, max: number) {
   return v > max ? max : v < min ? min : v
+}
+
+function escapeHTML(text: string) {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+function escapeAttribute(text: string) {
+  return escapeHTML(text).replaceAll('"', '&quot;')
 }

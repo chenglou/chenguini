@@ -8,6 +8,7 @@ import {
   prepareHNCommentDoc,
   resolveHNCommentTextOffset,
   renderHNCommentLayout,
+  serializePreparedHNCommentDocSelection,
   type HNCommentLayout,
   type PreparedHNCommentDoc,
 } from './hn-comment-layout'
@@ -219,11 +220,25 @@ window.addEventListener('click', () => {
 window.addEventListener('copy', (e) => {
   e.preventDefault()
   st.inputs.copied = true
-  // browser security dictates handling paste logic in the event itself instead of e.g. in render
-  const content = document.createElement('div')
-  content.appendChild(st.selection.range.cloneContents())
-  e.clipboardData?.setData('text/html', content.innerHTML)
-  e.clipboardData?.setData('text/plain', content.innerText)
+  if (
+    st.selection.row != null &&
+    st.selection.startTextOffset != null &&
+    st.selection.endTextOffset != null
+  ) {
+    const serialized = serializePreparedHNCommentDocSelection(
+      data[st.selection.row]!.preparedCommentDoc,
+      st.selection.startTextOffset,
+      st.selection.endTextOffset,
+    )
+    e.clipboardData?.setData('text/html', serialized.html)
+    e.clipboardData?.setData('text/plain', serialized.plainText)
+  } else {
+    // browser security dictates handling paste logic in the event itself instead of e.g. in render
+    const content = document.createElement('div')
+    content.appendChild(st.selection.range.cloneContents())
+    e.clipboardData?.setData('text/html', content.innerHTML)
+    e.clipboardData?.setData('text/plain', content.innerText)
+  }
   scheduleRender()
 })
 window.addEventListener('contextmenu', () => {
