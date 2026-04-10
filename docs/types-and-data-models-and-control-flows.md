@@ -95,7 +95,7 @@ Your app is more of a white box than these systems pretend. Keep the ordering lo
 ## Caching
 
 Modern computing's much cheaper than memory. Recompute instead of storing the result. Computing, being ephemeral, avoids lifetime issues. If you have to cache, consider it more as a temporary acceleration structure, like in dynamic programming. Here are some notable exceptions:
-- DOM, because they're genuinely expensive. We have a dedicated DOM caching section in [ui-architecture.md](../ui-architecture.md).
+- DOM, because they're genuinely expensive. We have a dedicated DOM caching section in [ui.md](./ui.md).
 - truly expensive computations after real measurements
 - computations with stable input identity, real reuse, bounded cache size
 

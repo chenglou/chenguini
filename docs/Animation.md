@@ -82,7 +82,7 @@ iOS FaceTime and Picture-in-Picture lets you flick a view that always ends up sn
 - `spring_2(t)`: starts at `rest_pos`, targets `corner`.
 - The final position is (speculatively) `spring_1(t) + (spring_2(t) - rest_pos)`.
 
-At t=0 this gives `current_pos + 0 = current_pos`. At t=∞ this gives `rest_pos + (corner - rest_pos) = corner`. Early on, spring_1 dominates and the motion follows the flick's momentum. Spring_2's correction starts at zero displacement and gradually steers toward the corner, so there's no jolt. Using a spring rather than a pure decay for the first component lets the motion overshoot `rest_pos` on hard flicks, which feels more physical. Since two damped springs are both solutions to second-order linear ODEs, their sum is too, so there might be an equivalent single-spring formulation with modified initial conditions. See [gesture-flick-snap-target](../gesture-flick-snap-target.html).
+At t=0 this gives `current_pos + 0 = current_pos`. At t=∞ this gives `rest_pos + (corner - rest_pos) = corner`. Early on, spring_1 dominates and the motion follows the flick's momentum. Spring_2's correction starts at zero displacement and gradually steers toward the corner, so there's no jolt. Using a spring rather than a pure decay for the first component lets the motion overshoot `rest_pos` on hard flicks, which feels more physical. Since two damped springs are both solutions to second-order linear ODEs, their sum is too, so there might be an equivalent single-spring formulation with modified initial conditions. See [gesture-flick-snap-target](../demos/gesture-flick-snap-target/index.ts).
 
 ## Exponential Decay
 
