@@ -33,18 +33,27 @@ For developers:
 */
 
 import {photoGalleryData} from './data'
+import {runPhotoGalleryLayoutVerification, type LayoutVerificationReport} from './layout-verifier'
+import {
+  boxesGapY,
+  gapTopPeek,
+  getGridLayout,
+  getLineLayout,
+  makeLayoutSources,
+  rect,
+  rectContainsPoint,
+  type GridLayoutModel,
+  type ItemLayoutGeometry,
+  type LineLayoutModel,
+  type PromptGeometry,
+  type Rect,
+} from './layout-model'
 import {
   measurePromptLayout,
-  preparePrompt,
-  prompt1DLineHeight,
   prompt1DMaxLines,
-  prompt2DLineHeight,
   prompt2DMaxLines,
-  promptPaddingBottom,
   promptPaddingX,
   promptPaddingTop,
-  type PromptLine,
-  type PreparedPrompt,
 } from './prompt-layout'
 
 const urlSearchParams = new URLSearchParams(window.location.search)
@@ -98,56 +107,6 @@ function springStep(config: Spring) {
 function springGoToEnd(config: Spring) {
   config.pos = config.dest
   config.v = 0
-}
-
-// === generic helpers
-function clamp(min: number, v: number, max: number) {
-  return v > max ? max : v < min ? min : v
-}
-
-type Rect = {
-  x: number
-  y: number
-  sizeX: number
-  sizeY: number
-}
-
-type PromptGeometry = {
-  box: Rect
-  lineHeight: number
-  lines: PromptLine[]
-}
-
-type ItemLayoutGeometry = {
-  imageBox: Rect
-  layoutBox: Rect
-  occlusionBounds: Rect
-  prompt: PromptGeometry
-}
-
-type GridLayoutModel = {
-  boxMaxSizeX: number
-  cols: number
-  contentHeight: number
-  items: Array<ItemLayoutGeometry & {hitArea: Rect}>
-  rowsTop: number[]
-}
-
-type EdgeHitArea = {
-  box: Rect
-  targetIndex: number
-}
-
-type LineLayoutModel = {
-  items: ItemLayoutGeometry[]
-  leftHitArea: EdgeHitArea | null
-  rightHitArea: EdgeHitArea | null
-}
-
-type LayoutSource = {
-  ar: number
-  naturalSizeX: number
-  preparedPrompt: PreparedPrompt
 }
 
 type ResizeScenario = {
@@ -204,9 +163,20 @@ type ResizeReport = {
   message?: string
 }
 
+type LayoutLawSweepReport = {
+  phase: 'loading' | 'running' | 'ready' | 'error'
+  requestId: string
+  scenario: 'layout-laws'
+  result?: LayoutVerificationReport
+  message?: string
+}
+
+type VerifyReport = ResizeReport | LayoutLawSweepReport
+
 type PhotoGalleryVerify = {
-  report: ResizeReport
-  runBatch: (scenarios: ResizeScenario[]) => Promise<ResizeReport>
+  report: VerifyReport
+  runBatch?: (scenarios: ResizeScenario[]) => Promise<ResizeReport>
+  runLayoutLawSweep?: () => Promise<LayoutLawSweepReport>
 }
 
 type VerifyRuntime = {
@@ -215,21 +185,13 @@ type VerifyRuntime = {
   scrollX: number
   scrollY: number
   pendingRender: boolean
-  report: ResizeReport
+  report: VerifyReport
 }
 
 declare global {
   interface Window {
     __photoGalleryVerify?: PhotoGalleryVerify
   }
-}
-
-function rect(x: number, y: number, sizeX: number, sizeY: number): Rect {
-  return {x, y, sizeX, sizeY}
-}
-
-function rectContainsPoint(r: Rect, x: number, y: number) {
-  return r.x <= x && x < r.x + r.sizeX && r.y <= y && y < r.y + r.sizeY
 }
 
 function layoutRectXPos(r: Rect, d: BoxData) {
@@ -248,42 +210,6 @@ function layoutRectSizeYPos(r: Rect, d: BoxData) {
   return r.sizeY + d.sizeYResidual.pos
 }
 
-function makeItemLayoutGeometry(
-  x: number,
-  y: number,
-  imageSizeX: number,
-  imageSizeY: number,
-  promptLayout: ReturnType<typeof measurePromptLayout>,
-  promptLineHeight: number,
-): ItemLayoutGeometry {
-  const imageBox = rect(x, y, imageSizeX, imageSizeY)
-  const layoutBox = rect(x, y, imageSizeX, imageSizeY + promptLayout.visibleHeight + promptPaddingBottom)
-  return {
-    imageBox,
-    layoutBox,
-    occlusionBounds: layoutBox,
-    prompt: {
-      box: rect(x, y + imageSizeY, promptLayout.width, promptLayout.visibleHeight),
-      lineHeight: promptLineHeight,
-      lines: promptLayout.lines,
-    },
-  }
-}
-
-// === constant layout metrics. The rest is dynamic
-const boxesGapX = 24, boxesGapY = 24
-const boxes1DGapX = 52, boxes1DGapY = 28
-const windowPaddingTop = 40
-const gapTopPeek = 40 // used when programmatically scrolling and wanting to show some gap at the top of a row
-const hitArea1DSizeX = 100 // left and right click region in 1D mode
-
-function colsBoxMaxSizeXF(containerSizeX: number) {
-  const boxMinSizeX = 220 // Make sure that on mobile, this min width is big enough not to show 2 images per row. Also, this won't be respected if view's tiny
-  const cols = clamp(1, Math.floor((containerSizeX - boxesGapX) / (boxMinSizeX + boxesGapX)), 7) // half of boxesGapX for container's left and right gap
-  const boxMaxSizeX = (containerSizeX - boxesGapX - cols * boxesGapX) / cols
-  return {cols, boxMaxSizeX}
-}
-
 const isSafari = navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome') // Chrome also includes Safari in user-agent string
 if (isSafari) {
   // alright *deep breath* Desktop Safari is fine, but iPad Safari behaves badly when items exceed the viewport in 1D mode (overflow hidden doesn't work!). This is prominent if you hold arrow right and check the GitHub logo move. It's especially pathological on Stage Manager and any other iPad Safari mode where the app window shrinks and bugs the browser more for whatever reason
@@ -296,14 +222,18 @@ if (isSafari) {
 }
 
 const verifyRuntime: VerifyRuntime | null =
-  verifyMode === 'resize'
+  verifyMode === 'resize' || verifyMode === 'layout-laws'
     ? {
         viewportSizeX: document.documentElement.clientWidth,
         viewportSizeY: document.documentElement.clientHeight,
         scrollX: isSafari ? document.body.scrollLeft : window.scrollX,
         scrollY: isSafari ? document.body.scrollTop : window.scrollY,
         pendingRender: false,
-        report: {phase: 'loading', requestId: verifyRequestId, scenario: 'resize'},
+        report: {
+          phase: 'loading',
+          requestId: verifyRequestId,
+          scenario: verifyMode === 'resize' ? 'resize' : 'layout-laws',
+        },
       }
     : null
 
@@ -448,16 +378,11 @@ function setPromptLayout(d: BoxData, x: number, y: number, sizeX: number, sizeY:
     d.promptSizeYResidual.pos = currentSizeY - sizeY
   }
 }
-const preparedPrompts = photoGalleryData.map(d => preparePrompt(d.prompt))
-const layoutSources: LayoutSource[] = photoGalleryData.map((d, i) => ({
-  ar: d.w / d.h,
-  naturalSizeX: d.w,
-  preparedPrompt: preparedPrompts[i]!,
-}))
+const layoutSources = makeLayoutSources(photoGalleryData)
 void document.fonts.ready.then(() => scheduleRender())
 
 function createInitialState(windowSizeX: number, windowSizeY: number, scrollY: number, withEntryAnimation: boolean): State {
-  const gridLayout = getGridLayout(windowSizeX)
+  const gridLayout = getGridLayout(layoutSources, windowSizeX)
   return {
     debugTimestamp: 0,
     animatedUntilTime: null,
@@ -496,129 +421,6 @@ function createInitialState(windowSizeX: number, windowSizeY: number, scrollY: n
         fxFactor: spring(withEntryAnimation ? 20 : 1), // for brightness and blur
       }
     }),
-  }
-}
-
-function get1DItemSize(
-  source: LayoutSource,
-  box1DMaxSizeX: number,
-  box1DMaxSizeY: number,
-  scaleFactor: number,
-) {
-  let promptAreaY = promptPaddingTop + prompt1DLineHeight * prompt1DMaxLines + promptPaddingBottom
-  while (true) {
-    const imgMaxSizeY = Math.max(1, box1DMaxSizeY - promptAreaY)
-    const imageSizeX = Math.min(source.naturalSizeX, box1DMaxSizeX, imgMaxSizeY * source.ar) * scaleFactor
-    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt1DMaxLines, prompt1DLineHeight, false)
-    const nextPromptAreaY = promptLayout.visibleHeight + promptPaddingBottom
-    if (nextPromptAreaY === promptAreaY) {
-      return {
-        imageSizeX,
-        imageSizeY: imageSizeX / source.ar,
-        promptLayout,
-        layoutHeight: imageSizeX / source.ar + nextPromptAreaY,
-      }
-    }
-    promptAreaY = nextPromptAreaY
-  }
-}
-
-function getGridLayout(windowSizeX: number): GridLayoutModel {
-  const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
-  const rowsTop: number[] = [windowPaddingTop]
-  const rowHeights: number[] = []
-  const measurements: Array<{
-    ar: number
-    imageSizeX: number
-    imageSizeY: number
-    layoutHeight: number
-    promptLayout: ReturnType<typeof measurePromptLayout>
-  }> = []
-  let rowHeight = 0
-  for (let i = 0; i < layoutSources.length; i++) {
-    const source = layoutSources[i]!
-    const ar = source.ar
-    const imgMaxSizeY =
-      ar === 1 ? boxMaxSizeX * 0.85 // square aspect ratio area too big. Shrink it
-      : ar < 1 ? boxMaxSizeX * 1.05 // vertical images look a bit small. Grow it
-      : boxMaxSizeX
-    const imageSizeX = Math.min(source.naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
-    const imageSizeY = imageSizeX / ar
-    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt2DMaxLines, prompt2DLineHeight, true)
-    const layoutHeight = imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
-    measurements.push({
-      ar,
-      imageSizeX,
-      imageSizeY,
-      layoutHeight,
-      promptLayout,
-    })
-    rowHeight = Math.max(rowHeight, layoutHeight)
-    if (i % cols === cols - 1 || i === photoGalleryData.length - 1) { // last box of the row or last box ever
-      rowHeights.push(rowHeight)
-      rowsTop.push(rowsTop.at(-1)! + rowHeight + boxesGapY)
-      rowHeight = 0
-    }
-  }
-  return {
-    boxMaxSizeX,
-    cols,
-    contentHeight: rowsTop.at(-1)!,
-    items: measurements.map((m, i) => {
-      const currentRow = Math.floor(i / cols)
-      const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - m.imageSizeX) / 2
-      const y = rowsTop[currentRow]! + (rowHeights[currentRow]! - m.layoutHeight) / 2
-      const geometry = makeItemLayoutGeometry(
-        x,
-        y,
-        m.imageSizeX,
-        m.imageSizeY,
-        m.promptLayout,
-        prompt2DLineHeight,
-      )
-      return {
-        ...geometry,
-        hitArea: geometry.layoutBox,
-      }
-    }),
-    rowsTop,
-  }
-}
-
-function getLineLayout(
-  sources: LayoutSource[],
-  focused: number,
-  windowSizeX: number,
-  windowSizeY: number,
-  scrollY: number,
-): LineLayoutModel {
-  const box1DMaxSizeY = windowSizeY - windowPaddingTop - boxes1DGapY
-  const box1DMaxSizeX = windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
-  const measurements = sources.map((source, i) => get1DItemSize(source, box1DMaxSizeX, box1DMaxSizeY, i === focused ? 1 : 0.7))
-
-  let currentLeft = hitArea1DSizeX + boxes1DGapX
-  for (let i = focused - 1; i >= 0; i--) currentLeft -= measurements[i]!.imageSizeX + boxes1DGapX
-
-  const items: ItemLayoutGeometry[] = []
-  for (let i = 0; i < sources.length; i++) {
-    const m = measurements[i]!
-    const x = i === focused ? (windowSizeX - m.imageSizeX) / 2 : currentLeft
-    const y = Math.max(windowPaddingTop, (windowSizeY - m.layoutHeight) / 2) + scrollY
-    items.push(makeItemLayoutGeometry(
-      x,
-      y,
-      m.imageSizeX,
-      m.imageSizeY,
-      m.promptLayout,
-      prompt1DLineHeight,
-    ))
-    currentLeft = i === focused ? windowSizeX - hitArea1DSizeX : currentLeft + m.imageSizeX + boxes1DGapX
-  }
-
-  return {
-    items,
-    leftHitArea: focused > 0 ? {box: rect(0, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused - 1} : null,
-    rightHitArea: focused < sources.length - 1 ? {box: rect(windowSizeX - hitArea1DSizeX, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused + 1} : null,
   }
 }
 
@@ -788,7 +590,7 @@ function render(now: number) {
     : inputCode === 'ArrowLeft' ? Math.max(0, focused - 1)
     : inputCode === 'ArrowRight' ? Math.min(data.length - 1, focused + 1)
     : focused
-  const gridLayout = getGridLayout(newWindowSizeX)
+  const gridLayout = getGridLayout(layoutSources, newWindowSizeX)
   const currentLineLayout = focused == null ? null : getLineLayout(layoutSources, focused, newWindowSizeX, windowSizeY, currentScrollY)
   // pointer
   let selectTarget: SelectTarget | null = null
@@ -810,7 +612,7 @@ function render(now: number) {
   }
 
   // === layout & cursor
-  const previousGridLayout = getGridLayout(st.windowSizeX)
+  const previousGridLayout = getGridLayout(layoutSources, st.windowSizeX)
   const resized = newWindowSizeX !== st.windowSizeX
   const entered1D = focused == null && newFocused != null
   const dismissed1D = focused != null && newFocused == null
@@ -1095,7 +897,7 @@ function getCurrentLayoutProjection() {
   const windowSizeX = readWindowSizeX()
   const windowSizeY = readWindowSizeY()
   const scrollY = readScrollY()
-  const gridLayout = getGridLayout(windowSizeX)
+  const gridLayout = getGridLayout(layoutSources, windowSizeX)
   const focused = getFocusedIndexFromHash(st.data)
   const lineLayout = focused == null ? null : getLineLayout(layoutSources, focused, windowSizeX, windowSizeY, scrollY)
   return {
@@ -1217,7 +1019,7 @@ async function runResizeScenario(scenario: ResizeScenario): Promise<ResizeScenar
   const anchorId = scenario.anchorId ?? null
   if (anchorId != null) st.anchor = findItemIndexById(anchorId)
   if (scenario.scrollY === 'anchor' && anchorId != null) {
-    const anchorLayoutBox = getGridLayout(scenario.startWidth).items[findItemIndexById(anchorId)]!.layoutBox
+    const anchorLayoutBox = getGridLayout(layoutSources, scenario.startWidth).items[findItemIndexById(anchorId)]!.layoutBox
     const anchoredScrollY = Math.max(0, anchorLayoutBox.y - gapTopPeek)
     verifyRuntime.scrollY = anchoredScrollY
     st.scrollY = anchoredScrollY
@@ -1234,7 +1036,7 @@ async function runResizeScenario(scenario: ResizeScenario): Promise<ResizeScenar
     scenario.trackedIds ??
     (
       scenario.trackedKind === 'firstRow'
-        ? photoGalleryData.slice(0, getGridLayout(scenario.startWidth).cols).map(d => d.id)
+        ? photoGalleryData.slice(0, getGridLayout(layoutSources, scenario.startWidth).cols).map(d => d.id)
         : anchorId == null ? [] : [anchorId]
     )
 
@@ -1291,12 +1093,40 @@ async function runResizeBatch(scenarios: ResizeScenario[]) {
   return verifyRuntime.report
 }
 
+async function runLayoutLawSweep() {
+  if (verifyRuntime == null) throw new Error('Layout verification is not enabled')
+
+  verifyRuntime.report = {
+    phase: 'running',
+    requestId: verifyRequestId,
+    scenario: 'layout-laws',
+  }
+  try {
+    await document.fonts.ready
+    verifyRuntime.report = {
+      phase: 'ready',
+      requestId: verifyRequestId,
+      scenario: 'layout-laws',
+      result: runPhotoGalleryLayoutVerification(),
+    }
+  } catch (error) {
+    verifyRuntime.report = {
+      phase: 'error',
+      requestId: verifyRequestId,
+      scenario: 'layout-laws',
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+  return verifyRuntime.report
+}
+
 if (verifyRuntime != null) {
   window.__photoGalleryVerify = {
     get report() {
       return verifyRuntime.report
     },
-    runBatch: runResizeBatch,
+    ...(verifyMode === 'resize' ? {runBatch: runResizeBatch} : {}),
+    ...(verifyMode === 'layout-laws' ? {runLayoutLawSweep} : {}),
   }
 }
 
