@@ -103,6 +103,25 @@ This kept coming up in the experiment:
 
 These are better than a vague "happy path" check that only implies the behavior indirectly.
 
+## Animated Seams Need One Transition Snapshot
+
+If a refactor moves child geometry from CSS or DOM flow into JS, don't only compare the final resting states.
+
+Also snapshot one representative transition frame.
+
+Good:
+
+- 2D card rect before click
+- the same card's prompt rect at `t=16ms` after entering 1D
+- widest rendered prompt line at that same frame
+
+Bad:
+
+- only final 2D vs final 1D snapshots
+- only outer card rects when the bug can live in a child rect
+
+A lot of animation regressions are "the base layout is right, but one child box teleported or overflowed during the handoff." Steady-state snapshots won't see that.
+
 ## Semantic Snapshots
 
 When you snapshot behavior, snapshot the semantics that matter.

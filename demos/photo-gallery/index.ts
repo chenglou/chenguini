@@ -33,10 +33,31 @@ For developers:
 */
 
 import {photoGalleryData} from './data'
+import {
+  measurePromptLayout,
+  preparePrompt,
+  prompt1DLineHeight,
+  prompt1DMaxLines,
+  prompt2DLineHeight,
+  prompt2DMaxLines,
+  promptPaddingBottom,
+  promptPaddingX,
+  promptPaddingTop,
+  type PromptLine,
+  type PreparedPrompt,
+} from './prompt-layout'
+
+const urlSearchParams = new URLSearchParams(window.location.search)
+const verifyMode = urlSearchParams.get('verify')
+const verifyRequestId = urlSearchParams.get('requestId') ?? ''
 
 // === generic scheduler & its debugger
 let scheduledRaf: number | null = null
 function scheduleRender() {
+  if (verifyRuntime != null) {
+    verifyRuntime.pendingRender = true
+    return
+  }
   if (scheduledRaf != null) return;
   scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) { // eye-grabbing name. No "(anonymous)" function in the debugger & profiler
     scheduledRaf = null
@@ -84,10 +105,172 @@ function clamp(min: number, v: number, max: number) {
   return v > max ? max : v < min ? min : v
 }
 
+type Rect = {
+  x: number
+  y: number
+  sizeX: number
+  sizeY: number
+}
+
+type PromptGeometry = {
+  box: Rect
+  lineHeight: number
+  lines: PromptLine[]
+}
+
+type ItemLayoutGeometry = {
+  imageBox: Rect
+  layoutBox: Rect
+  occlusionBounds: Rect
+  prompt: PromptGeometry
+}
+
+type GridLayoutModel = {
+  boxMaxSizeX: number
+  cols: number
+  contentHeight: number
+  items: Array<ItemLayoutGeometry & {hitArea: Rect}>
+  rowsTop: number[]
+}
+
+type EdgeHitArea = {
+  box: Rect
+  targetIndex: number
+}
+
+type LineLayoutModel = {
+  items: ItemLayoutGeometry[]
+  leftHitArea: EdgeHitArea | null
+  rightHitArea: EdgeHitArea | null
+}
+
+type LayoutSource = {
+  ar: number
+  naturalSizeX: number
+  preparedPrompt: PreparedPrompt
+}
+
+type ResizeScenario = {
+  name: string
+  startWidth: number
+  endWidth: number
+  height: number
+  anchorId?: string
+  trackedIds?: string[]
+  trackedKind?: 'firstRow'
+  scrollY?: number | 'anchor'
+  sampleTimesMs: number[]
+}
+
+type ResizeSampleItem = {
+  id: string
+  prompt: string
+  mounted: boolean
+  layoutBox: Rect | null
+  visualBox: Rect | null
+  promptBox: Rect | null
+  viewportY: number | null
+  row: number | null
+  col: number | null
+  lineCount: number | null
+  widestRenderedLine: number | null
+  promptInnerWidth: number | null
+}
+
+type ResizeSample = {
+  label: string
+  elapsedMs: number | null
+  cols: number
+  scrollY: number
+  contentHeight: number
+  anchor: ResizeSampleItem | null
+  items: ResizeSampleItem[]
+}
+
+type ResizeScenarioResult = {
+  name: string
+  startWidth: number
+  endWidth: number
+  anchorId: string | null
+  trackedIds: string[]
+  samples: ResizeSample[]
+}
+
+type ResizeReport = {
+  phase: 'loading' | 'running' | 'ready' | 'error'
+  requestId: string
+  scenario: 'resize'
+  results?: ResizeScenarioResult[]
+  message?: string
+}
+
+type PhotoGalleryVerify = {
+  report: ResizeReport
+  runBatch: (scenarios: ResizeScenario[]) => Promise<ResizeReport>
+}
+
+type VerifyRuntime = {
+  viewportSizeX: number
+  viewportSizeY: number
+  scrollX: number
+  scrollY: number
+  pendingRender: boolean
+  report: ResizeReport
+}
+
+declare global {
+  interface Window {
+    __photoGalleryVerify?: PhotoGalleryVerify
+  }
+}
+
+function rect(x: number, y: number, sizeX: number, sizeY: number): Rect {
+  return {x, y, sizeX, sizeY}
+}
+
+function rectContainsPoint(r: Rect, x: number, y: number) {
+  return r.x <= x && x < r.x + r.sizeX && r.y <= y && y < r.y + r.sizeY
+}
+
+function layoutRectXPos(r: Rect, d: BoxData) {
+  return r.x + d.xResidual.pos
+}
+
+function layoutRectYPos(r: Rect, d: BoxData) {
+  return r.y + d.yResidual.pos
+}
+
+function layoutRectSizeXPos(r: Rect, d: BoxData) {
+  return r.sizeX + d.sizeXResidual.pos
+}
+
+function layoutRectSizeYPos(r: Rect, d: BoxData) {
+  return r.sizeY + d.sizeYResidual.pos
+}
+
+function makeItemLayoutGeometry(
+  x: number,
+  y: number,
+  imageSizeX: number,
+  imageSizeY: number,
+  promptLayout: ReturnType<typeof measurePromptLayout>,
+  promptLineHeight: number,
+): ItemLayoutGeometry {
+  const imageBox = rect(x, y, imageSizeX, imageSizeY)
+  const layoutBox = rect(x, y, imageSizeX, imageSizeY + promptLayout.visibleHeight + promptPaddingBottom)
+  return {
+    imageBox,
+    layoutBox,
+    occlusionBounds: layoutBox,
+    prompt: {
+      box: rect(x, y + imageSizeY, promptLayout.width, promptLayout.visibleHeight),
+      lineHeight: promptLineHeight,
+      lines: promptLayout.lines,
+    },
+  }
+}
+
 // === constant layout metrics. The rest is dynamic
-const promptPaddingBottom = 8
-const promptSizeY = 44 + promptPaddingBottom // 44 is a magic number. Doesn't show the 3rd line nor cuts the 2nd line on safari, mobile safari and chrome
-const prompt1DSizeY = 64 + promptPaddingBottom // size in 1d mode
 const boxesGapX = 24, boxesGapY = 24
 const boxes1DGapX = 52, boxes1DGapY = 28
 const windowPaddingTop = 40
@@ -110,6 +293,51 @@ if (isSafari) {
   document.body.style.contain = 'layout'
   document.body.style.width = '100vw'
   document.body.style.height = '100vh'
+}
+
+const verifyRuntime: VerifyRuntime | null =
+  verifyMode === 'resize'
+    ? {
+        viewportSizeX: document.documentElement.clientWidth,
+        viewportSizeY: document.documentElement.clientHeight,
+        scrollX: isSafari ? document.body.scrollLeft : window.scrollX,
+        scrollY: isSafari ? document.body.scrollTop : window.scrollY,
+        pendingRender: false,
+        report: {phase: 'loading', requestId: verifyRequestId, scenario: 'resize'},
+      }
+    : null
+
+function readWindowSizeX() {
+  return verifyRuntime?.viewportSizeX ?? document.documentElement.clientWidth
+}
+
+function readWindowSizeY() {
+  return verifyRuntime?.viewportSizeY ?? document.documentElement.clientHeight
+}
+
+function readScrollY() {
+  return verifyRuntime?.scrollY ?? (isSafari ? document.body.scrollTop : window.scrollY)
+}
+
+function readScrollX() {
+  return verifyRuntime?.scrollX ?? (isSafari ? document.body.scrollLeft : window.scrollX)
+}
+
+function applyScrollTop(top: number) {
+  if (verifyRuntime != null) {
+    verifyRuntime.scrollY = top
+    return
+  }
+  ;(isSafari ? document.body : window).scrollTo({top})
+}
+
+function applyFocusedId(id: string | null) {
+  const url = `${window.location.pathname}${window.location.search}${id == null ? '' : '#' + id}`
+  if (verifyRuntime != null) {
+    window.history.replaceState(null, '', url)
+  } else {
+    window.history.pushState(null, '', url)
+  }
 }
 
 // === state. Plus one in the URL's hash
@@ -135,6 +363,14 @@ type BoxData = {
   yResidual: Spring
   sizeXResidual: Spring
   sizeYResidual: Spring
+  promptX: number
+  promptY: number
+  promptSizeX: number
+  promptSizeY: number
+  promptXResidual: Spring
+  promptYResidual: Spring
+  promptSizeXResidual: Spring
+  promptSizeYResidual: Spring
 }
 
 type State = {
@@ -147,6 +383,10 @@ type State = {
   events: {keydown: KeyboardEvent | null; click: MouseEvent | null; mousemove: MouseEvent | null}
   data: BoxData[]
 }
+
+type SelectTarget =
+  | {node: Node}
+  | {startNode: Node; startOffset: number; endNode: Node; endOffset: number}
 
 function shiftSpringPos(s: Spring, delta: number) {
   s.pos += delta
@@ -162,6 +402,18 @@ function xPos(d: BoxData) {
 }
 function yPos(d: BoxData) {
   return d.y + d.yResidual.pos
+}
+function promptXPos(d: BoxData) {
+  return d.promptX + d.promptXResidual.pos
+}
+function promptYPos(d: BoxData) {
+  return d.promptY + d.promptYResidual.pos
+}
+function promptSizeXPos(d: BoxData) {
+  return d.promptSizeX + d.promptSizeXResidual.pos
+}
+function promptSizeYPos(d: BoxData) {
+  return d.promptSizeY + d.promptSizeYResidual.pos
 }
 // Set x/y/size right away. If this change should animate, stash the current on-screen delta in the residuals and let them settle back to 0.
 function setLayout(d: BoxData, x: number, y: number, sizeX: number, sizeY: number, preservePosition: boolean, preserveSize: boolean) {
@@ -180,71 +432,201 @@ function setLayout(d: BoxData, x: number, y: number, sizeX: number, sizeY: numbe
     d.sizeYResidual.pos = currentSizeY - sizeY
   }
 }
-function get2DLayout(windowSizeX: number) {
-  const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
-  const boxes2DSizeX: number[] = [], boxes2DSizeY: number[] = [], rowsTop: number[] = [windowPaddingTop] // length: number of rows + 1
-  let rowMaxSizeY = 0
-  for (let i = 0; i < photoGalleryData.length; i++) {
-    const d = photoGalleryData[i]!
-    const ar = d.w / d.h
-    const imgMaxSizeY =
-      ar === 1 ? boxMaxSizeX * 0.85 // square aspect ratio area too big. Shrink it
-      : ar < 1 ? boxMaxSizeX * 1.05 // vertical images look a bit small. Grow it
-      : boxMaxSizeX
-    const sizeX = Math.min(d.w, boxMaxSizeX, imgMaxSizeY * ar)
-    const sizeY = sizeX / ar + promptSizeY
-    boxes2DSizeX.push(sizeX)
-    boxes2DSizeY.push(sizeY)
-    rowMaxSizeY = Math.max(rowMaxSizeY, sizeY)
-    if (i % cols === cols - 1 || i === photoGalleryData.length - 1) { // last box of the row or last box ever
-      rowsTop.push(rowsTop.at(-1)! + rowMaxSizeY + boxesGapY)
-      rowMaxSizeY = 0
-    }
+function setPromptLayout(d: BoxData, x: number, y: number, sizeX: number, sizeY: number, preservePosition: boolean, preserveSize: boolean) {
+  const currentX = promptXPos(d), currentY = promptYPos(d)
+  const currentSizeX = promptSizeXPos(d), currentSizeY = promptSizeYPos(d)
+  d.promptX = x
+  d.promptY = y
+  d.promptSizeX = sizeX
+  d.promptSizeY = sizeY
+  if (preservePosition) {
+    d.promptXResidual.pos = currentX - x
+    d.promptYResidual.pos = currentY - y
   }
-  return {cols, boxMaxSizeX, boxes2DSizeX, boxes2DSizeY, rowsTop}
+  if (preserveSize) {
+    d.promptSizeXResidual.pos = currentSizeX - sizeX
+    d.promptSizeYResidual.pos = currentSizeY - sizeY
+  }
 }
+const preparedPrompts = photoGalleryData.map(d => preparePrompt(d.prompt))
+const layoutSources: LayoutSource[] = photoGalleryData.map((d, i) => ({
+  ar: d.w / d.h,
+  naturalSizeX: d.w,
+  preparedPrompt: preparedPrompts[i]!,
+}))
+void document.fonts.ready.then(() => scheduleRender())
 
-let st: State; {
-  const windowSizeX = document.documentElement.clientWidth
-  const windowSizeY = document.documentElement.clientHeight
-  const {cols, boxMaxSizeX, boxes2DSizeX, boxes2DSizeY, rowsTop} = get2DLayout(windowSizeX)
-  st = {
+function createInitialState(windowSizeX: number, windowSizeY: number, scrollY: number, withEntryAnimation: boolean): State {
+  const gridLayout = getGridLayout(windowSizeX)
+  return {
     debugTimestamp: 0,
     animatedUntilTime: null,
     anchor: 0, // keep a box stable during resize layout shifts
     windowSizeX,
-    scrollY: isSafari ? document.body.scrollTop : window.scrollY,
+    scrollY,
     pointer: {x: -Infinity, y: -Infinity}, // btw, on page load, there's no way to render a first cursor state =(
-    events: { keydown: null, click: null, mousemove: null },
+    events: {keydown: null, click: null, mousemove: null},
     data: photoGalleryData.map((d, i) => {
       const ar = d.w / d.h
-      const sizeX = boxes2DSizeX[i]!, sizeY = boxes2DSizeY[i]!
-      const currentRow = Math.floor(i / cols)
-      const rowMaxSizeY = rowsTop[currentRow + 1]! - boxesGapY - rowsTop[currentRow]! // restore the row's max height
-      const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - sizeX) / 2
-      const y = rowsTop[currentRow]! + (rowMaxSizeY - sizeY) / 2
+      const geometry = gridLayout.items[i]!
+      const promptBox = geometry.prompt.box
+      const layoutBox = geometry.layoutBox
       return {
         id: d.id,
         prompt: d.prompt,
         naturalSizeX: d.w,
         ar,
-        sizeX,
-        sizeY,
-        x,
-        y,
+        sizeX: layoutBox.sizeX,
+        sizeY: layoutBox.sizeY,
+        x: layoutBox.x,
+        y: layoutBox.y,
         sizeXResidual: spring(0),
         sizeYResidual: spring(0), // image + prompt
-        xResidual: spring(Math.floor(i / cols) * -windowSizeX - windowSizeX - x), // unfold from lower left. More visible on long screens
-        yResidual: spring(windowSizeY + Math.floor(i / cols) * boxMaxSizeX - y),
+        xResidual: spring(withEntryAnimation ? Math.floor(i / gridLayout.cols) * -windowSizeX - windowSizeX - layoutBox.x : 0), // unfold from lower left. More visible on long screens
+        yResidual: spring(withEntryAnimation ? windowSizeY + Math.floor(i / gridLayout.cols) * gridLayout.boxMaxSizeX - layoutBox.y : 0),
+        promptX: promptBox.x - layoutBox.x,
+        promptY: promptBox.y - layoutBox.y,
+        promptSizeX: promptBox.sizeX,
+        promptSizeY: promptBox.sizeY,
+        promptXResidual: spring(0),
+        promptYResidual: spring(0),
+        promptSizeXResidual: spring(0),
+        promptSizeYResidual: spring(0),
         scale: spring(1),
-        fxFactor: spring(20), // for brightness and blur
+        fxFactor: spring(withEntryAnimation ? 20 : 1), // for brightness and blur
       }
     }),
   }
 }
+
+function get1DItemSize(
+  source: LayoutSource,
+  box1DMaxSizeX: number,
+  box1DMaxSizeY: number,
+  scaleFactor: number,
+) {
+  let promptAreaY = promptPaddingTop + prompt1DLineHeight * prompt1DMaxLines + promptPaddingBottom
+  while (true) {
+    const imgMaxSizeY = Math.max(1, box1DMaxSizeY - promptAreaY)
+    const imageSizeX = Math.min(source.naturalSizeX, box1DMaxSizeX, imgMaxSizeY * source.ar) * scaleFactor
+    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt1DMaxLines, prompt1DLineHeight, false)
+    const nextPromptAreaY = promptLayout.visibleHeight + promptPaddingBottom
+    if (nextPromptAreaY === promptAreaY) {
+      return {
+        imageSizeX,
+        imageSizeY: imageSizeX / source.ar,
+        promptLayout,
+        layoutHeight: imageSizeX / source.ar + nextPromptAreaY,
+      }
+    }
+    promptAreaY = nextPromptAreaY
+  }
+}
+
+function getGridLayout(windowSizeX: number): GridLayoutModel {
+  const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
+  const rowsTop: number[] = [windowPaddingTop]
+  const rowHeights: number[] = []
+  const measurements: Array<{
+    ar: number
+    imageSizeX: number
+    imageSizeY: number
+    layoutHeight: number
+    promptLayout: ReturnType<typeof measurePromptLayout>
+  }> = []
+  let rowHeight = 0
+  for (let i = 0; i < layoutSources.length; i++) {
+    const source = layoutSources[i]!
+    const ar = source.ar
+    const imgMaxSizeY =
+      ar === 1 ? boxMaxSizeX * 0.85 // square aspect ratio area too big. Shrink it
+      : ar < 1 ? boxMaxSizeX * 1.05 // vertical images look a bit small. Grow it
+      : boxMaxSizeX
+    const imageSizeX = Math.min(source.naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
+    const imageSizeY = imageSizeX / ar
+    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt2DMaxLines, prompt2DLineHeight, true)
+    const layoutHeight = imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
+    measurements.push({
+      ar,
+      imageSizeX,
+      imageSizeY,
+      layoutHeight,
+      promptLayout,
+    })
+    rowHeight = Math.max(rowHeight, layoutHeight)
+    if (i % cols === cols - 1 || i === photoGalleryData.length - 1) { // last box of the row or last box ever
+      rowHeights.push(rowHeight)
+      rowsTop.push(rowsTop.at(-1)! + rowHeight + boxesGapY)
+      rowHeight = 0
+    }
+  }
+  return {
+    boxMaxSizeX,
+    cols,
+    contentHeight: rowsTop.at(-1)!,
+    items: measurements.map((m, i) => {
+      const currentRow = Math.floor(i / cols)
+      const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - m.imageSizeX) / 2
+      const y = rowsTop[currentRow]! + (rowHeights[currentRow]! - m.layoutHeight) / 2
+      const geometry = makeItemLayoutGeometry(
+        x,
+        y,
+        m.imageSizeX,
+        m.imageSizeY,
+        m.promptLayout,
+        prompt2DLineHeight,
+      )
+      return {
+        ...geometry,
+        hitArea: geometry.layoutBox,
+      }
+    }),
+    rowsTop,
+  }
+}
+
+function getLineLayout(
+  sources: LayoutSource[],
+  focused: number,
+  windowSizeX: number,
+  windowSizeY: number,
+  scrollY: number,
+): LineLayoutModel {
+  const box1DMaxSizeY = windowSizeY - windowPaddingTop - boxes1DGapY
+  const box1DMaxSizeX = windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
+  const measurements = sources.map((source, i) => get1DItemSize(source, box1DMaxSizeX, box1DMaxSizeY, i === focused ? 1 : 0.7))
+
+  let currentLeft = hitArea1DSizeX + boxes1DGapX
+  for (let i = focused - 1; i >= 0; i--) currentLeft -= measurements[i]!.imageSizeX + boxes1DGapX
+
+  const items: ItemLayoutGeometry[] = []
+  for (let i = 0; i < sources.length; i++) {
+    const m = measurements[i]!
+    const x = i === focused ? (windowSizeX - m.imageSizeX) / 2 : currentLeft
+    const y = Math.max(windowPaddingTop, (windowSizeY - m.layoutHeight) / 2) + scrollY
+    items.push(makeItemLayoutGeometry(
+      x,
+      y,
+      m.imageSizeX,
+      m.imageSizeY,
+      m.promptLayout,
+      prompt1DLineHeight,
+    ))
+    currentLeft = i === focused ? windowSizeX - hitArea1DSizeX : currentLeft + m.imageSizeX + boxes1DGapX
+  }
+
+  return {
+    items,
+    leftHitArea: focused > 0 ? {box: rect(0, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused - 1} : null,
+    rightHitArea: focused < sources.length - 1 ? {box: rect(windowSizeX - hitArea1DSizeX, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused + 1} : null,
+  }
+}
+
+let st: State = createInitialState(readWindowSizeX(), readWindowSizeY(), readScrollY(), true)
 function springForEach(f: (s: Spring) => void) { // no spring ownership struggle between the spring library above vs consumer; un-inversion of control!
   for (const d of st.data) {
-    f(d.sizeXResidual); f(d.sizeYResidual); f(d.xResidual); f(d.yResidual); f(d.scale); f(d.fxFactor) // no different than [a, b, c].forEach(f)
+    f(d.sizeXResidual); f(d.sizeYResidual); f(d.xResidual); f(d.yResidual); f(d.scale); f(d.fxFactor)
+    f(d.promptXResidual); f(d.promptYResidual); f(d.promptSizeXResidual); f(d.promptSizeYResidual)
   }
 }
 
@@ -269,29 +651,89 @@ if (debug) {
   document.documentElement.style.height = '100%'
 }
 
+function promptRenderKey(prompt: PromptGeometry) {
+  return `${prompt.lineHeight}|${prompt.lines.map(line =>
+    `${line.width.toFixed(4)}:${line.fragments.map(fragment =>
+      `${fragment.itemIndex},${fragment.gapBefore.toFixed(4)},${fragment.text}`
+    ).join('/')}`
+  ).join('|')}`
+}
+
+function syncPromptNode(promptNode: HTMLElement, prompt: PromptGeometry, fullPromptText: string) {
+  const renderKey = promptRenderKey(prompt)
+  const existingSelectionSource = promptNode.querySelector('.prompt-selection-source')
+  if (promptNode.dataset['renderKey'] === renderKey && existingSelectionSource?.textContent === fullPromptText) return
+
+  const selectionSourceNode = document.createElement('span')
+  selectionSourceNode.className = 'prompt-selection-source'
+  selectionSourceNode.textContent = fullPromptText
+  const lineNodes = prompt.lines.map((line, lineIndex) => {
+    const lineNode = document.createElement('span')
+    lineNode.className = 'prompt-line'
+    lineNode.style.left = `${promptPaddingX}px`
+    lineNode.style.top = `${promptPaddingTop + lineIndex * prompt.lineHeight}px`
+    lineNode.style.height = `${prompt.lineHeight}px`
+    for (const fragment of line.fragments) {
+      const fragmentNode = document.createElement('span')
+      fragmentNode.className = fragment.itemIndex === 0
+        ? 'prompt-fragment prompt-fragment--quote'
+        : 'prompt-fragment prompt-fragment--body'
+      if (fragment.gapBefore !== 0) fragmentNode.style.marginLeft = `${fragment.gapBefore}px`
+      fragmentNode.textContent = fragment.text
+      lineNode.append(fragmentNode)
+    }
+    return lineNode
+  })
+
+  promptNode.replaceChildren(selectionSourceNode, ...lineNodes)
+  promptNode.dataset['renderKey'] = renderKey
+}
+
+function getPromptSelectionTarget(promptTarget: Element): SelectTarget {
+  const selectionSourceNode = promptTarget.querySelector('.prompt-selection-source')?.firstChild
+  if (selectionSourceNode != null) {
+    return {
+      startNode: selectionSourceNode,
+      startOffset: 0,
+      endNode: selectionSourceNode,
+      endOffset: selectionSourceNode.textContent?.length ?? 0,
+    }
+  }
+
+  const bodyFragments = promptTarget.querySelectorAll('.prompt-fragment--body')
+  if (bodyFragments.length === 0) return {node: promptTarget}
+
+  const firstNode = bodyFragments[0]!.firstChild ?? bodyFragments[0]!
+  const lastNode = bodyFragments[bodyFragments.length - 1]!.firstChild ?? bodyFragments[bodyFragments.length - 1]!
+  return {
+    startNode: firstNode,
+    startOffset: 0,
+    endNode: lastNode,
+    endOffset: lastNode.textContent?.length ?? 0,
+  }
+}
+
 // === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either)
-function hitTest2DMode(data: BoxData[], pointerX: number, pointerY: number) {
-  for (let i = 0; i < data.length; i++) {
-    const d = data[i]!
-    if (d.x <= pointerX && pointerX < d.x + d.sizeX && d.y <= pointerY && pointerY < d.y + d.sizeY) return i // pointer on this box
+function hitTest2DMode(layout: GridLayoutModel, pointerX: number, pointerY: number) {
+  for (let i = 0; i < layout.items.length; i++) {
+    if (rectContainsPoint(layout.items[i]!.hitArea, pointerX, pointerY)) return i
   }
   return null
 }
-function hitTest1DMode(data: BoxData[], focused: number, windowSizeX: number, pointerX: number) {
-  // allow spamming clicks without accidentally clicking on an empty region on left/right side or newly focused image during transition (and dismiss 1D mode)
-  return focused > 0 && pointerX >= 0 /* might be -Infinity */ && pointerX <= hitArea1DSizeX ? Math.max(0, focused - 1) // left
-    : focused < data.length - 1 && pointerX >= windowSizeX - hitArea1DSizeX ? Math.min(data.length - 1, focused + 1) // right
-    : null
+function hitTest1DMode(layout: LineLayoutModel, pointerX: number, pointerY: number) {
+  if (layout.leftHitArea != null && rectContainsPoint(layout.leftHitArea.box, pointerX, pointerY)) return layout.leftHitArea.targetIndex
+  if (layout.rightHitArea != null && rectContainsPoint(layout.rightHitArea.box, pointerX, pointerY)) return layout.rightHitArea.targetIndex
+  return null
 }
 
 function render(now: number) {
   // === DOM reads
-  const newWindowSizeX = document.documentElement.clientWidth // excludes scroll bar & invariant under safari pinch zoom
-  const windowSizeY = document.documentElement.clientHeight // same
+  const newWindowSizeX = readWindowSizeX() // excludes scroll bar & invariant under safari pinch zoom
+  const windowSizeY = readWindowSizeY() // same
   // this way, when pinch zooming in, we don't occlude away rows outside of the view; if we did, when we zoom out again we wouldn't see those occluded rows until we release our fingers. During safari pinch, no event is triggered so we couldn't have updated the occlusion in real time
   const animationDisabled = reducedMotion.matches
-  const currentScrollY = isSafari ? document.body.scrollTop : window.scrollY
-  const currentScrollX = isSafari ? document.body.scrollLeft : window.scrollX
+  const currentScrollY = readScrollY()
+  const currentScrollX = readScrollX()
   const hashImgId = window.location.hash.slice(1)
 
   const data = st.data
@@ -331,87 +773,103 @@ function render(now: number) {
     : inputCode === 'ArrowLeft' ? Math.max(0, focused - 1)
     : inputCode === 'ArrowRight' ? Math.min(data.length - 1, focused + 1)
     : focused
+  const gridLayout = getGridLayout(newWindowSizeX)
+  const currentLineLayout = focused == null ? null : getLineLayout(layoutSources, focused, newWindowSizeX, windowSizeY, currentScrollY)
   // pointer
-  let selectTarget: HTMLElement | null = null
+  let selectTarget: SelectTarget | null = null
   if (clickedTarget != null) { // clicked
-    if (clickedTarget instanceof HTMLElement && clickedTarget.tagName === 'FIGCAPTION') { // select the whole prompt
-      selectTarget = clickedTarget
+    if (clickedTarget instanceof Element) {
+      const promptTarget = clickedTarget.closest('figcaption.prompt')
+      if (promptTarget != null) {
+        selectTarget = getPromptSelectionTarget(promptTarget)
+      } else if (focused == null) { // in 2D grid mode. Find the box the pointer's on
+        newFocused = hitTest2DMode(gridLayout, pointerXLocal, pointerYLocal) ?? newFocused
+      } else { // 1D mode
+        newFocused = currentLineLayout == null ? newFocused : hitTest1DMode(currentLineLayout, pointerXLocal, pointerYLocal)
+      }
     } else if (focused == null) { // in 2D grid mode. Find the box the pointer's on
-      newFocused = hitTest2DMode(data, pointerXLocal, pointerYLocal) ?? newFocused
+      newFocused = hitTest2DMode(gridLayout, pointerXLocal, pointerYLocal) ?? newFocused
     } else { // 1D mode
-      newFocused = hitTest1DMode(data, focused, newWindowSizeX, pointerXLocal)
+      newFocused = currentLineLayout == null ? newFocused : hitTest1DMode(currentLineLayout, pointerXLocal, pointerYLocal)
     }
   }
 
   // === layout & cursor
-  const {cols: oldCols} = get2DLayout(st.windowSizeX)
-  const {cols, boxMaxSizeX, boxes2DSizeX, boxes2DSizeY, rowsTop} = get2DLayout(newWindowSizeX)
+  const previousGridLayout = getGridLayout(st.windowSizeX)
   const resized = newWindowSizeX !== st.windowSizeX
   const entered1D = focused == null && newFocused != null
   const dismissed1D = focused != null && newFocused == null
   const changedFocusIn1D = focused != null && newFocused != null && focused !== newFocused
   // Resize alone doesn't touch residuals. 2D grid reflow does.
-  const reflowed2D = newFocused == null && resized && oldCols !== cols
+  const reflowed2D = newFocused == null && resized && previousGridLayout.cols !== gridLayout.cols
+  const resized1D = newFocused != null && resized
   let cursor: string
   let newAnchor = st.anchor
   let adjustedScrollTop = currentScrollY
+  let activeLayoutItems: ItemLayoutGeometry[] = gridLayout.items
+  let activeLineLayout: LineLayoutModel | null = null
   const hoverMagnetFactor = 40
   if (newFocused == null) { // 2D mode
     if (focused != null) { // just dismissed 1D mode
-      const focusedTop = rowsTop[Math.floor(focused / cols)]!
+      const focusedTop = gridLayout.rowsTop[Math.floor(focused / gridLayout.cols)]!
+      const focusedItem = gridLayout.items[focused]!.layoutBox
       // if the dismissed box isn't fully shown, scroll to it (later after the render code block)
-      if (focusedTop <= currentScrollY || focusedTop + boxes2DSizeY[focused]! >= currentScrollY + windowSizeY) {
+      if (focusedTop <= currentScrollY || focusedItem.y + focusedItem.sizeY >= currentScrollY + windowSizeY) {
         adjustedScrollTop = focusedTop - boxesGapY - gapTopPeek // Peek a little higher to show the previous row
       }
     }
 
     for (let i = 0; i < data.length; i++) { // calculate boxes positions
       const d = data[i]!
-      const sizeX = boxes2DSizeX[i]!, sizeY = boxes2DSizeY[i]!
-      const currentRow = Math.floor(i / cols)
-      const rowMaxSizeY = rowsTop[currentRow + 1]! - boxesGapY - rowsTop[currentRow]! // this is restoring the rowMaxSizeY info above, kinda weird
-      const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - sizeX) / 2
-      const y = rowsTop[currentRow]! + (rowMaxSizeY - sizeY) / 2
-      // Back to grid: keep current x/y/size. Pure 2D reflow only keeps x/y. Same-grid resize doesn't touch the residuals.
-      setLayout(d, x, y, sizeX, sizeY, dismissed1D || reflowed2D, dismissed1D)
+      const geometry = gridLayout.items[i]!
+      const layoutBox = geometry.layoutBox
+      const promptBox = geometry.prompt.box
+      // Back to grid: keep current x/y/size. Pure 2D reflow also keeps size so resize handoff doesn't jump.
+      setLayout(d, layoutBox.x, layoutBox.y, layoutBox.sizeX, layoutBox.sizeY, dismissed1D || reflowed2D, dismissed1D || reflowed2D)
+      setPromptLayout(
+        d,
+        promptBox.x - layoutBox.x,
+        promptBox.y - layoutBox.y,
+        promptBox.sizeX,
+        promptBox.sizeY,
+        dismissed1D || reflowed2D,
+        dismissed1D || reflowed2D,
+      )
       d.sizeXResidual.dest = 0
       d.sizeYResidual.dest = 0
       d.xResidual.dest = 0
       d.yResidual.dest = 0
+      d.promptXResidual.dest = 0
+      d.promptYResidual.dest = 0
+      d.promptSizeXResidual.dest = 0
+      d.promptSizeYResidual.dest = 0
       d.scale.dest = 1
       d.fxFactor.dest = 1
     }
 
-    const hit = hitTest2DMode(data, pointerXLocal, pointerYLocal)
+    const hit = hitTest2DMode(gridLayout, pointerXLocal, pointerYLocal)
     if (hit == null) cursor = 'auto'
     else { // hovering over a box. Adjust position
       cursor = 'zoom-in'
+      const hoveredLayoutBox = gridLayout.items[hit]!.layoutBox
       const d = data[hit]!
-      d.xResidual.dest += (pointerXLocal - (d.x + d.sizeX / 2)) / hoverMagnetFactor
-      d.yResidual.dest += (pointerYLocal - (d.y + d.sizeY / 2)) / hoverMagnetFactor
+      d.xResidual.dest += (pointerXLocal - (hoveredLayoutBox.x + hoveredLayoutBox.sizeX / 2)) / hoverMagnetFactor
+      d.yResidual.dest += (pointerYLocal - (hoveredLayoutBox.y + hoveredLayoutBox.sizeY / 2)) / hoverMagnetFactor
       d.scale.dest = 1.02
     }
     // if layout shifted, keep the boxes near the same place to prevent annoying layout jumps while viewing
-    const anchorY = data[st.anchor]!.y - gapTopPeek
+    const anchorY = gridLayout.items[st.anchor]!.layoutBox.y - gapTopPeek
     if (newWindowSizeX !== st.windowSizeX) adjustedScrollTop = Math.max(0, anchorY) // resized; maintain position!
     if (adjustedScrollTop !== st.scrollY && Math.abs(anchorY -/*toLocal*/adjustedScrollTop) > windowSizeY / 10) { // find new anchor if the current one moved too much
-      for (newAnchor = 0; newAnchor < data.length; newAnchor += cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
-        const d = data[newAnchor]!
+      for (newAnchor = 0; newAnchor < data.length; newAnchor += gridLayout.cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
+        const layoutBox = gridLayout.items[newAnchor]!.layoutBox
         // find 1st box whose bottom exceeds 20% of window height
-        if (d.y + d.sizeY -/*toLocal*/adjustedScrollTop > windowSizeY / 5) break
+        if (layoutBox.y + layoutBox.sizeY -/*toLocal*/adjustedScrollTop > windowSizeY / 5) break
       }
     }
   } else { // 1D mode
-    const img1DSizeY = windowSizeY - windowPaddingTop - prompt1DSizeY - boxes1DGapY
-    const box1DMaxSizeX = newWindowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
-
-    let currentLeft = hitArea1DSizeX + boxes1DGapX // start from the right edge of the left box and...
-    for (let i = newFocused - 1; i >= 0; i--) { // ...iterate til we get the left edge of the very first box
-      const d = data[i]!
-      const {naturalSizeX, ar} = d
-      const imgSizeX = Math.min(naturalSizeX, box1DMaxSizeX, img1DSizeY * ar) * 0.7
-      currentLeft -= imgSizeX + boxes1DGapX
-    }
+    activeLineLayout = getLineLayout(layoutSources, newFocused, newWindowSizeX, windowSizeY, adjustedScrollTop)
+    activeLayoutItems = activeLineLayout.items
 
     const edgeRubberBandVelocityX = // feedback when you hit first/last image and keep pressing left/right key
       inputCode === 'ArrowLeft' && focused === 0 ? 2 * 1000 // 2 pixels per second
@@ -419,36 +877,55 @@ function render(now: number) {
       : 0
     for (let i = 0; i < data.length; i++) { // calculate boxes positions
       const d = data[i]!
-      const {naturalSizeX, ar} = d
-      const imgSizeX = Math.min(naturalSizeX, box1DMaxSizeX, img1DSizeY * ar) * (i === newFocused ? 1 : 0.7)
-      const boxSizeY = imgSizeX / ar + prompt1DSizeY
-      const x = i === newFocused ? (newWindowSizeX - imgSizeX) / 2 : currentLeft
-      const y = Math.max(windowPaddingTop, (windowSizeY - boxSizeY) / 2) +/*toLocal*/adjustedScrollTop
-      // Going into 1D mode, or switching focused image, starts from the current on-screen x/y/size. Plain 1D resize doesn't.
-      setLayout(d, x, y, imgSizeX, boxSizeY, entered1D || changedFocusIn1D, entered1D || changedFocusIn1D)
+      const geometry = activeLineLayout.items[i]!
+      const layoutBox = geometry.layoutBox
+      const promptBox = geometry.prompt.box
+      // Going into 1D mode, switching focused image, or resizing in 1D starts from the current on-screen x/y/size.
+      setLayout(
+        d,
+        layoutBox.x,
+        layoutBox.y,
+        layoutBox.sizeX,
+        layoutBox.sizeY,
+        entered1D || changedFocusIn1D || resized1D,
+        entered1D || changedFocusIn1D || resized1D,
+      )
+      setPromptLayout(
+        d,
+        promptBox.x - layoutBox.x,
+        promptBox.y - layoutBox.y,
+        promptBox.sizeX,
+        promptBox.sizeY,
+        entered1D || changedFocusIn1D || resized1D,
+        entered1D || changedFocusIn1D || resized1D,
+      )
       d.sizeXResidual.dest = 0
       d.sizeYResidual.dest = 0
       d.xResidual.dest = 0
       d.yResidual.dest = 0
+      d.promptXResidual.dest = 0
+      d.promptYResidual.dest = 0
+      d.promptSizeXResidual.dest = 0
+      d.promptSizeYResidual.dest = 0
       d.xResidual.v += edgeRubberBandVelocityX / (i === newFocused ? 1 : 4)
       d.scale.dest = 1
       d.fxFactor.dest = i === newFocused ? 1 : 0.2 // center image has no brightness & blur effect
-
-      currentLeft = i === newFocused ? newWindowSizeX - hitArea1DSizeX : currentLeft + imgSizeX + boxes1DGapX
     }
 
-    const hit = hitTest1DMode(data, newFocused, newWindowSizeX, pointerXLocal)
+    const hit = hitTest1DMode(activeLineLayout, pointerXLocal, pointerYLocal)
     if (hit == null) cursor = 'zoom-out'
     else { // hovering on left or right image
       cursor = 'zoom-in'
+      const hoveredLayoutBox = activeLineLayout.items[hit]!.layoutBox
       const d = data[hit]!
-      d.xResidual.dest += (pointerXLocal - (d.x + d.sizeX / 2)) / hoverMagnetFactor
-      d.yResidual.dest += (pointerYLocal - (d.y + d.sizeY / 2)) / hoverMagnetFactor
+      d.xResidual.dest += (pointerXLocal - (hoveredLayoutBox.x + hoveredLayoutBox.sizeX / 2)) / hoverMagnetFactor
+      d.yResidual.dest += (pointerYLocal - (hoveredLayoutBox.y + hoveredLayoutBox.sizeY / 2)) / hoverMagnetFactor
       d.scale.dest = 1.02
       d.fxFactor.dest = 0.5
     }
   }
-  if (focused != null && newFocused == null && adjustedScrollTop !== currentScrollY) { // scroll changes base coordinates only; preserve the current visual position while it catches up
+  const preserveScrollShiftViaResidual = (focused != null && newFocused == null) || reflowed2D
+  if (preserveScrollShiftViaResidual && adjustedScrollTop !== currentScrollY) { // scroll changes base coordinates only; preserve the current visual position while it catches up
     for (const d of data) shiftSpringPos(d.yResidual, adjustedScrollTop - currentScrollY)
   }
 
@@ -477,12 +954,22 @@ function render(now: number) {
   const browserUIMaxSizeTop = 100, browserUIMaxSizeBottom = 150 // browsers UI like Safari are transluscent. Random conservative numbers
   for (let i = 0; i < data.length; i++) {
     const d = data[i]!
-    const boxY = yPos(d), boxSizeY = sizeYPos(d), boxX = xPos(d), boxSizeX = sizeXPos(d)
+    const geometry = activeLayoutItems[i]!
+    const layoutBox = geometry.layoutBox
+    const occlusionBounds = geometry.occlusionBounds
+    const boxX = layoutRectXPos(layoutBox, d)
+    const boxY = layoutRectYPos(layoutBox, d)
+    const boxSizeX = layoutRectSizeXPos(layoutBox, d)
+    const boxSizeY = layoutRectSizeYPos(layoutBox, d)
+    const occlusionX = layoutRectXPos(occlusionBounds, d)
+    const occlusionY = layoutRectYPos(occlusionBounds, d)
+    const occlusionSizeX = layoutRectSizeXPos(occlusionBounds, d)
+    const occlusionSizeY = layoutRectSizeYPos(occlusionBounds, d)
     if ( // occlusion culling, aka only draw what's visible on screen (aka "virtualization")
-      boxY -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
-      boxY + boxSizeY -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
-      boxX <= newWindowSizeX &&
-      boxX + boxSizeX >= 0
+      occlusionY -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
+      occlusionY + occlusionSizeY -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
+      occlusionX <= newWindowSizeX &&
+      occlusionX + occlusionSizeX >= 0
     ) { // disregard shadow & scaling for now; browserUIMaxSizeBottom and browserUIMaxSizeTop are safe bigger values anyway
       let node = domCache.get(d.id)
       if (node == null) { // JIT DOM node creation: first time this box is visible
@@ -493,7 +980,6 @@ function render(now: number) {
         const img = document.createElement('img')
         const promptNode = document.createElement('figcaption')
         promptNode.className = 'prompt'
-        promptNode.textContent = d.prompt
         node.append(img, promptNode)
         domCache.set(d.id, node)
       }
@@ -506,23 +992,36 @@ function render(now: number) {
         ? `brightness(${d.fxFactor.pos * 100}%) blur(${Math.max(0, 6 - d.fxFactor.pos * 6)}px)` // blur these 3 only
         : `brightness(${d.fxFactor.pos * 100}%)` // blur of unrelated pics is too fast during transition from/to 1D mode to be seen anyway
       if (debug) node.style.outline = i === newAnchor ? '2px solid rgba(255, 255, 0, 0.8)' : 'none' // oxlint-disable-line no-unnecessary-condition
-      prompt.style.top = `${boxSizeX / d.ar}px` // right below img's sizeY
+      const currentPromptX = promptXPos(d)
+      const currentPromptY = promptYPos(d)
+      const currentPromptSizeX = promptSizeXPos(d)
+      const currentPromptLayout = measurePromptLayout(
+        layoutSources[i]!.preparedPrompt,
+        currentPromptSizeX,
+        activeLineLayout == null ? prompt2DMaxLines : prompt1DMaxLines,
+        geometry.prompt.lineHeight,
+        false,
+      )
+      const currentPromptSizeY = currentPromptLayout.visibleHeight
+      prompt.style.left = `${currentPromptX}px`
+      prompt.style.width = `${currentPromptSizeX}px`
+      prompt.style.top = `${currentPromptY}px`
+      prompt.style.height = `${currentPromptSizeY}px`
+      prompt.style.lineHeight = `${geometry.prompt.lineHeight}px`
+      prompt.style.overflowY = 'hidden'
+      syncPromptNode(prompt, {
+        box: rect(currentPromptX, currentPromptY, currentPromptSizeX, currentPromptSizeY),
+        lineHeight: geometry.prompt.lineHeight,
+        lines: currentPromptLayout.lines,
+      }, d.prompt)
 
       if (i === newFocused) {
         node.style.zIndex = String(data.length + 1) // guaranteed above everything
-        prompt.style.overflowY = 'auto'
-        prompt.style.height = `${prompt1DSizeY - promptPaddingBottom}px`
-        prompt.style.setProperty('line-clamp', '999')
-        prompt.style.webkitLineClamp = '999'
         img.style.display = 'block' // not 'inline' (img's default), which adds whitespace below
         const src = `https://cdn.midjourney.com/${d.id}.webp`
         if (!stillAnimating && img.src !== src) img.src = src // oxlint-disable-line no-unnecessary-condition -- load the full res image
       } else {
         node.style.zIndex = String(i + 1) // simple proper z-index management
-        prompt.style.overflowY = 'hidden'
-        prompt.style.height = `${promptSizeY - promptPaddingBottom}px`
-        prompt.style.setProperty('line-clamp', '2')
-        prompt.style.webkitLineClamp = '2'
         img.style.display = 'none' // hide full res image for perf (yes it makes a difference, even on M1, with Studio Display)
       }
       if (node.parentNode == null) document.body.appendChild(node) // if previously absent, add
@@ -537,25 +1036,253 @@ function render(now: number) {
 
   document.body.style.cursor = cursor
   document.body.style.overflowY = newFocused == null ? 'auto' : 'hidden'
-  dummyPlaceholder.style.height = `${rowsTop.at(-1)!}px` // Chrome has race conditon if scrollTo is called before setting a longer dummy height
+  dummyPlaceholder.style.height = `${gridLayout.contentHeight}px` // Chrome has race conditon if scrollTo is called before setting a longer dummy height
 
   // === side effects
   if (selectTarget != null) {
     const selection = window.getSelection()
     const range = document.createRange()
-    range.selectNodeContents(selectTarget)
+    if ('node' in selectTarget) {
+      range.selectNodeContents(selectTarget.node)
+    } else {
+      range.setStart(selectTarget.startNode, selectTarget.startOffset)
+      range.setEnd(selectTarget.endNode, selectTarget.endOffset)
+    }
     selection?.removeAllRanges()
     selection?.addRange(range)
   }
   if (adjustedScrollTop !== currentScrollY) {
-    // see comment about isSafari above
-    ;(isSafari ? document.body : window).scrollTo({top: adjustedScrollTop}) // will trigger scrolling, thus next frame's render
+    applyScrollTop(adjustedScrollTop)
   }
   if (newFocused !== focused) {
-    window.history.pushState(null, '', `${window.location.pathname}${window.location.search}${newFocused == null ? '' : '#' + data[newFocused]!.id}`)
+    applyFocusedId(newFocused == null ? null : data[newFocused]!.id)
   }
 
   return stillAnimating
+}
+
+function copyRect(r: Rect): Rect {
+  return rect(r.x, r.y, r.sizeX, r.sizeY)
+}
+
+function getFocusedIndexFromHash(data: BoxData[]) {
+  const hashImgId = window.location.hash.slice(1)
+  for (let i = 0; i < data.length; i++) if (data[i]!.id === hashImgId) return i
+  return null
+}
+
+function findItemIndexById(id: string) {
+  for (let i = 0; i < st.data.length; i++) if (st.data[i]!.id === id) return i
+  throw new Error(`Unknown photo id: ${id}`)
+}
+
+function getCurrentLayoutProjection() {
+  const windowSizeX = readWindowSizeX()
+  const windowSizeY = readWindowSizeY()
+  const scrollY = readScrollY()
+  const gridLayout = getGridLayout(windowSizeX)
+  const focused = getFocusedIndexFromHash(st.data)
+  const lineLayout = focused == null ? null : getLineLayout(layoutSources, focused, windowSizeX, windowSizeY, scrollY)
+  return {
+    focused,
+    scrollY,
+    gridLayout,
+    activeItems: lineLayout == null ? gridLayout.items : lineLayout.items,
+  }
+}
+
+function getResizeSampleItem(id: string, projection: ReturnType<typeof getCurrentLayoutProjection>): ResizeSampleItem {
+  const index = findItemIndexById(id)
+  const d = st.data[index]!
+  const activeGeometry = projection.activeItems[index]!
+  const visualBox = rect(
+    layoutRectXPos(activeGeometry.layoutBox, d),
+    layoutRectYPos(activeGeometry.layoutBox, d),
+    layoutRectSizeXPos(activeGeometry.layoutBox, d),
+    layoutRectSizeYPos(activeGeometry.layoutBox, d),
+  )
+  const node = domCache.get(id)
+  const promptNode = node == null ? null : node.children[1] as HTMLElement
+  const lineNodes = promptNode == null ? [] : [...promptNode.querySelectorAll<HTMLElement>('.prompt-line')]
+  const widestRenderedLine =
+    lineNodes.length === 0 ? null : Math.max(...lineNodes.map(line => line.getBoundingClientRect().width))
+  const promptInnerWidth =
+    promptNode == null ? null : promptNode.getBoundingClientRect().width - promptPaddingX * 2
+  const visualPromptBox =
+    promptNode == null
+      ? rect(
+          visualBox.x + promptXPos(d),
+          visualBox.y + promptYPos(d),
+          promptSizeXPos(d),
+          promptSizeYPos(d),
+        )
+      : (() => {
+          const bounds = promptNode.getBoundingClientRect()
+          return rect(
+            bounds.left + (verifyRuntime == null ? readScrollX() : 0),
+            bounds.top + (verifyRuntime == null ? projection.scrollY : 0),
+            bounds.width,
+            bounds.height,
+          )
+        })()
+
+  return {
+    id,
+    prompt: d.prompt,
+    mounted: node?.parentNode != null,
+    layoutBox: copyRect(activeGeometry.layoutBox),
+    visualBox,
+    promptBox: visualPromptBox,
+    viewportY: visualBox.y - projection.scrollY,
+    row: Math.floor(index / projection.gridLayout.cols),
+    col: index % projection.gridLayout.cols,
+    lineCount: lineNodes.length === 0 ? null : lineNodes.length,
+    widestRenderedLine,
+    promptInnerWidth,
+  }
+}
+
+function getResizeSample(label: string, elapsedMs: number | null, anchorId: string | null, trackedIds: string[]): ResizeSample {
+  const projection = getCurrentLayoutProjection()
+  return {
+    label,
+    elapsedMs,
+    cols: projection.gridLayout.cols,
+    scrollY: projection.scrollY,
+    contentHeight: projection.gridLayout.contentHeight,
+    anchor: anchorId == null ? null : getResizeSampleItem(anchorId, projection),
+    items: trackedIds.map(id => getResizeSampleItem(id, projection)),
+  }
+}
+
+function resetVerifyState(viewportSizeX: number, viewportSizeY: number, scrollY: number) {
+  if (verifyRuntime == null) return
+  verifyRuntime.viewportSizeX = viewportSizeX
+  verifyRuntime.viewportSizeY = viewportSizeY
+  verifyRuntime.scrollX = 0
+  verifyRuntime.scrollY = scrollY
+  verifyRuntime.pendingRender = true
+  window.getSelection()?.removeAllRanges()
+  applyFocusedId(null)
+  for (const node of domCache.values()) {
+    if (node.parentNode != null) node.parentNode.removeChild(node)
+  }
+  domCache.clear()
+  st = createInitialState(viewportSizeX, viewportSizeY, scrollY, false)
+}
+
+function flushVerifyTo(now: number) {
+  if (verifyRuntime == null) return false
+  if (!verifyRuntime.pendingRender && st.animatedUntilTime == null) return false
+  verifyRuntime.pendingRender = false
+  const stillAnimating = render(now)
+  if (stillAnimating) verifyRuntime.pendingRender = true
+  return stillAnimating
+}
+
+function flushVerifyUntilSettled(startNow: number) {
+  if (verifyRuntime == null) return startNow
+  let now = startNow
+  let guard = 0
+  while (verifyRuntime.pendingRender || st.animatedUntilTime != null) {
+    flushVerifyTo(now)
+    now += 16
+    guard++
+    if (guard > 600) throw new Error('Resize verification did not settle')
+  }
+  return now
+}
+
+async function runResizeScenario(scenario: ResizeScenario): Promise<ResizeScenarioResult> {
+  if (verifyRuntime == null) throw new Error('Resize verification is not enabled')
+
+  resetVerifyState(scenario.startWidth, scenario.height, 0)
+  flushVerifyTo(0)
+
+  const anchorId = scenario.anchorId ?? null
+  if (anchorId != null) st.anchor = findItemIndexById(anchorId)
+  if (scenario.scrollY === 'anchor' && anchorId != null) {
+    const anchorLayoutBox = getGridLayout(scenario.startWidth).items[findItemIndexById(anchorId)]!.layoutBox
+    const anchoredScrollY = Math.max(0, anchorLayoutBox.y - gapTopPeek)
+    verifyRuntime.scrollY = anchoredScrollY
+    st.scrollY = anchoredScrollY
+    verifyRuntime.pendingRender = true
+    flushVerifyTo(0)
+  } else if (typeof scenario.scrollY === 'number') {
+    verifyRuntime.scrollY = scenario.scrollY
+    st.scrollY = scenario.scrollY
+    verifyRuntime.pendingRender = true
+    flushVerifyTo(0)
+  }
+
+  const trackedIds =
+    scenario.trackedIds ??
+    (
+      scenario.trackedKind === 'firstRow'
+        ? photoGalleryData.slice(0, getGridLayout(scenario.startWidth).cols).map(d => d.id)
+        : anchorId == null ? [] : [anchorId]
+    )
+
+  const samples: ResizeSample[] = [
+    getResizeSample('before', 0, anchorId, trackedIds),
+  ]
+
+  verifyRuntime.viewportSizeX = scenario.endWidth
+  verifyRuntime.viewportSizeY = scenario.height
+  verifyRuntime.pendingRender = true
+  for (const elapsedMs of scenario.sampleTimesMs) {
+    flushVerifyTo(elapsedMs)
+    samples.push(getResizeSample(`t=${elapsedMs}`, elapsedMs, anchorId, trackedIds))
+  }
+  const settledElapsedMs = flushVerifyUntilSettled((scenario.sampleTimesMs.at(-1) ?? 0) + 16)
+  samples.push(getResizeSample('settled', settledElapsedMs, anchorId, trackedIds))
+
+  return {
+    name: scenario.name,
+    startWidth: scenario.startWidth,
+    endWidth: scenario.endWidth,
+    anchorId,
+    trackedIds,
+    samples,
+  }
+}
+
+async function runResizeBatch(scenarios: ResizeScenario[]) {
+  if (verifyRuntime == null) throw new Error('Resize verification is not enabled')
+
+  verifyRuntime.report = {
+    phase: 'running',
+    requestId: verifyRequestId,
+    scenario: 'resize',
+  }
+  try {
+    await document.fonts.ready
+    const results: ResizeScenarioResult[] = []
+    for (const scenario of scenarios) results.push(await runResizeScenario(scenario))
+    verifyRuntime.report = {
+      phase: 'ready',
+      requestId: verifyRequestId,
+      scenario: 'resize',
+      results,
+    }
+  } catch (error) {
+    verifyRuntime.report = {
+      phase: 'error',
+      requestId: verifyRequestId,
+      scenario: 'resize',
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+  return verifyRuntime.report
+}
+
+if (verifyRuntime != null) {
+  window.__photoGalleryVerify = {
+    get report() {
+      return verifyRuntime.report
+    },
+    runBatch: runResizeBatch,
+  }
 }
 
 scheduleRender()
