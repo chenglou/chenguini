@@ -1,5 +1,7 @@
 import {dataRaw} from './data'
 import {
+  commentTextLength,
+  findHNCommentTextOffset,
   findHNCommentTextOffsetInEmptySpace,
   findHNCommentTextRects,
   layoutPreparedHNCommentDoc,
@@ -175,10 +177,23 @@ const st = {
     startOffset: null as number | null,
     endNode: null as Node | null,
     endOffset: null as number | null,
+    startTextOffset: null as number | null,
+    endTextOffset: null as number | null,
     row: null as number | null,
     range: document.createRange(),
   },
   scheduledRaf: null as number | null,
+}
+
+function clearSelection() {
+  st.selection.startNode = null
+  st.selection.startOffset = null
+  st.selection.endNode = null
+  st.selection.endOffset = null
+  st.selection.startTextOffset = null
+  st.selection.endTextOffset = null
+  st.selection.row = null
+  st.selection.range = document.createRange()
 }
 
 window.addEventListener('resize', () => { scheduleRender() })
@@ -515,6 +530,21 @@ function render() {
         cached.layoutWidth = row.commentWidthMeasured
       }
 
+      if (
+        st.selection.row === rowGeometry.rowIndex &&
+        st.selection.startTextOffset != null &&
+        st.selection.endTextOffset != null
+      ) {
+        const startBoundary = resolveHNCommentTextOffset(cached.comment, st.selection.startTextOffset)
+        const endBoundary = resolveHNCommentTextOffset(cached.comment, st.selection.endTextOffset)
+        if (startBoundary != null && endBoundary != null) {
+          st.selection.startNode = startBoundary.node
+          st.selection.startOffset = startBoundary.offset
+          st.selection.endNode = endBoundary.node
+          st.selection.endOffset = endBoundary.offset
+        } else clearSelection()
+      }
+
       placeVisibleNode(cached.user)
       placeVisibleNode(cached.comment)
     }
@@ -581,21 +611,18 @@ function render() {
   let rangePointed:
     | {startContainer: Node; startOffset: number; endContainer: Node; endOffset: number}
     | undefined // caretRangeFromPoint is expensive... make an exception here and don't call it unless necessary
+  let rangePointedTextOffset: number | null = null
   // custom selection range (highlight later below)
   if (st.inputs.pointerState !== 'up' && pointer.on === 'row') {
     const row = data[pointer.row]!
     const rowGeometry = visualGeometry.rows[pointer.row]!
+    const cached = domCache.get(pointer.row)
     const localX = st.inputs.pointerXY.pageX - containerLeft - rowGeometry.commentRect.left
     const localY = st.inputs.pointerXY.pageY - scrollerTop - rowGeometry.commentRect.top
-    if (
-      0 <= localX &&
-      localX < rowGeometry.commentRect.width &&
-      0 <= localY &&
-      localY < rowGeometry.commentRect.height
-    ) {
+    if (0 <= localY && localY < rowGeometry.commentRect.height) {
       const textOffset = findHNCommentTextOffsetInEmptySpace(row.commentLayout!, localX, localY)
       if (textOffset != null) {
-        const cached = domCache.get(pointer.row)
+        rangePointedTextOffset = textOffset
         const boundary = cached == null ? null : resolveHNCommentTextOffset(cached.comment, textOffset)
         if (boundary != null) {
           rangePointed = {
@@ -606,15 +633,28 @@ function render() {
           }
         }
       }
-    }
-    if (rangePointed == null) {
-      const rangePointedBrowser = caretRangeFromPoint(st.inputs.pointerXY.pageX, st.inputs.pointerXY.pageY) // still nullable from e.g. out-of-bound values
-      if (rangePointedBrowser != null) {
+      if (rangePointed == null) {
+        const rangePointedBrowser = caretRangeFromPoint(st.inputs.pointerXY.pageX, st.inputs.pointerXY.pageY) // still nullable from e.g. out-of-bound values
+        if (rangePointedBrowser != null) {
+          rangePointedTextOffset =
+            cached == null ? null : findHNCommentTextOffset(cached.comment, rangePointedBrowser.startContainer, rangePointedBrowser.startOffset)
+          rangePointed = {
+            startContainer: rangePointedBrowser.startContainer,
+            startOffset: rangePointedBrowser.startOffset,
+            endContainer: rangePointedBrowser.endContainer,
+            endOffset: rangePointedBrowser.endOffset,
+          }
+        }
+      }
+    } else if (st.selection.row === pointer.row) {
+      rangePointedTextOffset = localY < 0 ? 0 : commentTextLength(row.commentLayout!)
+      const boundary = cached == null ? null : resolveHNCommentTextOffset(cached.comment, rangePointedTextOffset)
+      if (boundary != null) {
         rangePointed = {
-          startContainer: rangePointedBrowser.startContainer,
-          startOffset: rangePointedBrowser.startOffset,
-          endContainer: rangePointedBrowser.endContainer,
-          endOffset: rangePointedBrowser.endOffset,
+          startContainer: boundary.node,
+          startOffset: boundary.offset,
+          endContainer: boundary.node,
+          endOffset: boundary.offset,
         }
       }
     }
@@ -625,17 +665,20 @@ function render() {
         pointerDownTargetNext = 'text'
         st.selection.startNode = rangePointed.startContainer
         st.selection.startOffset = rangePointed.startOffset
+        st.selection.startTextOffset = rangePointedTextOffset
         st.selection.row = pointer.row
       }
       if (pointer.row === st.selection.row) { // cap selection to the same single row we started selecting. Better UX, for now
         st.selection.endNode = rangePointed.endContainer
         st.selection.endOffset = rangePointed.endOffset
+        st.selection.endTextOffset = rangePointedTextOffset
       } else if (st.selection.row != null && pointer.row < st.selection.row) {
         const selCached = domCache.get(st.selection.row)
         if (selCached != null) {
           let firstText: Node = selCached.comment; while (firstText.firstChild) firstText = firstText.firstChild
           st.selection.endNode = firstText
           st.selection.endOffset = 0
+          st.selection.endTextOffset = 0
         }
       } else if (st.selection.row != null) {
         const selCached = domCache.get(st.selection.row)
@@ -643,6 +686,7 @@ function render() {
           let lastText: Node = selCached.comment; while (lastText.lastChild) lastText = lastText.lastChild
           st.selection.endNode = lastText
           st.selection.endOffset = (lastText as Text).length
+          st.selection.endTextOffset = commentTextLength(data[st.selection.row]!.commentLayout!)
         }
       }
     }

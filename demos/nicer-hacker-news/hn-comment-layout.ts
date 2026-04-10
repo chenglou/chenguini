@@ -238,6 +238,8 @@ export function renderHNCommentLayout(layout: HNCommentLayout): DocumentFragment
       const line = block.lines[lineIndex]!
       const lineNode = document.createElement('div')
       lineNode.className = block.kind === 'codeBlock' ? 'comment-line comment-code-line' : 'comment-line'
+      lineNode.dataset['textStart'] = String(line.textStart)
+      lineNode.dataset['textEnd'] = String(line.textEnd)
       lineNode.style.top = `${line.top}px`
       lineNode.style.height = `${line.height}px`
 
@@ -246,12 +248,16 @@ export function renderHNCommentLayout(layout: HNCommentLayout): DocumentFragment
         if (lineFragment.gapBefore > 0) {
           const gapNode = document.createElement('span')
           gapNode.className = 'comment-gap'
+          gapNode.dataset['textStart'] = String(lineFragment.textStart - 1)
+          gapNode.dataset['textEnd'] = String(lineFragment.textStart)
           gapNode.style.left = `${lineFragment.left - lineFragment.gapBefore}px`
           gapNode.textContent = ' '
           lineNode.appendChild(gapNode)
         }
 
         const textNode = createFragmentNode(lineFragment)
+        textNode.dataset['textStart'] = String(lineFragment.textStart)
+        textNode.dataset['textEnd'] = String(lineFragment.textEnd)
         textNode.style.left = `${lineFragment.left}px`
         lineNode.appendChild(textNode)
       }
@@ -261,6 +267,15 @@ export function renderHNCommentLayout(layout: HNCommentLayout): DocumentFragment
   }
 
   return fragment
+}
+
+export function commentTextLength(layout: HNCommentLayout) {
+  let length = 0
+  for (let blockIndex = 0; blockIndex < layout.blocks.length; blockIndex++) {
+    const line = layout.blocks[blockIndex]!.lines.at(-1)
+    if (line != null) length = line.textEnd
+  }
+  return length
 }
 
 export function findHNCommentTextOffsetInEmptySpace(layout: HNCommentLayout, x: number, y: number) {
@@ -286,21 +301,61 @@ export function findHNCommentTextOffsetInEmptySpace(layout: HNCommentLayout, x: 
   return previousLine?.textEnd ?? null
 }
 
-export function resolveHNCommentTextOffset(root: Node, textOffset: number) {
-  let remaining = Math.max(0, textOffset)
+export function resolveHNCommentTextOffset(root: HTMLElement, textOffset: number) {
+  const target = Math.max(0, textOffset)
   let lastText: Text | null = null
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  for (let lineIndex = 0; lineIndex < root.children.length; lineIndex++) {
+    const lineNode = root.children[lineIndex]
+    if (!(lineNode instanceof HTMLElement)) continue
+    const lineStart = readTextStart(lineNode)
+    const lineEnd = readTextEnd(lineNode)
+    if (lineStart == null || lineEnd == null) continue
+    if (target < lineStart) break
+    if (target > lineEnd) {
+      lastText = lastTextNodeIn(lineNode) ?? lastText
+      continue
+    }
 
-  while (true) {
-    const next = walker.nextNode()
-    if (next == null) break
-    const textNode = next as Text
-    lastText = textNode
-    if (remaining <= textNode.length) return {node: textNode, offset: remaining}
-    remaining -= textNode.length
+    for (let childIndex = 0; childIndex < lineNode.children.length; childIndex++) {
+      const part = lineNode.children[childIndex]
+      if (!(part instanceof HTMLElement)) continue
+      const partStart = readTextStart(part)
+      const partEnd = readTextEnd(part)
+      if (partStart == null || partEnd == null) continue
+      const textNode = part.firstChild
+      if (!(textNode instanceof Text)) continue
+      lastText = textNode
+      if (target < partStart) return {node: textNode, offset: 0}
+      if (target <= partEnd) return {node: textNode, offset: clamp(0, target - partStart, textNode.length)}
+    }
   }
 
   return lastText == null ? null : {node: lastText, offset: lastText.length}
+}
+
+export function findHNCommentTextOffset(root: HTMLElement, node: Node, offset: number) {
+  if (node !== root && !root.contains(node)) return null
+
+  if (node instanceof Text) {
+    const owner = node.parentElement
+    const start = owner == null ? null : readTextStart(owner)
+    if (start == null) return null
+    return start + clamp(0, offset, node.length)
+  }
+
+  if (node instanceof HTMLElement) {
+    const start = readTextStart(node)
+    const end = readTextEnd(node)
+    if (start != null && end != null && node.firstChild instanceof Text) {
+      return offset <= 0 ? start : end
+    }
+    if (node === root || node.classList.contains('comment-line')) {
+      const boundary = resolveElementBoundary(node, offset)
+      if (boundary != null) return boundary
+    }
+  }
+
+  return null
 }
 
 export function findHNCommentTextRects(layout: HNCommentLayout, start: number, length: number): HNCommentRect[] {
@@ -432,4 +487,80 @@ function pushMergedRect(rects: HNCommentRect[], next: HNCommentRect) {
     return
   }
   rects.push(next)
+}
+
+function resolveElementBoundary(parent: HTMLElement, childOffset: number) {
+  if (childOffset <= 0) {
+    const first = firstTextStartIn(parent)
+    return first ?? readTextStart(parent)
+  }
+  if (childOffset >= parent.childNodes.length) {
+    const last = lastTextEndIn(parent)
+    return last ?? readTextEnd(parent)
+  }
+
+  const previous = parent.childNodes[childOffset - 1]
+  const previousEnd = previous == null ? null : lastTextEndIn(previous)
+  if (previousEnd != null) return previousEnd
+  const next = parent.childNodes[childOffset]
+  return next == null ? null : firstTextStartIn(next)
+}
+
+function readTextStart(node: HTMLElement) {
+  const value = node.dataset['textStart']
+  return value == null ? null : Number(value)
+}
+
+function readTextEnd(node: HTMLElement) {
+  const value = node.dataset['textEnd']
+  return value == null ? null : Number(value)
+}
+
+function firstTextStartIn(node: Node): number | null {
+  if (node instanceof Text) {
+    const owner = node.parentElement
+    return owner == null ? null : readTextStart(owner)
+  }
+  if (!(node instanceof HTMLElement)) return null
+  const own = readTextStart(node)
+  if (own != null) return own
+  for (let i = 0; i < node.childNodes.length; i++) {
+    const child = node.childNodes[i]
+    if (child == null) continue
+    const value: number | null = firstTextStartIn(child)
+    if (value != null) return value
+  }
+  return null
+}
+
+function lastTextEndIn(node: Node): number | null {
+  if (node instanceof Text) {
+    const owner = node.parentElement
+    return owner == null ? null : readTextEnd(owner)
+  }
+  if (!(node instanceof HTMLElement)) return null
+  const own = readTextEnd(node)
+  if (own != null) return own
+  for (let i = node.childNodes.length - 1; i >= 0; i--) {
+    const child = node.childNodes[i]
+    if (child == null) continue
+    const value: number | null = lastTextEndIn(child)
+    if (value != null) return value
+  }
+  return null
+}
+
+function lastTextNodeIn(node: Node) {
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+  let last: Text | null = null
+  while (true) {
+    const next = walker.nextNode()
+    if (next == null) break
+    last = next as Text
+  }
+  return last
+}
+
+function clamp(min: number, v: number, max: number) {
+  return v > max ? max : v < min ? min : v
 }
