@@ -4,6 +4,23 @@ If JS owns layout, let one JS model own the answer.
 
 Don't have JS decide an image card's size, CSS decide its caption fit, then DOM reads recover the rest later. That path keeps creating fake bugs where the policy is fine but the ownership is split.
 
+## Keep Layout Arithmetic Natural
+
+If JS owns layout, write normal JS layout.
+
+Good:
+
+- `const cols = clamp(1, Math.floor((width - gap) / (minCardWidth + gap)), 7)`
+- a `for` loop that pushes `rowsTop`
+- `Math.min` / `Math.max` when one size caps another
+
+Bad:
+
+- rewriting the same math as `add(...)`, `sub(...)`, `mul(...)`, `when(...)` only because a verifier exists
+- forcing every layout helper through a special expression builder just to make proofs possible
+
+If the verifier cannot understand some natural arithmetic yet, grow the verifier or add one local contract. Don't contort the app first.
+
 ## Base Geometry First, Animated Geometry Second
 
 Compute the stable boxes once, then let animation add a visual residual on top.
@@ -40,6 +57,32 @@ Good:
 - that same line list drives caption height, width shrink, and painted fragments
 
 This is especially important when the layout is exact enough to shrink a `1`-line caption down to its tight width.
+
+## Opaque Geometry Helpers Want Contracts
+
+Sometimes one layout layer has to trust another.
+
+Example:
+
+- a row layout helper asks a text layout helper for caption height
+- a comment thread layout asks a text engine for fragment boxes
+- an outer scroller asks an inner layout for content height
+
+When that happens, ask for small earned postconditions instead of recreating the inner layout badly downstream.
+
+Good contracts:
+
+- visible line width is `<= offeredWidth`
+- visible height comes from line count and line height
+- fragment boxes stay ordered inside the line box
+- reported aggregate width really means `max(line.width)`
+
+Bad:
+
+- computing height with one helper, then remeasuring sliced substrings somewhere else to guess highlight rects
+- measuring against one width, then letting CSS margins or wrapping silently change the same geometry later
+
+The outer layout should trust one contract. It should not maintain a second approximate geometry algorithm for the same thing.
 
 ## Decorative Prefixes Count As Layout
 

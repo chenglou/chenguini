@@ -16,6 +16,65 @@ Examples:
 
 Don't force every demo or helper through one verifier shape.
 
+## One Semantic Core, Several Precision Mechanisms
+
+If a verifier grows past a couple of hand-written checks, don't bolt each new trick onto a fresh code path.
+
+Prefer one semantic core, then several precision mechanisms on top of it.
+
+For example, the same layout function can be checked three different ways:
+
+- a symbolic check for `layoutHeight = imageHeight + captionHeight + bottomGap`
+- a width-interval pass proving `cols` stays in `1..7`
+- a concrete width sweep over `320..1600`
+
+Those are not three different verifier architectures. They are three ways of looking at the same code.
+
+This matters because demos often want a mix:
+
+- exact equalities for small helper functions
+- cheap range proofs for simple formulas
+- concrete sweeps for small real domains such as viewport widths
+- browser seam checks for the final rendered behavior
+
+Keep those under one semantic model when you can.
+
+## Lower Natural Code Once
+
+If you do build a static verifier, stop analyzing raw syntax forever.
+
+Parse ordinary TS/JS, then lower the useful subset once into a smaller internal form. After that, run your symbolic checks, range checks, and concrete checks over that lowered form.
+
+The high-ROI subset is usually bigger than people assume:
+
+- locals
+- `if`
+- `for` / `while`
+- arrays and indexing
+- object literals and spread
+- `Math.min`, `Math.max`, `Math.floor`, `Math.ceil`
+- small pure helper functions
+
+That is enough to cover a lot of real layout code without forcing authors into a verifier DSL.
+
+Do draw a semantic boundary.
+
+Good verifier subset:
+
+- first-order pure helpers over numbers, arrays, and records
+- append-only arrays like `rowsTop`
+- local mutation inside one layout pass
+
+Bad verifier subset:
+
+- dynamic property names
+- getters and prototype tricks
+- unknown callbacks
+- async and exceptions
+- shared mutable state captured all over the place
+
+Don't make authors write `add(...)` and `sub(...)` just because the verifier is young. Grow the verifier up to the natural code first.
+
 ## Start Narrow, Then Widen
 
 Start with the smallest repro you can trust.
@@ -312,6 +371,31 @@ Use those seams when they buy leverage:
 - cheap-vs-rich comparisons
 
 Don't turn that into a repo-wide rule that every demo needs a shared verifier interface.
+
+## Bring In A Different Shape Early
+
+Once one regular case is proven, bring in a second shape early.
+
+Example:
+
+- first demo: a regular image grid
+- second demo: an indented row stack with visible-row bookkeeping
+
+Do _not_ wait until the first demo is "fully solved". That is how the verifier quietly overfits to one style of geometry.
+
+Keep the second proof perimeter narrow.
+
+Good:
+
+- row tops stay monotone
+- content height matches the last row bottom
+- comment left edge equals `indent * indentWidth + leftGap`
+
+Bad:
+
+- insisting the second demo also proves native selection, caret placement, and browser range geometry on day one
+
+The point of the second shape is to test whether the verifier architecture generalizes, not to drag every browser seam into the static core immediately.
 
 ## Randomized Checks
 
