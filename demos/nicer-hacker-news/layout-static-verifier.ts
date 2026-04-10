@@ -1,0 +1,244 @@
+import {
+  buildStaticLayoutReport,
+  check,
+  concreteArray,
+  concreteNumber,
+  concreteObject,
+  epsilon,
+  expectArray,
+  expectConcreteNumber,
+  expectObject,
+  getProp,
+  type InternalLawSummary,
+  LoweredProgramAnalyzer,
+  type StaticLayoutVerificationReport,
+} from '../layout-static-core'
+
+export function runNicerHackerNewsStaticVerification(sourceText: string): StaticLayoutVerificationReport {
+  const analyzer = new LoweredProgramAnalyzer(sourceText, {})
+  const laws = new Map<string, InternalLawSummary>()
+
+  verifyRowHitGeometry(analyzer, laws)
+  verifyThreadVisualGeometry(analyzer, laws)
+
+  return buildStaticLayoutReport('nicer-hacker-news-static-layout', 'demos/nicer-hacker-news/hn-thread-layout.ts', laws)
+}
+
+function verifyRowHitGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const scenarios = [
+    {
+      label: 'thread_rows',
+      rows: concreteArray([
+        concreteObject({indent: concreteNumber(0), rowHeightNatural: concreteNumber(120)}),
+        concreteObject({indent: concreteNumber(1), rowHeightNatural: concreteNumber(84)}),
+        concreteObject({indent: concreteNumber(2), rowHeightNatural: concreteNumber(96)}),
+        concreteObject({indent: concreteNumber(1), rowHeightNatural: concreteNumber(72)}),
+      ]),
+      submissionHeight: 260,
+      scrollTopCap: 48,
+      containerWidth: 760,
+    },
+    {
+      label: 'empty_thread',
+      rows: concreteArray([]),
+      submissionHeight: 180,
+      scrollTopCap: 24,
+      containerWidth: 640,
+    },
+  ]
+
+  for (const scenario of scenarios) {
+    const returns = analyzer.evaluateFunction('layoutHNRowHitGeometry', [concreteObject({
+      rows: scenario.rows,
+      submissionHeight: concreteNumber(scenario.submissionHeight),
+      scrollTopCap: concreteNumber(scenario.scrollTopCap),
+      containerWidth: concreteNumber(scenario.containerWidth),
+    })], 'concrete')
+    check(laws, 'layoutHNRowHitGeometry stays branch-free per concrete scenario', returns.length === 1, () => ({
+      scenario: scenario.label,
+      cases: returns.length,
+    }))
+    if (returns.length !== 1) continue
+
+    const rows = expectArray(returns[0]!.value)
+    check(laws, 'layoutHNRowHitGeometry preserves row count', rows.items.length === scenario.rows.items.length, () => ({
+      scenario: scenario.label,
+      rowCount: rows.items.length,
+      expectedRowCount: scenario.rows.items.length,
+    }))
+
+    let expectedTop = scenario.submissionHeight - scenario.scrollTopCap
+    let monotone = true
+    let widthsMatch = true
+    for (let i = 0; i < rows.items.length; i++) {
+      const row = expectObject(rows.items[i]!)
+      const rowRect = expectObject(getProp(row, 'rowRect'))
+      const top = expectConcreteNumber(getProp(rowRect, 'top'))
+      const left = expectConcreteNumber(getProp(rowRect, 'left'))
+      const width = expectConcreteNumber(getProp(rowRect, 'width'))
+      const height = expectConcreteNumber(getProp(rowRect, 'height'))
+      if (Math.abs(top - expectedTop) > epsilon) monotone = false
+      if (left !== 0 || Math.abs(width - scenario.containerWidth) > epsilon || height < -epsilon) widthsMatch = false
+      expectedTop += height
+    }
+
+    check(laws, 'layoutHNRowHitGeometry stacks row tops contiguously', monotone, () => ({
+      scenario: scenario.label,
+      firstExpectedTop: scenario.submissionHeight - scenario.scrollTopCap,
+    }))
+    check(laws, 'layoutHNRowHitGeometry keeps each row full-width and non-negative', widthsMatch, () => ({
+      scenario: scenario.label,
+      containerWidth: scenario.containerWidth,
+    }))
+  }
+}
+
+function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const scenarios = [
+    {
+      label: 'mixed_visibility',
+      rows: concreteArray([
+        concreteObject({indent: concreteNumber(0), rowHeight: concreteNumber(120), commentLayout: concreteObject({width: concreteNumber(300)})}),
+        concreteObject({indent: concreteNumber(1), rowHeight: concreteNumber(84), commentLayout: concreteObject({width: concreteNumber(260)})}),
+        concreteObject({indent: concreteNumber(2), rowHeight: concreteNumber(72), commentLayout: concreteObject({width: concreteNumber(180)})}),
+        concreteObject({indent: concreteNumber(1), rowHeight: concreteNumber(168), commentLayout: concreteObject({width: concreteNumber(360)})}),
+        concreteObject({indent: concreteNumber(0), rowHeight: concreteNumber(92), commentLayout: concreteObject({width: concreteNumber(320)})}),
+      ]),
+      containerWidth: 760,
+      indentWidth: 24,
+      commentLeftGap: 24,
+      commentRightGap: 20,
+      commentUserGapNatural: 8,
+      userHeightNatural: 18,
+      rowsScrollerTopGap: 32,
+      scrollerPeekUp: 16,
+      scrollTopCap: 40,
+      scrollerHeight: 320,
+    },
+    {
+      label: 'fully_hidden',
+      rows: concreteArray([
+        concreteObject({indent: concreteNumber(0), rowHeight: concreteNumber(80), commentLayout: concreteObject({width: concreteNumber(280)})}),
+        concreteObject({indent: concreteNumber(1), rowHeight: concreteNumber(96), commentLayout: concreteObject({width: concreteNumber(240)})}),
+      ]),
+      containerWidth: 680,
+      indentWidth: 24,
+      commentLeftGap: 24,
+      commentRightGap: 20,
+      commentUserGapNatural: 8,
+      userHeightNatural: 18,
+      rowsScrollerTopGap: 24,
+      scrollerPeekUp: -220,
+      scrollTopCap: 60,
+      scrollerHeight: 40,
+    },
+  ]
+
+  for (const scenario of scenarios) {
+    const returns = analyzer.evaluateFunction('layoutHNThreadVisualGeometry', [concreteObject({
+      rows: scenario.rows,
+      containerWidth: concreteNumber(scenario.containerWidth),
+      indentWidth: concreteNumber(scenario.indentWidth),
+      commentLeftGap: concreteNumber(scenario.commentLeftGap),
+      commentRightGap: concreteNumber(scenario.commentRightGap),
+      commentUserGapNatural: concreteNumber(scenario.commentUserGapNatural),
+      userHeightNatural: concreteNumber(scenario.userHeightNatural),
+      rowsScrollerTopGap: concreteNumber(scenario.rowsScrollerTopGap),
+      scrollerPeekUp: concreteNumber(scenario.scrollerPeekUp),
+      scrollTopCap: concreteNumber(scenario.scrollTopCap),
+      scrollerHeight: concreteNumber(scenario.scrollerHeight),
+    })], 'concrete')
+    check(laws, 'layoutHNThreadVisualGeometry stays branch-free per concrete scenario', returns.length === 1, () => ({
+      scenario: scenario.label,
+      cases: returns.length,
+    }))
+    if (returns.length !== 1) continue
+
+    const layout = expectObject(returns[0]!.value)
+    const rows = expectArray(getProp(layout, 'rows'))
+    const contentHeight = expectConcreteNumber(getProp(layout, 'contentHeight'))
+    const firstVisibleRowIndex = getProp(layout, 'firstVisibleRowIndex')
+    const lastVisibleRowIndex = getProp(layout, 'lastVisibleRowIndex')
+    const firstVisibleRowTop = getProp(layout, 'firstVisibleRowTop')
+
+    check(laws, 'layoutHNThreadVisualGeometry preserves row count', rows.items.length === scenario.rows.items.length, () => ({
+      scenario: scenario.label,
+      rowCount: rows.items.length,
+      expectedRowCount: scenario.rows.items.length,
+    }))
+
+    let monotone = true
+    let commentMathMatches = true
+    let userRectStaysInsideRow = true
+    let gutterStaysOrdered = true
+    let maxRowBottom = scenario.rowsScrollerTopGap + scenario.scrollerPeekUp - scenario.scrollTopCap
+    for (let i = 0; i < rows.items.length; i++) {
+      const row = expectObject(rows.items[i]!)
+      const input = expectObject(scenario.rows.items[i]!)
+      const rowRect = expectObject(getProp(row, 'rowRect'))
+      const userRect = expectObject(getProp(row, 'userRect'))
+      const commentRect = expectObject(getProp(row, 'commentRect'))
+      const gutter = expectObject(getProp(row, 'gutter'))
+
+      const rowTop = expectConcreteNumber(getProp(rowRect, 'top'))
+      const rowHeight = expectConcreteNumber(getProp(rowRect, 'height'))
+      const rowBottom = expectConcreteNumber(getProp(row, 'rowBottom'))
+      const rowLeft = expectConcreteNumber(getProp(rowRect, 'left'))
+      const rowWidth = expectConcreteNumber(getProp(rowRect, 'width'))
+      const indent = expectConcreteNumber(getProp(row, 'indent'))
+      const commentLayout = expectObject(getProp(input, 'commentLayout'))
+      const expectedCommentLeft = indent * scenario.indentWidth + scenario.commentLeftGap
+      const expectedCommentWidth = expectConcreteNumber(getProp(commentLayout, 'width')) + scenario.commentRightGap
+      const userTop = expectConcreteNumber(getProp(userRect, 'top'))
+      const userHeight = expectConcreteNumber(getProp(userRect, 'height'))
+      const gutterTop = expectConcreteNumber(getProp(gutter, 'top'))
+      const gutterBottom = expectConcreteNumber(getProp(gutter, 'bottom'))
+
+      if (Math.abs(rowBottom - (rowTop + rowHeight)) > epsilon || rowTop + epsilon < maxRowBottom) monotone = false
+      if (rowLeft !== 0 || Math.abs(rowWidth - scenario.containerWidth) > epsilon) monotone = false
+      if (Math.abs(expectConcreteNumber(getProp(commentRect, 'left')) - expectedCommentLeft) > epsilon) commentMathMatches = false
+      if (Math.abs(expectConcreteNumber(getProp(commentRect, 'width')) - expectedCommentWidth) > epsilon) commentMathMatches = false
+      if (expectConcreteNumber(getProp(commentRect, 'height')) < -epsilon) commentMathMatches = false
+      if (userTop < rowTop - epsilon || userTop + userHeight > rowBottom + epsilon) userRectStaysInsideRow = false
+      if (gutterBottom + epsilon < gutterTop) gutterStaysOrdered = false
+      maxRowBottom = rowBottom
+    }
+
+    check(laws, 'layoutHNThreadVisualGeometry keeps row bottoms monotone and full-width', monotone, () => ({
+      scenario: scenario.label,
+      rowCount: rows.items.length,
+    }))
+    check(laws, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math', commentMathMatches, () => ({
+      scenario: scenario.label,
+    }))
+    check(laws, 'layoutHNThreadVisualGeometry keeps the user rect inside the row', userRectStaysInsideRow, () => ({
+      scenario: scenario.label,
+    }))
+    check(laws, 'layoutHNThreadVisualGeometry keeps gutter segments ordered', gutterStaysOrdered, () => ({
+      scenario: scenario.label,
+    }))
+    check(laws, 'layoutHNThreadVisualGeometry derives content height from the last row bottom plus scrollTopCap', Math.abs(contentHeight - (maxRowBottom + scenario.scrollTopCap)) <= epsilon, () => ({
+      scenario: scenario.label,
+      contentHeight,
+      expectedContentHeight: maxRowBottom + scenario.scrollTopCap,
+    }))
+
+    const visibleStateConsistent =
+      firstVisibleRowIndex.kind === 'null'
+        ? lastVisibleRowIndex.kind === 'null' && firstVisibleRowTop.kind === 'null'
+        : (() => {
+            if (lastVisibleRowIndex.kind === 'null' || firstVisibleRowTop.kind === 'null') return false
+            const firstIndex = expectConcreteNumber(firstVisibleRowIndex)
+            const lastIndex = expectConcreteNumber(lastVisibleRowIndex)
+            if (firstIndex < 0 || lastIndex < firstIndex || lastIndex >= rows.items.length) return false
+            const firstRow = expectObject(rows.items[firstIndex]!)
+            const firstRowRect = expectObject(getProp(firstRow, 'rowRect'))
+            return Math.abs(expectConcreteNumber(firstVisibleRowTop) - expectConcreteNumber(getProp(firstRowRect, 'top'))) <= epsilon
+          })()
+    check(laws, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping internally consistent', visibleStateConsistent, () => ({
+      scenario: scenario.label,
+      firstVisibleRowIndex: firstVisibleRowIndex.kind === 'null' ? null : expectConcreteNumber(firstVisibleRowIndex),
+      lastVisibleRowIndex: lastVisibleRowIndex.kind === 'null' ? null : expectConcreteNumber(lastVisibleRowIndex),
+    }))
+  }
+}

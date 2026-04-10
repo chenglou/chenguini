@@ -5,6 +5,8 @@
     "start": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./demos/*/index.html --host=$HOST:$PORT",
     "start:templates": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./drafts/demo_templates/*/index.html --host=$HOST:$PORT",
     "check": "tsgo && oxlint --type-aware demos --ignore-pattern '*.js'",
+    "test:layout-static-verifier": "bun test demos/layout-static-verifier.test.js",
+    "verify:nicer-hacker-news-static-layout": "bun demos/nicer-hacker-news/verify-static-layout.js",
     "verify:photo-gallery-static-layout": "bun demos/photo-gallery/verify-static-layout.js",
     "verify:photo-gallery-layout": "bun demos/photo-gallery/verify-layout.js",
     "verify:photo-gallery-resize": "bun demos/photo-gallery/verify-resize.js"
