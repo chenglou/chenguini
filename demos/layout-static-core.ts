@@ -224,6 +224,7 @@ type IrBinaryOperator =
   | '*'
   | '/'
   | '%'
+  | '??'
   | '>'
   | '>='
   | '<'
@@ -975,6 +976,24 @@ function lowerExpression(expression: ts.Expression): IrExpression {
       items: expression.elements.map(element => lowerExpression(element)),
     }
   }
+  if (ts.isPropertyAccessChain(expression)) {
+    const object = lowerExpression(expression.expression)
+    return {
+      kind: 'conditional',
+      condition: {
+        kind: 'binary',
+        operator: '==',
+        left: object,
+        right: {kind: 'null'},
+      },
+      whenTrue: {kind: 'null'},
+      whenFalse: {
+        kind: 'property',
+        object,
+        property: expression.name.text,
+      },
+    }
+  }
   if (ts.isPropertyAccessExpression(expression)) {
     return {
       kind: 'property',
@@ -1227,6 +1246,18 @@ function combineBinaryCases(analyzer: LoweredProgramAnalyzer, state: EvalState, 
   const leftCases = analyzer.evalExpression(state, expression.left)
   const results: EvalCase[] = []
   for (const leftCase of leftCases) {
+    if (expression.operator === '??') {
+      if (leftCase.value.kind !== 'null') {
+        results.push({
+          state: leftCase.state,
+          value: leftCase.value,
+        })
+        continue
+      }
+      results.push(...analyzer.evalExpression(leftCase.state, expression.right))
+      continue
+    }
+
     if (expression.operator === '||' || expression.operator === '&&') {
       const left = expectBoolean(leftCase.value)
       if (left.mode !== 'concrete') throw new Error(`Logical operator ${expression.operator} is only supported in concrete mode`)
@@ -1282,6 +1313,7 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
   const leftCases = analyzer.evalRangeExpression(state, expression.left)
   const results: RangeEvalCase[] = []
   for (const leftCase of leftCases) {
+    if (expression.operator === '??') throw new Error('Range nullish coalescing is not supported yet')
     const rightCases = analyzer.evalRangeExpression(leftCase.state, expression.right)
     for (const rightCase of rightCases) {
       if (
@@ -2142,6 +2174,8 @@ function binaryTokenToOperator(token: ts.SyntaxKind): IrBinaryOperator {
       return '/'
     case ts.SyntaxKind.PercentToken:
       return '%'
+    case ts.SyntaxKind.QuestionQuestionToken:
+      return '??'
     case ts.SyntaxKind.GreaterThanToken:
       return '>'
     case ts.SyntaxKind.GreaterThanEqualsToken:

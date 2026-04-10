@@ -50,8 +50,10 @@ The high-ROI subset is usually bigger than people assume:
 - locals
 - `if`
 - `for` / `while`
+- `break` / `continue`
 - arrays and indexing
 - object literals and spread
+- `?.` / `??`
 - `Math.min`, `Math.max`, `Math.floor`, `Math.ceil`
 - small pure helper functions
 
@@ -74,6 +76,31 @@ Bad verifier subset:
 - shared mutable state captured all over the place
 
 Don't make authors write `add(...)` and `sub(...)` just because the verifier is young. Grow the verifier up to the natural code first.
+
+## Callback Helpers Are Effect Boundaries
+
+Keep ordinary helper calls pure from the caller's point of view.
+
+For example, if `lineBreakCharCountAt(text, offset)` returns a number, the verifier should not pretend that calling it mutates the caller's locals.
+
+Callback-style helpers are different. If you model something like:
+
+```ts
+walkVisibleLines(flow, width, line => {
+  totalHeight += line.height
+  lineTops.push(totalHeight)
+})
+```
+
+then that helper is an effect boundary. The verifier needs an explicit contract saying that the callback's local mutations flow back out through `walkVisibleLines(...)`.
+
+That is narrower and more honest than making every function call effectful.
+
+The useful split is:
+
+- ordinary helpers stay pure
+- callback helpers get explicit contracts
+- browser seams stay outside the proved zone
 
 ## Start Narrow, Then Widen
 

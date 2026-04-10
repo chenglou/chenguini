@@ -41,6 +41,7 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
   expect(report.phase).toBe('ready')
   expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes')?.status).toBe('pass')
   expect(report.laws.find(law => law.name === 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
+  expect(report.laws.find(law => law.name === 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('pass')
   expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps')?.checks).toBe(2)
 })
 
@@ -94,6 +95,19 @@ test('HN comment verifier catches a broken substring offset in text rect geometr
 
   expect(report.phase).toBe('error')
   expect(report.laws.find(law => law.name === 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('fail')
+})
+
+test('HN comment verifier catches a broken midpoint decision in empty-space offsets', async () => {
+  const source = await Bun.file(new URL('./nicer-hacker-news/hn-comment-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'return y < (previousLine.top + previousLine.height + line.top) / 2 ? previousLine.textEnd : line.textStart',
+    'return y < (previousLine.top + previousLine.height + line.top) / 2 ? line.textStart : line.textStart',
+  )
+  const report = runHNCommentLayoutStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(report.laws.find(law => law.name === 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('fail')
 })
 
 test('callback overrides thread outer local mutations back to the caller', () => {

@@ -117,12 +117,13 @@ export function runHNCommentLayoutStaticVerification(sourceText: string): Static
       },
     },
   }, {
-    includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'findHNCommentTextRects'],
+    includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'findHNCommentTextRects', 'findHNCommentTextOffsetInEmptySpace'],
   })
   const laws = new Map<string, InternalLawSummary>()
 
   verifyLayoutPreparedHNCommentDocConcrete(analyzer, laws)
   verifyFindHNCommentTextRectsConcrete(analyzer, laws)
+  verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer, laws)
 
   return buildStaticLayoutReport('nicer-hacker-news-comment-static-layout', 'demos/nicer-hacker-news/hn-comment-layout.ts', laws)
 }
@@ -308,84 +309,7 @@ function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyz
 }
 
 function verifyFindHNCommentTextRectsConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
-  const layout = concreteObject({
-    width: concreteNumber(200),
-    height: concreteNumber(28),
-    blocks: concreteArray([
-      concreteObject({
-        kind: concreteString('paragraph'),
-        height: concreteNumber(28),
-        lines: concreteArray([
-          concreteObject({
-            top: concreteNumber(0),
-            width: concreteNumber(110),
-            height: concreteNumber(14),
-            textStart: concreteNumber(0),
-            textEnd: concreteNumber(11),
-            fragments: concreteArray([
-              concreteObject({
-                kind: concreteString('text'),
-                href: concreteNull('concrete'),
-                text: concreteString('hello'),
-                gapBefore: concreteNumber(0),
-                left: concreteNumber(0),
-                top: concreteNumber(0),
-                width: concreteNumber(50),
-                height: concreteNumber(14),
-                textStart: concreteNumber(0),
-                textEnd: concreteNumber(5),
-              }),
-              concreteObject({
-                kind: concreteString('link'),
-                href: concreteString('https://example.com'),
-                text: concreteString('world'),
-                gapBefore: concreteNumber(0),
-                left: concreteNumber(50),
-                top: concreteNumber(0),
-                width: concreteNumber(50),
-                height: concreteNumber(14),
-                textStart: concreteNumber(5),
-                textEnd: concreteNumber(10),
-              }),
-              concreteObject({
-                kind: concreteString('italic'),
-                href: concreteNull('concrete'),
-                text: concreteString('!'),
-                gapBefore: concreteNumber(0),
-                left: concreteNumber(100),
-                top: concreteNumber(0),
-                width: concreteNumber(10),
-                height: concreteNumber(14),
-                textStart: concreteNumber(10),
-                textEnd: concreteNumber(11),
-              }),
-            ]),
-          }),
-          concreteObject({
-            top: concreteNumber(14),
-            width: concreteNumber(40),
-            height: concreteNumber(14),
-            textStart: concreteNumber(11),
-            textEnd: concreteNumber(15),
-            fragments: concreteArray([
-              concreteObject({
-                kind: concreteString('code'),
-                href: concreteNull('concrete'),
-                text: concreteString('code'),
-                gapBefore: concreteNumber(0),
-                left: concreteNumber(0),
-                top: concreteNumber(14),
-                width: concreteNumber(40),
-                height: concreteNumber(14),
-                textStart: concreteNumber(11),
-                textEnd: concreteNumber(15),
-              }),
-            ]),
-          }),
-        ]),
-      }),
-    ]),
-  })
+  const layout = makeConcreteCommentLayoutFixture()
 
   const scenarios = [
     {
@@ -409,10 +333,10 @@ function verifyFindHNCommentTextRectsConcrete(analyzer: LoweredProgramAnalyzer, 
     {
       label: 'split_across_lines',
       start: 8,
-      length: 5,
+      length: 6,
       expectedRects: [
         {left: 80, top: 0, width: 30, height: 14},
-        {left: 0, top: 14, width: 20, height: 14},
+        {left: 0, top: 20, width: 20, height: 14},
       ],
     },
   ]
@@ -464,7 +388,7 @@ function verifyFindHNCommentTextRectsConcrete(analyzer: LoweredProgramAnalyzer, 
 
       const line = rect.top === 0
         ? {width: 110, height: 14}
-        : rect.top === 14
+        : rect.top === 20
           ? {width: 40, height: 14}
           : null
       if (line == null || rect.left < -epsilon || rect.width < -epsilon || rect.left + rect.width > line.width + epsilon || rect.height !== line.height) {
@@ -485,4 +409,124 @@ function verifyFindHNCommentTextRectsConcrete(analyzer: LoweredProgramAnalyzer, 
       rectCount: actualRects.length,
     }))
   }
+}
+
+function verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const layout = makeConcreteCommentLayoutFixture()
+  const emptyLayout = concreteObject({
+    width: concreteNumber(200),
+    height: concreteNumber(0),
+    blocks: concreteArray([]),
+  })
+  const scenarios = [
+    {label: 'before_first_line', layout, x: 0, y: -1, expectedOffset: 0},
+    {label: 'inside_line_left', layout, x: -5, y: 4, expectedOffset: 0},
+    {label: 'inside_line_middle', layout, x: 30, y: 4, expectedOffset: null},
+    {label: 'inside_line_right', layout, x: 200, y: 4, expectedOffset: 11},
+    {label: 'between_lines_biases_to_previous', layout, x: 0, y: 16, expectedOffset: 11},
+    {label: 'between_lines_biases_to_next', layout, x: 0, y: 18, expectedOffset: 12},
+    {label: 'below_last_line', layout, x: 0, y: 40, expectedOffset: 16},
+    {label: 'empty_layout', layout: emptyLayout, x: 0, y: 10, expectedOffset: null},
+  ]
+
+  for (const scenario of scenarios) {
+    const returns = analyzer.evaluateFunction('findHNCommentTextOffsetInEmptySpace', [
+      scenario.layout,
+      concreteNumber(scenario.x),
+      concreteNumber(scenario.y),
+    ], 'concrete')
+    check(laws, 'findHNCommentTextOffsetInEmptySpace stays branch-free per concrete scenario', returns.length === 1, () => ({
+      scenario: scenario.label,
+      cases: returns.length,
+    }))
+    if (returns.length !== 1) continue
+
+    const offset = returns[0]!.value.kind === 'null' ? null : expectConcreteNumber(returns[0]!.value)
+    check(laws, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams', offset === scenario.expectedOffset, () => ({
+      scenario: scenario.label,
+      offset,
+      expectedOffset: scenario.expectedOffset,
+    }))
+  }
+}
+
+function makeConcreteCommentLayoutFixture() {
+  return concreteObject({
+    width: concreteNumber(200),
+    height: concreteNumber(34),
+    blocks: concreteArray([
+      concreteObject({
+        kind: concreteString('paragraph'),
+        height: concreteNumber(34),
+        lines: concreteArray([
+          concreteObject({
+            top: concreteNumber(0),
+            width: concreteNumber(110),
+            height: concreteNumber(14),
+            textStart: concreteNumber(0),
+            textEnd: concreteNumber(11),
+            fragments: concreteArray([
+              concreteObject({
+                kind: concreteString('text'),
+                href: concreteNull('concrete'),
+                text: concreteString('hello'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(0),
+                top: concreteNumber(0),
+                width: concreteNumber(50),
+                height: concreteNumber(14),
+                textStart: concreteNumber(0),
+                textEnd: concreteNumber(5),
+              }),
+              concreteObject({
+                kind: concreteString('link'),
+                href: concreteString('https://example.com'),
+                text: concreteString('world'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(50),
+                top: concreteNumber(0),
+                width: concreteNumber(50),
+                height: concreteNumber(14),
+                textStart: concreteNumber(5),
+                textEnd: concreteNumber(10),
+              }),
+              concreteObject({
+                kind: concreteString('italic'),
+                href: concreteNull('concrete'),
+                text: concreteString('!'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(100),
+                top: concreteNumber(0),
+                width: concreteNumber(10),
+                height: concreteNumber(14),
+                textStart: concreteNumber(10),
+                textEnd: concreteNumber(11),
+              }),
+            ]),
+          }),
+          concreteObject({
+            top: concreteNumber(20),
+            width: concreteNumber(40),
+            height: concreteNumber(14),
+            textStart: concreteNumber(12),
+            textEnd: concreteNumber(16),
+            fragments: concreteArray([
+              concreteObject({
+                kind: concreteString('code'),
+                href: concreteNull('concrete'),
+                text: concreteString('code'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(0),
+                top: concreteNumber(20),
+                width: concreteNumber(40),
+                height: concreteNumber(14),
+                textStart: concreteNumber(12),
+                textEnd: concreteNumber(16),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]),
+  })
 }
