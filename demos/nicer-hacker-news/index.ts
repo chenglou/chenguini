@@ -1,6 +1,16 @@
 import {dataRaw} from './data'
-import {measureHNCommentDoc, prepareHNCommentDoc, type PreparedHNCommentDoc} from './hn-comment-layout'
-import {hnCommentDocToPlainText, parseHNCommentHTML, renderHNCommentDoc, type HNCommentDoc} from './hn-comment-parser'
+import {
+  findHNCommentTextOffsetInEmptySpace,
+  findHNCommentTextRects,
+  layoutPreparedHNCommentDoc,
+  prepareHNCommentDoc,
+  resolveHNCommentTextOffset,
+  renderHNCommentLayout,
+  type HNCommentLayout,
+  type PreparedHNCommentDoc,
+} from './hn-comment-layout'
+import {layoutHNRowHitGeometry, layoutHNThreadVisualGeometry} from './hn-thread-layout'
+import {hnCommentDocToPlainText, parseHNCommentHTML} from './hn-comment-parser'
 
 const thread = dataRaw[0]!
 const regexChars = "[\\^$.*+?()[]{}|]"
@@ -111,23 +121,24 @@ function commentWidthF(containerWidth: number, indentsWidth: number) { // TODO: 
 
 // === state
 
-const commentHeightNaturalEstimate = 14 // minimum height: one line of 12px Verdana (~1.2 line-height). Safe lower bound so visibility never misses rows
-
 type RowData = {
   indent: number
   userName: string
   age: string
-  commentDoc: HNCommentDoc
-  commentLayout: PreparedHNCommentDoc
+  preparedCommentDoc: PreparedHNCommentDoc
+  commentLayout: HNCommentLayout | null
   commentText: string
   heightAnimation: 'grow' | 'shrink'
   height: number
-  commentHeightNatural: number
   commentWidthMeasured: number
 }
 
+function rowNaturalHeight(row: RowData) {
+  return rowHeightNaturalF(row.commentLayout?.height ?? 0)
+}
+
 // cache lifetime: same as data
-const domCache = new Map<number, {user: HTMLDivElement; comment: HTMLDivElement}>()
+const domCache = new Map<number, {user: HTMLDivElement; comment: HTMLDivElement; layoutWidth: number}>()
 
 const data: RowData[] = []; {
   for (let i = 0; i < thread.comments.length; i++) {
@@ -137,12 +148,11 @@ const data: RowData[] = []; {
       indent: row.indent,
       userName: row.user,
       age: row.age,
-      commentDoc,
-      commentLayout: prepareHNCommentDoc(commentDoc),
+      preparedCommentDoc: prepareHNCommentDoc(commentDoc),
+      commentLayout: null,
       commentText: hnCommentDocToPlainText(commentDoc),
       heightAnimation: 'grow',
-      height: rowHeightNaturalF(commentHeightNaturalEstimate),
-      commentHeightNatural: commentHeightNaturalEstimate,
+      height: rowHeightNaturalMin,
       commentWidthMeasured: -1,
     })
   }
@@ -170,8 +180,6 @@ const st = {
   },
   scheduledRaf: null as number | null,
 }
-
-const reusedRange = document.createRange() // reuse a single range. Creating many is expensive. See callsites. Careful with leak
 
 window.addEventListener('resize', () => { scheduleRender() })
 window.addEventListener('mouseup', () => { // can't use pointerup, which isn't triggered when pointer panned
@@ -277,13 +285,14 @@ function render() {
   for (let i = 0; i < data.length; i++) {
     const row = data[i]!
     const commentWidth = commentWidthF(containerWidth, row.indent * indentWidth)
+    const rowHeightNaturalPrevious = rowNaturalHeight(row)
     if (commentWidth !== row.commentWidthMeasured) {
-      const rowHeightNaturalPrevious = rowHeightNaturalF(row.commentHeightNatural)
       row.commentWidthMeasured = commentWidth
-      row.commentHeightNatural = measureHNCommentDoc(row.commentLayout, commentWidth)
-      if (Math.abs(row.height - rowHeightNaturalPrevious) < 0.001) row.height = rowHeightNaturalF(row.commentHeightNatural)
+      row.commentLayout = layoutPreparedHNCommentDoc(row.preparedCommentDoc, commentWidth)
+      const rowHeightNaturalNext = rowNaturalHeight(row)
+      if (Math.abs(row.height - rowHeightNaturalPrevious) < 0.001) row.height = rowHeightNaturalNext
     }
-    rowsHeightNatural += rowHeightNaturalF(row.commentHeightNatural)
+    rowsHeightNatural += rowNaturalHeight(row)
   }
 
   // submission, comments, vertical sizing logic
@@ -331,14 +340,22 @@ function render() {
   // **Views should be decoupled from their hitboxes!** Here, the hitboxes ignore animating states
   let pointer: Pointer = {on: null}
   const pageXLocal = st.inputs.pointerXY.pageX/*c*/ - containerLeft
+  const rowHitGeometry = layoutHNRowHitGeometry({
+    rows: data.map(row => ({
+      indent: row.indent,
+      rowHeightNatural: rowNaturalHeight(row),
+    })),
+    submissionHeight,
+    scrollTopCap,
+    containerWidth,
+  })
   if (0 <= pageXLocal && pageXLocal < containerWidth) {
-    let rowTop = submissionHeight/*c*/ - scrollTopCap // ignore animations from scrollerPeekUp & rowsScrollerTopGap
     const indentPointed = Math.floor(pageXLocal / indentWidth) // the indent we're on
-    for (let i = 0; i < data.length; i++) {
-      const height = rowHeightNaturalF(data[i]!.commentHeightNatural)
-      if (rowTop <= st.inputs.pointerXY.pageY && st.inputs.pointerXY.pageY < rowTop + height) {
+    for (let i = 0; i < rowHitGeometry.length; i++) {
+      const rowHit = rowHitGeometry[i]!
+      if (rowHit.rowRect.top <= st.inputs.pointerXY.pageY && st.inputs.pointerXY.pageY < rowHit.rowRect.top + rowHit.rowRect.height) {
         // arrived at the pointed row's y range
-        if (indentPointed <= data[i]!.indent) { // pointed a gutter (as opposed to a comment)
+        if (indentPointed <= rowHit.indent) { // pointed a gutter (as opposed to a comment)
           let ancestor = i; while (ancestor > 0 && data[ancestor]!.indent > indentPointed) ancestor--
           pointer = {on: 'gutter', row: i, ancestor}
         } else {
@@ -346,7 +363,6 @@ function render() {
         }
         break // btw, this might never be reached if e.g. scroller's bigger than rows height sum or bottom edge rubberbanding
       }
-      rowTop += height
     }
   }
   const pointerDownStartedOnScroller =
@@ -373,12 +389,12 @@ function render() {
       const ancestor = pointer.ancestor
       let scrollerCommentTopGapFinal = 0
       for (let i = ancestor + 1; i < data.length; i++)
-        if (data[i]!.heightAnimation === 'shrink') scrollerCommentTopGapFinal += rowHeightNaturalF(data[i]!.commentHeightNatural)
+        if (data[i]!.heightAnimation === 'shrink') scrollerCommentTopGapFinal += rowNaturalHeight(data[i]!)
       let ancestorTopFinal = scrollerCommentTopGapFinal
-      for (let i = 0; i < ancestor; i++) ancestorTopFinal += rowHeightNaturalF(data[i]!.commentHeightNatural)
+      for (let i = 0; i < ancestor; i++) ancestorTopFinal += rowNaturalHeight(data[i]!)
 
       ancestorHeightFinal =
-        rowHeightNaturalF(data[ancestor]!.commentHeightNatural) - Math.max(0, (scrollTop - submissionHeight) - ancestorTopFinal)
+        rowNaturalHeight(data[ancestor]!) - Math.max(0, (scrollTop - submissionHeight) - ancestorTopFinal)
       // max(0, scrollTop - ...) = max(0, scrollTopCap - ...) when scrollTop < 0. So we can just use scrollTop here
       scrollerPeekUpFinal = clamp(0, scrollTop - ancestorTopFinal, submissionHeight)
     }
@@ -390,7 +406,7 @@ function render() {
   let rowsScrollerTopGap = 0
   for (let i = 0; i < data.length; i++) { // update row height
     const row = data[i]!
-    const rowHeightNatural = rowHeightNaturalF(row.commentHeightNatural)
+    const rowHeightNatural = rowNaturalHeight(row)
     const rowHeightFinal =
       st.inputs.pointerState !== 'up' && pointer.on === 'gutter' && i === pointer.ancestor ? ancestorHeightFinal
         : row.heightAnimation === 'shrink' ? 0
@@ -404,6 +420,23 @@ function render() {
   }
 
   const scrollerTop = submissionHeight - st.scrollerPeekUp
+  const visualGeometry = layoutHNThreadVisualGeometry({
+    rows: data.map(row => ({
+      indent: row.indent,
+      rowHeight: row.height,
+      commentLayout: row.commentLayout!,
+    })),
+    containerWidth,
+    indentWidth,
+    commentLeftGap,
+    commentRightGap,
+    commentUserGapNatural,
+    userHeightNatural,
+    rowsScrollerTopGap,
+    scrollerPeekUp: st.scrollerPeekUp,
+    scrollTopCap,
+    scrollerHeight,
+  })
   const devicePixelRatio = window.devicePixelRatio
 
   // === End batched DOM reads 1. Begin batched DOM writes 1
@@ -442,8 +475,6 @@ function render() {
   threadView.commentsDisplay.style.height = `${scrollerHeight}px`
 
   // --- Pass 1: walk visible range, JIT-create nodes, preserve attached visible ones ---
-  let rowTop = rowsScrollerTopGap + st.scrollerPeekUp/*c*/ - scrollTopCap
-  let indexFirstVisible: number | undefined, indexLastVisible: number | undefined, indexFirstVisibleTop: number | undefined
   let nextChild: ChildNode | null = threadView.commentsDisplay.firstChild
   function placeVisibleNode(node: ChildNode) {
     if (node === nextChild) {
@@ -452,17 +483,11 @@ function render() {
     }
     threadView.commentsDisplay.insertBefore(node, nextChild)
   }
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i]!
-    const rowBottom = rowTop + row.height
-    if (rowTop <= scrollerHeight && rowBottom >= 0) { // visible range
-      if (indexFirstVisible == null) {
-        indexFirstVisible = i
-        indexFirstVisibleTop = rowTop
-      }
-      indexLastVisible = i
-
-      let cached = domCache.get(i)
+  for (let i = 0; i < visualGeometry.rows.length; i++) {
+    const rowGeometry = visualGeometry.rows[i]!
+    if (rowGeometry.rowRect.top <= scrollerHeight && rowGeometry.rowBottom >= 0) { // visible range
+      const row = data[rowGeometry.rowIndex]!
+      let cached = domCache.get(rowGeometry.rowIndex)
       if (cached == null) { // JIT DOM node creation: first time this row is visible
         const indentsWidth = row.indent * indentWidth
 
@@ -480,18 +505,19 @@ function render() {
         const comment = document.createElement('div')
         comment.className = 'comment'
         comment.style.left = `${commentLeftF(indentsWidth)}px`
-        // Safari: select from right of comment toward left sets caretRangeFromPoint range.startOffset to 0, which is weird
-        comment.style.paddingRight = `${commentRightGap}px`
-        comment.appendChild(renderHNCommentDoc(row.commentDoc))
+        comment.style.paddingRight = '0'
+        comment.appendChild(renderHNCommentLayout(row.commentLayout!))
 
-        cached = {user, comment}
-        domCache.set(i, cached)
+        cached = {user, comment, layoutWidth: row.commentWidthMeasured}
+        domCache.set(rowGeometry.rowIndex, cached)
+      } else if (cached.layoutWidth !== row.commentWidthMeasured) {
+        cached.comment.replaceChildren(renderHNCommentLayout(row.commentLayout!))
+        cached.layoutWidth = row.commentWidthMeasured
       }
 
       placeVisibleNode(cached.user)
       placeVisibleNode(cached.comment)
     }
-    rowTop += row.height
   }
   while (nextChild != null) {
     const child = nextChild
@@ -500,20 +526,16 @@ function render() {
   }
 
   // --- Pass 2: set position/size styles, draw gutters ---
-  rowTop = rowsScrollerTopGap + st.scrollerPeekUp/*c*/ - scrollTopCap
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i]!
-    const rowBottom = rowTop + row.height
-    const userHeight = Math.min(userHeightNatural, row.height)
-    const userTop = clamp(rowTop, 0, rowBottom - userHeight)
-
-    const cached = domCache.get(i)
+  for (let i = 0; i < visualGeometry.rows.length; i++) {
+    const rowGeometry = visualGeometry.rows[i]!
+    const row = data[rowGeometry.rowIndex]!
+    const cached = domCache.get(rowGeometry.rowIndex)
     if (cached != null && cached.user.parentNode != null) { // visible and in DOM
       const user = cached.user
-      user.style.top = `${userTop}px`
-      user.style.height = `${userHeight}px`
-      user.style.backgroundColor = st.inputs.pointerState !== 'up' && pointer.on === 'gutter' && i === pointer.ancestor ? emphasis : emphasisNone
-      user.style.opacity = String(userHeight / userHeightNatural) // bar fades toward 0 when squashed
+      user.style.top = `${rowGeometry.userRect.top}px`
+      user.style.height = `${rowGeometry.userRect.height}px`
+      user.style.backgroundColor = st.inputs.pointerState !== 'up' && pointer.on === 'gutter' && rowGeometry.rowIndex === pointer.ancestor ? emphasis : emphasisNone
+      user.style.opacity = String(rowGeometry.userRect.height / userHeightNatural) // bar fades toward 0 when squashed
 
       const userText = user.children[0] as HTMLElement
       // we don't wanna see user text clipped by its banner. Fade out text earlier
@@ -521,41 +543,27 @@ function render() {
       userText.style.opacity = String((row.height - userHeightNatural) / (rowHeightNaturalMin - userHeightNatural))
 
       const comment = cached.comment
-      const commentHeight = Math.max(0, row.height - userHeight - commentUserGapNatural)
       const commentFadeSize = // fade grows from 1x to 3x of bottom gap size (hide enough comment text to be perceptible)
-        commentBottomGapNatural + Math.min(row.commentHeightNatural - commentHeight, commentBottomGapNatural * 2)
-      comment.style.top = `${rowTop + userHeightNatural + commentUserGapNatural}px`
-      comment.style.width = `${row.commentWidthMeasured}px`
-      comment.style.height = `${commentHeight}px`
+        commentBottomGapNatural + Math.min(row.commentLayout!.height - rowGeometry.commentRect.height, commentBottomGapNatural * 2)
+      comment.style.top = `${rowGeometry.commentRect.top}px`
+      comment.style.width = `${rowGeometry.commentRect.width}px`
+      comment.style.height = `${rowGeometry.commentRect.height}px`
       comment.style.maskImage = comment.style.webkitMaskImage =
         `linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) ${commentFadeSize}px)`
     }
 
-    // render vertical gutter
-    let gutterTop = // better seen in action. Try seeing the gap between user and banner when scrolling and when shrunken
-      rowBottom - (userTop + userHeight) <= 4 ? rowBottom
-        : 0 <= userTop - rowTop && userTop - rowTop <= 4 ? rowTop + userHeight + 4
-          : userTop + userHeight
-    gutterTop = Math.max(gutterTop, 0)
-
-    let gutterBottom = rowBottom
-    for (let j = i + 1; j < data.length && data[j]!.indent > row.indent; j++) gutterBottom += data[j]!.height
-    gutterBottom = Math.max(gutterTop, gutterBottom - 4)
-
-    if (gutterTop <= scrollerHeight && gutterBottom >= 0) { // visible
-      canvasContext.strokeStyle = pointer.on === 'gutter' && i === pointer.ancestor ? emphasis : emphasisNone
+    if (rowGeometry.gutter.top <= scrollerHeight && rowGeometry.gutter.bottom >= 0) { // visible
+      canvasContext.strokeStyle = pointer.on === 'gutter' && rowGeometry.rowIndex === pointer.ancestor ? emphasis : emphasisNone
       // canvas line's drawn in the middle of a position. Add half stroke width to left align with DOM-rendered user banner
-      const left = row.indent * indentWidth + 0.5/*c*/ + containerLeft
+      const left = rowGeometry.gutter.left/*c*/ + containerLeft
       canvasContext.beginPath()
-      canvasContext.moveTo(left, gutterTop/*c*/ + scrollerTop)
-      canvasContext.lineTo(left, gutterBottom/*c*/ + scrollerTop)
+      canvasContext.moveTo(left, rowGeometry.gutter.top/*c*/ + scrollerTop)
+      canvasContext.lineTo(left, rowGeometry.gutter.bottom/*c*/ + scrollerTop)
       canvasContext.stroke()
     }
-
-    rowTop += row.height
   }
 
-  threadView.dummyPlaceholder.style.height = `${rowTop/*c*/ + scrollTopCap}px`
+  threadView.dummyPlaceholder.style.height = `${visualGeometry.contentHeight}px`
 
   const temporarilyAllowRowSelection = pointer.on != null ? pointer : null
   if (temporarilyAllowRowSelection != null) {
@@ -570,10 +578,46 @@ function render() {
 
   // === End batched DOM writes 1. Begin batched DOM read 2
 
-  let rangePointed: ReturnType<typeof caretRangeFromPoint> | undefined // caretRangeFromPoint is expensive... make an exception here and don't call it unless necessary
+  let rangePointed:
+    | {startContainer: Node; startOffset: number; endContainer: Node; endOffset: number}
+    | undefined // caretRangeFromPoint is expensive... make an exception here and don't call it unless necessary
   // custom selection range (highlight later below)
   if (st.inputs.pointerState !== 'up' && pointer.on === 'row') {
-    rangePointed = caretRangeFromPoint(st.inputs.pointerXY.pageX, st.inputs.pointerXY.pageY) // still nullable from e.g. out-of-bound values
+    const row = data[pointer.row]!
+    const rowGeometry = visualGeometry.rows[pointer.row]!
+    const localX = st.inputs.pointerXY.pageX - containerLeft - rowGeometry.commentRect.left
+    const localY = st.inputs.pointerXY.pageY - scrollerTop - rowGeometry.commentRect.top
+    if (
+      0 <= localX &&
+      localX < rowGeometry.commentRect.width &&
+      0 <= localY &&
+      localY < rowGeometry.commentRect.height
+    ) {
+      const textOffset = findHNCommentTextOffsetInEmptySpace(row.commentLayout!, localX, localY)
+      if (textOffset != null) {
+        const cached = domCache.get(pointer.row)
+        const boundary = cached == null ? null : resolveHNCommentTextOffset(cached.comment, textOffset)
+        if (boundary != null) {
+          rangePointed = {
+            startContainer: boundary.node,
+            startOffset: boundary.offset,
+            endContainer: boundary.node,
+            endOffset: boundary.offset,
+          }
+        }
+      }
+    }
+    if (rangePointed == null) {
+      const rangePointedBrowser = caretRangeFromPoint(st.inputs.pointerXY.pageX, st.inputs.pointerXY.pageY) // still nullable from e.g. out-of-bound values
+      if (rangePointedBrowser != null) {
+        rangePointed = {
+          startContainer: rangePointedBrowser.startContainer,
+          startOffset: rangePointedBrowser.startOffset,
+          endContainer: rangePointedBrowser.endContainer,
+          endOffset: rangePointedBrowser.endOffset,
+        }
+      }
+    }
     if (rangePointed != null) {
       if (st.inputs.pointerState === 'firstDown' || st.pointerDownTarget !== 'text') {
         // UX detail: click on non-comment (e.g. gutter): selection not lost. Click on gutter, drag to comment: new selection =)
@@ -620,8 +664,7 @@ function render() {
       // show a resizable cursor on gutter when:
       // - pointed row's ancestor (which might be ourselves) is occluded at the top
       // - pointed row's ancestor isn't the row's immediate parent
-      let rowTop = 0; for (let i = 0; i < pointer.ancestor; i++) rowTop += data[i]!.height
-      if (rowTop < scrollTopCap || pointer.ancestor < pointer.row - 1) cursor = 'row-resize'
+      if (visualGeometry.rows[pointer.ancestor]!.rowRect.top < 0 || pointer.ancestor < pointer.row - 1) cursor = 'row-resize'
     }
   }
 
@@ -636,41 +679,28 @@ function render() {
     searchMatches = data.map(d => d.commentText.matchAll(fuzzyQueryRegex))
   }
   { // highlight search results and selection
-    if (indexFirstVisible != null && indexLastVisible != null && indexFirstVisibleTop != null) {
-      let rowTop = indexFirstVisibleTop
-      for (let i = indexFirstVisible; i <= indexLastVisible; i++) {
+    if (
+      visualGeometry.firstVisibleRowIndex != null &&
+      visualGeometry.lastVisibleRowIndex != null
+    ) {
+      for (let i = visualGeometry.firstVisibleRowIndex; i <= visualGeometry.lastVisibleRowIndex; i++) {
         const row = data[i]!
-        const commentTop = userHeightNatural/*c*/ + scrollerTop // don't surpass the top sticky bar
-        const commentBottom = rowTop + row.height/*c*/ + scrollerTop // same as row bottom
-        const cached = domCache.get(i)!
-        const visitor = document.createTreeWalker(cached.comment, NodeFilter.SHOW_TEXT)
-        let node = visitor.nextNode()
-        let positionInNode = 0
-        function advance(count: number) {
-          while (node != null && node.textContent!.length - positionInNode < count) {
-            count -= node.textContent!.length - positionInNode
-            node = visitor.nextNode()
-            positionInNode = 0
-          }
-          positionInNode += count
-          // if we landed exactly at the end of a text node, prefer the start of the next one.
-          // This avoids getClientRects() including boundary gaps at block element edges (e.g. <p> tags)
-          if (node != null && positionInNode === node.textContent!.length) {
-            const next = visitor.nextNode()
-            if (next != null) { node = next; positionInNode = 0 }
-          }
-        }
-        let positionLast = 0
+        const rowGeometry = visualGeometry.rows[i]!
+        const commentTopBound = userHeightNatural/*c*/ + scrollerTop // don't surpass the top sticky bar
+        const commentBottomBound = rowGeometry.rowBottom/*c*/ + scrollerTop // same as row bottom
         if (searchMatches != null) {
           for (const match of searchMatches[i]!) {
-            const start = match.index, length = match[0].length
-            advance(start - positionLast); if (node != null) reusedRange.setStart(node, positionInNode)
-            advance(length); if (node != null) reusedRange.setEnd(node, positionInNode)
-            positionLast = start + length
-            for (const {left, width, top, bottom} of reusedRange.getClientRects()) {
-              const topBound = clamp(commentTop, top, commentBottom)
-              const bottomBound = clamp(commentTop, bottom, commentBottom)
-              canvasContext.clearRect(left, topBound, width, bottomBound - topBound)
+            const start = match.index
+            const length = match[0].length
+            for (const searchRect of findHNCommentTextRects(row.commentLayout!, start, length)) {
+              const top = clamp(commentTopBound, rowGeometry.commentRect.top + searchRect.top/*c*/ + scrollerTop, commentBottomBound)
+              const bottom = clamp(commentTopBound, rowGeometry.commentRect.top + searchRect.top + searchRect.height/*c*/ + scrollerTop, commentBottomBound)
+              canvasContext.clearRect(
+                rowGeometry.commentRect.left + searchRect.left/*c*/ + containerLeft,
+                top,
+                searchRect.width,
+                bottom - top,
+              )
             }
           }
         }
@@ -695,18 +725,17 @@ function render() {
           if (rects.length > 0) {
             const rectFirst = rects[0]!; const rectLast = rects[rects.length - 1]!
 
-            const topFirst = clamp(commentTop, rectFirst.top, commentBottom)
-            const bottomFirst = clamp(commentTop, rectFirst.bottom, commentBottom)
-            const topLast = clamp(commentTop, rectLast.top, commentBottom)
-            const bottomLast = clamp(commentTop, rectLast.bottom, commentBottom)
+            const topFirst = clamp(commentTopBound, rectFirst.top, commentBottomBound)
+            const bottomFirst = clamp(commentTopBound, rectFirst.bottom, commentBottomBound)
+            const topLast = clamp(commentTopBound, rectLast.top, commentBottomBound)
+            const bottomLast = clamp(commentTopBound, rectLast.bottom, commentBottomBound)
 
             canvasContext.fillStyle = 'rgba(0, 0, 100, 0.2)'
 
             let j = 0; while (j < rects.length - 1 && rects[j + 1]!.top === rectFirst.top) j++ // index of last rect of first line
             if (j < rects.length - 1) { // more than 1 selected line
-              const indentsWidth = data[st.selection.row]!.indent * indentWidth
-              const left = commentLeftF(indentsWidth)/*c*/ + containerLeft
-              const commentWidth = commentWidthF(containerWidth, indentsWidth)
+              const left = rowGeometry.commentRect.left/*c*/ + containerLeft
+              const commentWidth = row.commentLayout!.width
               canvasContext.fillRect(rectFirst.left, topFirst, left + commentWidth - rectFirst.left, bottomFirst - topFirst) // 1st line
               canvasContext.fillRect(left, bottomFirst, commentWidth, topLast - bottomFirst) // middle region
               canvasContext.fillRect(left, topLast, rectLast.right - left, bottomLast - topLast) // last line
@@ -715,8 +744,6 @@ function render() {
             }
           }
         }
-
-        rowTop += row.height
       }
     }
   }

@@ -69,27 +69,32 @@
       line-height: 14px;
       overflow: hidden;
     }
+    .comment-line {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 14px;
+      line-height: 14px;
+      font-family: Verdana, Geneva, sans-serif;
+    }
+    .comment-code-line {
+      font-family: monospace;
+    }
+    .comment-fragment,
+    .comment-gap {
+      position: absolute;
+      top: 0;
+      line-height: 14px;
+      white-space: pre;
+    }
+    .comment-code-fragment {
+      font-family: monospace;
+    }
     .comment a {
       color: black;
     }
     .comment a:visited {
       color: rgb(130, 130, 130);
-    }
-    .comment p {
-      margin-top: 8px;
-      margin-bottom: 0;
-    }
-    .comment pre {
-      margin-top: 8px;
-      margin-bottom: 0;
-      white-space: pre-wrap;
-      overflow-wrap: break-word;
-      font-family: monospace;
-      font-size: 12px;
-      line-height: 14px;
-    }
-    .comment pre:first-child {
-      margin-top: 0;
     }
   </style>
   <script type="module" src="./index.ts"></script>
