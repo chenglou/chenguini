@@ -84,6 +84,24 @@ Bad:
 
 The outer layout should trust one contract. It should not maintain a second approximate geometry algorithm for the same thing.
 
+## Hit Testing Should Read The Same Geometry
+
+If JS owns text boxes or card boxes, let hit testing read those same boxes.
+
+Good:
+
+- a selection highlighter walks the same line fragments the renderer used
+- clicking empty space in a comment returns the nearest text offset from the line tops and line widths you already computed
+- a grid hit area comes from the same `layoutBox` and `promptBox` that drive paint
+
+Bad:
+
+- layout comes from one JS model, then hit testing remeasures sliced substrings later
+- empty-space selection is guessed from DOM ranges even though line tops and text offsets are already in userland
+- one helper returns merged text rects while another helper recomputes almost-the-same boxes with slightly different gap rules
+
+Once the geometry is in userland, selection and hit routing should usually become geometry queries, not DOM archaeology.
+
 ## Decorative Prefixes Count As Layout
 
 If an opening quote, badge, or icon steals width, make it part of the measured text stream.
