@@ -3,8 +3,12 @@ import {
   concreteNull,
   concreteNumber,
   expectConcreteNumber,
+  expectRangeArray,
+  expectRangeNumber,
   invokeConcreteFunctionValue,
+  joinRangeCases,
   LoweredProgramAnalyzer,
+  rangeNumber,
 } from './layout-static-core.ts'
 import {
   buildConcreteContractOverrides,
@@ -36,6 +40,7 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
 
   expect(report.phase).toBe('ready')
   expect(report.laws.find(law => law.name === 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
+  expect(report.laws.find(law => law.name === 'getGridLayout keeps each item centered in its column slot')?.status).toBe('pass')
   expect(report.laws.find(law => law.name === 'colsBoxMaxSizeXF exactly fills the horizontal track')?.checks).toBe(1281)
 })
 
@@ -45,6 +50,8 @@ test('nicer-hacker-news static verifier keeps the row geometry slice ready', asy
 
   expect(report.phase).toBe('ready')
   expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('pass')
+  expect(report.laws.find(law => law.name === 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals')?.status).toBe('pass')
+  expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible')?.status).toBe('pass')
   expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping internally consistent')?.checks).toBe(2)
 })
 
@@ -90,6 +97,21 @@ test('photo-gallery verifier catches broken track-fill math', async () => {
 
   expect(report.phase).toBe('error')
   expect(report.laws.find(law => law.name === 'colsBoxMaxSizeXF exactly fills the horizontal track')?.status).toBe('fail')
+})
+
+test('photo-gallery verifier catches broken column-slot math', async () => {
+  const sourceFilePath = new URL('./photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - measurement.imageSizeX) / 2',
+    'const x = boxesGapX + (boxMaxSizeX + boxesGapX) * ((i + 1) % cols) + (boxMaxSizeX - measurement.imageSizeX) / 2',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+
+  expect(report.phase).toBe('error')
+  expect(report.laws.find(law => law.name === 'getGridLayout keeps each item centered in its column slot')?.status).toBe('fail')
 })
 
 test('HN row verifier catches broken comment width math', async () => {
@@ -256,4 +278,60 @@ function demo() {
   const returns = analyzer.evaluateFunction('demo', [], 'concrete')
   expect(returns).toHaveLength(1)
   expect(expectConcreteNumber(returns[0].value)).toBe(28)
+})
+
+test('range mode keeps exact append-only array facts through pushes', () => {
+  const source = `
+function demo() {
+  const tops = [40]
+  tops.push(120)
+  tops.push(180)
+  return tops
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  const returns = analyzer.evaluateFunctionRange('demo', [])
+  const tops = expectRangeArray(joinRangeCases(returns))
+
+  expect(tops.lengthMin).toBe(3)
+  expect(tops.lengthMax).toBe(3)
+  expect(tops.isStrictlyIncreasingNumeric).toBe(true)
+  expect(expectRangeNumber(tops.last)).toEqual(rangeNumber(180, 180, true))
+})
+
+test('range mode keeps exact array indexing and at(-1)', () => {
+  const source = `
+function byIndex() {
+  const values = [10, 20, 30]
+  return values[1]
+}
+
+function byAt() {
+  const values = [10, 20, 30]
+  return values.at(-1)
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['byIndex', 'byAt'],
+  })
+
+  expect(expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('byIndex', [])))).toEqual(rangeNumber(20, 20, true))
+  expect(expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('byAt', [])))).toEqual(rangeNumber(30, 30, true))
+})
+
+test('range mode tracks integer remainder bounds', () => {
+  const source = `
+function demo(width: number) {
+  return width % 3
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  const remainder = expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [rangeNumber(0, 100, true)])))
+  expect(remainder).toEqual(rangeNumber(0, 2, true))
 })

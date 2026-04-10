@@ -113,6 +113,16 @@ export type RangeObjectValue = {
   props: Record<string, RangeValue>
 }
 
+export type RangeArrayValue = {
+  kind: 'range-array'
+  lengthMin: number
+  lengthMax: number
+  items: RangeValue[] | null
+  item: RangeValue | null
+  last: RangeValue | null
+  isStrictlyIncreasingNumeric: boolean
+}
+
 export type RangeOpaqueValue = {
   kind: 'range-opaque'
   label: string
@@ -122,7 +132,7 @@ export type RangeNullValue = {
   kind: 'range-null'
 }
 
-export type RangeValue = RangeNumberValue | RangeBooleanValue | RangeObjectValue | RangeOpaqueValue | RangeNullValue
+export type RangeValue = RangeNumberValue | RangeBooleanValue | RangeObjectValue | RangeArrayValue | RangeOpaqueValue | RangeNullValue
 
 export type FunctionOverride = {
   evaluate?: (args: Value[], mode: Mode, context: {
@@ -492,12 +502,57 @@ export class LoweredProgramAnalyzer {
           value: expression.operator === '-' ? negateRangeNumber(expectRangeNumber(result.value)) : expectRangeNumber(result.value),
         }))
       }
+      case 'postfix-update': {
+        const current = expectRangeNumber(state.env.get(expression.target) ?? unsupported(`Unknown identifier ${expression.target}`))
+        const env = new Map(state.env)
+        const delta = expression.operator === '++' ? 1 : -1
+        env.set(expression.target, rangeNumber(current.min + delta, current.max + delta, current.isInteger))
+        return [{
+          state: {env},
+          value: current,
+        }]
+      }
+      case 'array': {
+        let cases: Array<{state: RangeState; items: RangeValue[]}> = [{state, items: []}]
+        for (const itemExpression of expression.items) {
+          const nextCases: Array<{state: RangeState; items: RangeValue[]}> = []
+          for (const arrayCase of cases) {
+            for (const evaluated of this.evalRangeExpression(arrayCase.state, itemExpression)) {
+              nextCases.push({
+                state: evaluated.state,
+                items: [...arrayCase.items, evaluated.value],
+              })
+            }
+          }
+          cases = nextCases
+        }
+        return cases.map(arrayCase => ({
+          state: arrayCase.state,
+          value: rangeArray(arrayCase.items),
+        }))
+      }
       case 'property': {
         const targetCases = this.evalRangeExpression(state, expression.object)
         return targetCases.map(result => ({
           state: result.state,
-          value: getRangeProp(expectRangeObject(result.value), expression.property),
+          value:
+            result.value.kind === 'range-array'
+              ? getRangeArrayProperty(result.value, expression.property)
+              : getRangeProp(expectRangeObject(result.value), expression.property),
         }))
+      }
+      case 'index': {
+        const targetCases = this.evalRangeExpression(state, expression.object)
+        const results: RangeEvalCase[] = []
+        for (const targetCase of targetCases) {
+          for (const evaluatedIndex of this.evalRangeExpression(targetCase.state, expression.index)) {
+            results.push({
+              state: evaluatedIndex.state,
+              value: getRangeIndexableItem(targetCase.value, expectRangeNumber(evaluatedIndex.value)),
+            })
+          }
+        }
+        return results
       }
       case 'binary':
         return combineRangeBinaryCases(this, state, expression)
@@ -519,7 +574,18 @@ export class LoweredProgramAnalyzer {
         let cases: Array<{state: RangeState; props: Record<string, RangeValue>}> = [{state, props: {}}]
         for (const property of expression.properties) {
           if (property.kind === 'spread') {
-            throw new Error('Spread in range object literals is not supported yet')
+            const nextCases: Array<{state: RangeState; props: Record<string, RangeValue>}> = []
+            for (const objectCase of cases) {
+              for (const evaluated of this.evalRangeExpression(objectCase.state, property.value)) {
+                const spreadObject = expectRangeObject(evaluated.value)
+                nextCases.push({
+                  state: evaluated.state,
+                  props: {...objectCase.props, ...spreadObject.props},
+                })
+              }
+            }
+            cases = nextCases
+            continue
           }
           const nextCases: Array<{state: RangeState; props: Record<string, RangeValue>}> = []
           for (const objectCase of cases) {
@@ -539,6 +605,24 @@ export class LoweredProgramAnalyzer {
       }
       case 'call':
         return evaluateRangeCallExpression(this, state, expression)
+      case 'assign': {
+        return this.evalRangeExpression(state, expression.value).map(evaluated => {
+          const env = new Map(evaluated.state.env)
+          const nextValue =
+            expression.operator === '='
+              ? evaluated.value
+              : applyRangeAssignmentOperator(
+                  expectRangeNumber(env.get(expression.target) ?? unsupported(`Unknown identifier ${expression.target}`)),
+                  expectRangeNumber(evaluated.value),
+                  expression.operator,
+                )
+          env.set(expression.target, nextValue)
+          return {
+            state: {env},
+            value: nextValue,
+          }
+        })
+      }
       default:
         throw new Error(`Unsupported range expression kind: ${expression.kind}`)
     }
@@ -1223,8 +1307,8 @@ function executeInstruction(analyzer: LoweredProgramAnalyzer, state: EvalState, 
 }
 
 function executeRangeInstruction(analyzer: LoweredProgramAnalyzer, state: RangeState, instruction: IrInstruction): RangeState[] {
-  if (instruction.kind !== 'declare') {
-    throw new Error('Range execution only supports declarations right now')
+  if (instruction.kind === 'expression') {
+    return analyzer.evalRangeExpression(state, instruction.expression).map(result => result.state)
   }
 
   let states = [state]
@@ -1314,13 +1398,58 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
   const results: RangeEvalCase[] = []
   for (const leftCase of leftCases) {
     if (expression.operator === '??') throw new Error('Range nullish coalescing is not supported yet')
+    if (expression.operator === '||' || expression.operator === '&&') {
+      const left = expectRangeBoolean(leftCase.value)
+      if ((expression.operator === '||' && left.truth === 'always-true') || (expression.operator === '&&' && left.truth === 'always-false')) {
+        results.push({
+          state: leftCase.state,
+          value: rangeBoolean(left.truth === 'always-true' ? 'always-true' : 'always-false'),
+        })
+        continue
+      }
+      if ((expression.operator === '||' && left.truth === 'always-false') || (expression.operator === '&&' && left.truth === 'always-true')) {
+        const rightCases = analyzer.evalRangeExpression(leftCase.state, expression.right)
+        for (const rightCase of rightCases) {
+          results.push({
+            state: rightCase.state,
+            value: expectRangeBoolean(rightCase.value),
+          })
+        }
+        continue
+      }
+      const rightCases = analyzer.evalRangeExpression(leftCase.state, expression.right)
+      for (const rightCase of rightCases) {
+        results.push({
+          state: rightCase.state,
+          value: rangeBoolean('maybe'),
+        })
+      }
+      continue
+    }
     const rightCases = analyzer.evalRangeExpression(leftCase.state, expression.right)
     for (const rightCase of rightCases) {
+      if (
+        expression.operator === '==' ||
+        expression.operator === '!=' ||
+        expression.operator === '===' ||
+        expression.operator === '!=='
+      ) {
+        const nullTruth = compareNullableRangeValues(leftCase.value, rightCase.value, expression.operator)
+        if (nullTruth != null) {
+          results.push({
+            state: rightCase.state,
+            value: rangeBoolean(nullTruth),
+          })
+          continue
+        }
+      }
+
       if (
         expression.operator === '+' ||
         expression.operator === '-' ||
         expression.operator === '*' ||
-        expression.operator === '/'
+        expression.operator === '/' ||
+        expression.operator === '%'
       ) {
         results.push({
           state: rightCase.state,
@@ -1329,14 +1458,7 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
         continue
       }
 
-      if (
-        expression.operator === '>' ||
-        expression.operator === '>=' ||
-        expression.operator === '<' ||
-        expression.operator === '<=' ||
-        expression.operator === '===' ||
-        expression.operator === '!=='
-      ) {
+      if (isRangeComparisonOperator(expression.operator)) {
         results.push({
           state: rightCase.state,
           value: rangeBoolean(compareRangeNumbers(expectRangeNumber(leftCase.value), expectRangeNumber(rightCase.value), expression.operator)),
@@ -1344,7 +1466,7 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
         continue
       }
 
-      throw new Error(`Unsupported range binary operator: ${expression.operator}`)
+      throw new Error('Unsupported range binary operator')
     }
   }
   return results
@@ -1501,6 +1623,48 @@ function evaluateCallExpression(analyzer: LoweredProgramAnalyzer, state: EvalSta
 }
 
 function evaluateRangeCallExpression(analyzer: LoweredProgramAnalyzer, state: RangeState, expression: Extract<IrExpression, {kind: 'call'}>): RangeEvalCase[] {
+  if (expression.callee.kind === 'property' && expression.callee.property === 'at') {
+    const targetCases = analyzer.evalRangeExpression(state, expression.callee.object)
+    const results: RangeEvalCase[] = []
+    for (const targetCase of targetCases) {
+      const array = expectRangeArray(targetCase.value)
+      if (expression.args.length !== 1) throw new Error('Array.at expects exactly 1 argument')
+      for (const evaluatedIndex of analyzer.evalRangeExpression(targetCase.state, expression.args[0]!)) {
+        results.push({
+          state: evaluatedIndex.state,
+          value: getRangeArrayItemAt(array, expectRangeNumber(evaluatedIndex.value)),
+        })
+      }
+    }
+    return results
+  }
+
+  if (expression.callee.kind === 'property' && expression.callee.property === 'push') {
+    const targetExpression = expression.callee.object
+    if (targetExpression.kind !== 'identifier') throw new Error('Only identifier.push(...) is supported in range mode')
+    let activeStates: RangeState[] = [state]
+    for (const argument of expression.args) {
+      const nextStates: RangeState[] = []
+      for (const activeState of activeStates) {
+        for (const evaluated of analyzer.evalRangeExpression(activeState, argument)) {
+          const currentArray = expectRangeArray(evaluated.state.env.get(targetExpression.name) ?? unsupported(`Unknown array identifier ${targetExpression.name}`))
+          const env = new Map(evaluated.state.env)
+          env.set(targetExpression.name, appendRangeArrayItem(currentArray, evaluated.value))
+          nextStates.push({env})
+        }
+      }
+      activeStates = nextStates
+    }
+    return activeStates.map(activeState => ({
+      state: activeState,
+      value: rangeNumber(
+        expectRangeArray(activeState.env.get(targetExpression.name)!).lengthMin,
+        expectRangeArray(activeState.env.get(targetExpression.name)!).lengthMax,
+        true,
+      ),
+    }))
+  }
+
   let argumentCases: Array<{state: RangeState; values: RangeValue[]}> = [{state, values: []}]
   for (const argument of expression.args) {
     const nextArgumentCases: Array<{state: RangeState; values: RangeValue[]}> = []
@@ -2002,8 +2166,20 @@ function rangeBoolean(truth: RangeTruth): RangeBooleanValue {
   return {kind: 'range-boolean', truth}
 }
 
-function rangeObject(props: Record<string, RangeValue>): RangeObjectValue {
+export function rangeObject(props: Record<string, RangeValue>): RangeObjectValue {
   return {kind: 'range-object', props}
+}
+
+export function rangeArray(items: RangeValue[]): RangeArrayValue {
+  return {
+    kind: 'range-array',
+    lengthMin: items.length,
+    lengthMax: items.length,
+    items,
+    item: joinNullableRangeItems(items),
+    last: items.at(-1) ?? null,
+    isStrictlyIncreasingNumeric: rangeItemsAreStrictlyIncreasing(items),
+  }
 }
 
 function rangeNull(): RangeNullValue {
@@ -2025,10 +2201,84 @@ export function expectRangeObject(value: RangeValue): RangeObjectValue {
   return value
 }
 
+export function expectRangeArray(value: RangeValue): RangeArrayValue {
+  if (value.kind !== 'range-array') throw new Error(`Expected range array, got ${value.kind}`)
+  return value
+}
+
 export function getRangeProp(object: RangeObjectValue, key: string) {
   const value = object.props[key]
   if (value == null) throw new Error(`Missing range property ${key}`)
   return value
+}
+
+function getRangeArrayProperty(array: RangeArrayValue, key: string) {
+  if (key === 'length') return rangeNumber(array.lengthMin, array.lengthMax, true)
+  throw new Error(`Unsupported range array property: ${key}`)
+}
+
+function getRangeIndexableItem(value: RangeValue, index: RangeNumberValue) {
+  if (value.kind === 'range-array') return getRangeArrayItemAt(value, index)
+  throw new Error(`Expected range array index access, got ${value.kind}`)
+}
+
+function getRangeArrayItemAt(array: RangeArrayValue, index: RangeNumberValue) {
+  const normalizedIndex = normalizeRangeArrayIndex(array, index)
+  if (array.items != null && normalizedIndex != null) {
+    const joined = joinNullableRangeItems(array.items.slice(normalizedIndex.min, normalizedIndex.max + 1))
+    if (joined != null) return joined
+  }
+  if (array.item != null) return array.item
+  throw new Error('Cannot read from an empty range array')
+}
+
+function appendRangeArrayItem(array: RangeArrayValue, next: RangeValue): RangeArrayValue {
+  const items = array.items == null ? null : [...array.items, next]
+  return {
+    kind: 'range-array',
+    lengthMin: array.lengthMin + 1,
+    lengthMax: array.lengthMax + 1,
+    items,
+    item: array.item == null ? next : joinRangeValues(array.item, next),
+    last: next,
+    isStrictlyIncreasingNumeric:
+      array.isStrictlyIncreasingNumeric &&
+      rangeValuesAreStrictlyIncreasingPair(array.last, next),
+  }
+}
+
+function normalizeRangeArrayIndex(array: RangeArrayValue, index: RangeNumberValue) {
+  if (!index.isInteger) return null
+  if (array.lengthMin !== array.lengthMax) return null
+  const length = array.lengthMin
+  let min = index.min
+  let max = index.max
+  if (max < 0) {
+    min += length
+    max += length
+  }
+  if (min < 0 || max >= length) return null
+  return {min, max}
+}
+
+function joinNullableRangeItems(items: RangeValue[]) {
+  if (items.length === 0) return null
+  let current = items[0]!
+  for (let i = 1; i < items.length; i++) current = joinRangeValues(current, items[i]!)
+  return current
+}
+
+function rangeItemsAreStrictlyIncreasing(items: RangeValue[]) {
+  for (let i = 1; i < items.length; i++) {
+    if (!rangeValuesAreStrictlyIncreasingPair(items[i - 1]!, items[i]!)) return false
+  }
+  return true
+}
+
+function rangeValuesAreStrictlyIncreasingPair(left: RangeValue | null, right: RangeValue | null) {
+  if (left == null || right == null) return true
+  if (left.kind !== 'range-number' || right.kind !== 'range-number') return false
+  return left.max < right.min - epsilon
 }
 
 export function joinRangeCases(cases: RangeReturnCase[]): RangeValue {
@@ -2051,6 +2301,29 @@ function joinRangeValues(left: RangeValue, right: RangeValue): RangeValue {
     for (const key of Object.keys(left.props)) props[key] = joinRangeValues(getRangeProp(left, key), getRangeProp(right, key))
     return rangeObject(props)
   }
+  if (left.kind === 'range-array' && right.kind === 'range-array') {
+    const items =
+      left.items != null &&
+      right.items != null &&
+      left.items.length === right.items.length
+        ? left.items.map((item, index) => joinRangeValues(item, right.items![index]!))
+        : null
+    return {
+      kind: 'range-array',
+      lengthMin: Math.min(left.lengthMin, right.lengthMin),
+      lengthMax: Math.max(left.lengthMax, right.lengthMax),
+      items,
+      item:
+        left.item == null ? right.item
+        : right.item == null ? left.item
+        : joinRangeValues(left.item, right.item),
+      last:
+        left.last == null ? right.last
+        : right.last == null ? left.last
+        : joinRangeValues(left.last, right.last),
+      isStrictlyIncreasingNumeric: items == null ? false : rangeItemsAreStrictlyIncreasing(items),
+    }
+  }
   if (left.kind === 'range-opaque' && right.kind === 'range-opaque') {
     if (left.label !== right.label) throw new Error(`Cannot join opaque values ${left.label} and ${right.label}`)
     return left
@@ -2063,7 +2336,7 @@ function negateRangeNumber(value: RangeNumberValue) {
   return rangeNumber(-value.max, -value.min, value.isInteger)
 }
 
-function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNumberValue, operator: '+' | '-' | '*' | '/') {
+function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNumberValue, operator: '+' | '-' | '*' | '/' | '%') {
   switch (operator) {
     case '+':
       return rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger)
@@ -2078,10 +2351,25 @@ function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNumberVal
       const quotients = [left.min / right.min, left.min / right.max, left.max / right.min, left.max / right.max]
       return rangeNumber(Math.min(...quotients), Math.max(...quotients), false)
     }
+    case '%': {
+      if (!left.isInteger || !right.isInteger) throw new Error('Range remainder expects integer operands')
+      if (right.min <= 0) throw new Error('Range remainder expects a positive divisor interval')
+      const leftIsSingleton = Math.abs(left.max - left.min) <= epsilon
+      const rightIsSingleton = Math.abs(right.max - right.min) <= epsilon
+      if (leftIsSingleton && rightIsSingleton) {
+        return rangeNumber(left.min % right.min, left.min % right.min, true)
+      }
+      if (right.min === right.max) {
+        const divisor = right.min
+        if (left.min >= 0) return rangeNumber(0, Math.max(0, divisor - 1), true)
+      }
+      const maxAbsDivisor = Math.max(Math.abs(right.min), Math.abs(right.max))
+      return rangeNumber(-(maxAbsDivisor - 1), maxAbsDivisor - 1, true)
+    }
   }
 }
 
-function compareRangeNumbers(left: RangeNumberValue, right: RangeNumberValue, operator: ComparisonOp): RangeTruth {
+function compareRangeNumbers(left: RangeNumberValue, right: RangeNumberValue, operator: ComparisonOp | '==' | '!='): RangeTruth {
   switch (operator) {
     case '>':
       return left.min > right.max ? 'always-true' : left.max <= right.min ? 'always-false' : 'maybe'
@@ -2109,7 +2397,19 @@ function compareRangeNumbers(left: RangeNumberValue, right: RangeNumberValue, op
           ? 'always-false'
           : 'maybe'
     }
+    case '==':
+      return compareRangeNumbers(left, right, '===')
+    case '!=':
+      return compareRangeNumbers(left, right, '!==')
   }
+}
+
+function compareNullableRangeValues(left: RangeValue, right: RangeValue, operator: '==' | '!=' | '===' | '!=='): RangeTruth | null {
+  if (left.kind !== 'range-null' && right.kind !== 'range-null') return null
+  const equal = left.kind === 'range-null' && right.kind === 'range-null'
+  return operator === '==' || operator === '==='
+    ? equal ? 'always-true' : 'always-false'
+    : equal ? 'always-false' : 'always-true'
 }
 
 function minRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeNumberValue {
@@ -2125,6 +2425,10 @@ function applyAssignmentOperator(current: NumberValue, next: NumberValue, operat
   const currentValue = expectConcreteNumberValue(current)
   const nextValue = expectConcreteNumberValue(next)
   return concreteNumber(operator === '+=' ? currentValue + nextValue : currentValue - nextValue)
+}
+
+function applyRangeAssignmentOperator(current: RangeNumberValue, next: RangeNumberValue, operator: '+=' | '-='): RangeNumberValue {
+  return applyRangeNumericOperator(current, next, operator === '+=' ? '+' : '-')
 }
 
 export function concreteNumberArrayIsStrictlyIncreasing(array: ArrayValue) {
@@ -2212,6 +2516,10 @@ function isComparisonOperator(operator: IrBinaryOperator): operator is Compariso
     operator === '===' ||
     operator === '!=='
   )
+}
+
+function isRangeComparisonOperator(operator: IrBinaryOperator): operator is ComparisonOp | '==' | '!=' {
+  return isComparisonOperator(operator)
 }
 
 function isAssignmentToken(token: ts.SyntaxKind) {

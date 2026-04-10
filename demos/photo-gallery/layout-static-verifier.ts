@@ -227,6 +227,7 @@ function verifyGetGridLayoutConcrete(
   ])
 
   const windowWidths = [520, 760, 1100]
+  const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
   const boxesGapY = analyzer.getGlobalNumber('boxesGapY')
 
   for (const windowWidth of windowWidths) {
@@ -244,6 +245,7 @@ function verifyGetGridLayoutConcrete(
     const items = expectArray(getProp(layout, 'items'))
     const rowsTop = expectArray(getProp(layout, 'rowsTop'))
     const cols = expectConcreteNumber(getProp(layout, 'cols'))
+    const boxMaxSizeX = expectConcreteNumber(getProp(layout, 'boxMaxSizeX'))
     const contentHeight = expectConcreteNumber(getProp(layout, 'contentHeight'))
 
     check(laws, 'getGridLayout preserves item count', items.items.length === layoutSources.items.length, () => ({
@@ -267,39 +269,101 @@ function verifyGetGridLayoutConcrete(
     let maxBottom = 0
     let withinViewport = true
     let horizontalNonOverlap = true
+    let columnCentering = true
+    let viewportFailure: null | Record<string, number | string> = null
+    let overlapFailure: null | Record<string, number | string> = null
+    let columnCenterFailure: null | Record<string, number | string> = null
     for (let i = 0; i < items.items.length; i++) {
       const item = expectObject(items.items[i]!)
       const layoutBox = expectObject(getProp(item, 'layoutBox'))
       const prompt = expectObject(getProp(item, 'prompt'))
       const promptBox = expectObject(getProp(prompt, 'box'))
       const left = expectConcreteNumber(getProp(layoutBox, 'x'))
+      const layoutWidth = expectConcreteNumber(getProp(layoutBox, 'sizeX'))
       const right = left + expectConcreteNumber(getProp(layoutBox, 'sizeX'))
+      const {row, column} = gridSlot(i, cols)
       const bottom = expectConcreteNumber(getProp(layoutBox, 'y')) + expectConcreteNumber(getProp(layoutBox, 'sizeY'))
       maxBottom = Math.max(maxBottom, bottom)
-      if (left < -epsilon || right > windowWidth + epsilon) withinViewport = false
-      if (expectConcreteNumber(getProp(promptBox, 'sizeX')) > expectConcreteNumber(getProp(layoutBox, 'sizeX')) + epsilon) withinViewport = false
+      if (left < -epsilon || right > windowWidth + epsilon) {
+        withinViewport = false
+        viewportFailure ??= {
+          itemIndex: i,
+          row,
+          column,
+          left,
+          right,
+          windowWidth,
+        }
+      }
+      if (expectConcreteNumber(getProp(promptBox, 'sizeX')) > layoutWidth + epsilon) {
+        withinViewport = false
+        viewportFailure ??= {
+          itemIndex: i,
+          row,
+          column,
+          promptWidth: expectConcreteNumber(getProp(promptBox, 'sizeX')),
+          layoutWidth,
+        }
+      }
+
+      const slotCenterX = boxesGapX + (boxMaxSizeX + boxesGapX) * column + boxMaxSizeX / 2
+      const actualCenterX = left + layoutWidth / 2
+      if (Math.abs(actualCenterX - slotCenterX) > epsilon) {
+        columnCentering = false
+        columnCenterFailure ??= {
+          itemIndex: i,
+          row,
+          column,
+          actualCenterX,
+          expectedCenterX: slotCenterX,
+        }
+      }
 
       if (i % cols !== cols - 1 && i < items.items.length - 1) {
         const next = expectObject(items.items[i + 1]!)
         const nextLayoutBox = expectObject(getProp(next, 'layoutBox'))
         const nextLeft = expectConcreteNumber(getProp(nextLayoutBox, 'x'))
-        if (right > nextLeft + epsilon && Math.floor(i / cols) === Math.floor((i + 1) / cols)) horizontalNonOverlap = false
+        if (right > nextLeft + epsilon && row === gridSlot(i + 1, cols).row) {
+          horizontalNonOverlap = false
+          overlapFailure ??= {
+            leftItemIndex: i,
+            rightItemIndex: i + 1,
+            row,
+            leftRight: right,
+            rightLeft: nextLeft,
+            overlapBy: right - nextLeft,
+          }
+        }
       }
     }
 
     check(laws, 'getGridLayout keeps layout boxes within the viewport width', withinViewport, () => ({
       windowWidth,
       cols,
+      ...(viewportFailure ?? {}),
     }))
     check(laws, 'getGridLayout row items do not overlap horizontally', horizontalNonOverlap, () => ({
       windowWidth,
       cols,
+      ...(overlapFailure ?? {}),
+    }))
+    check(laws, 'getGridLayout keeps each item centered in its column slot', columnCentering, () => ({
+      windowWidth,
+      cols,
+      ...(columnCenterFailure ?? {}),
     }))
     check(laws, 'getGridLayout content height matches the last row bottom plus bottom gap', Math.abs(contentHeight - (maxBottom + boxesGapY)) <= epsilon, () => ({
       windowWidth,
       contentHeight,
       expectedContentHeight: maxBottom + boxesGapY,
     }))
+  }
+}
+
+function gridSlot(index: number, cols: number) {
+  return {
+    row: Math.floor(index / cols),
+    column: index % cols,
   }
 }
 

@@ -102,6 +102,23 @@ Bad:
 
 Once the geometry is in userland, selection and hit routing should usually become geometry queries, not DOM archaeology.
 
+## Grid Index Math Should Show Up On Screen
+
+If a grid uses `Math.floor(i / cols)` and `i % cols`, make the verifier talk about the slot the item actually lands in.
+
+Good:
+
+- the item at index `i` is centered in the column slot implied by `i % cols`
+- the item's `y` uses the row implied by `Math.floor(i / cols)`
+- same-row overlap bugs report `row`, `column`, and the two x positions that crossed
+
+Bad:
+
+- proving `%` stays in bounds but never checking the placed box
+- debugging row / column bugs from a raw `i` with no slot context
+
+Quotient / remainder math is only interesting here because it decides visible placement.
+
 ## Decorative Prefixes Count As Layout
 
 If an opening quote, badge, or icon steals width, make it part of the measured text stream.

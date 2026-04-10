@@ -39,6 +39,24 @@ This matters because demos often want a mix:
 
 Keep those under one semantic model when you can.
 
+## Quotient / Remainder Checks Should Mention Geometry
+
+If a grid uses `Math.floor(i / cols)` and `i % cols`, don't stop at "the remainder stays in `0..cols-1`".
+
+Tie that math to something visible.
+
+Good:
+
+- the card at index `i` is centered in the column slot implied by `i % cols`
+- two same-row neighbors only overlap if their slot math is wrong
+- the row top used for index `i` matches the row implied by `Math.floor(i / cols)`
+
+Bad:
+
+- proving `%` facts in isolation and never checking whether the placed rect actually lands in the expected slot
+
+The point of quotient / remainder reasoning is not number trivia. It is to catch wrong row / column placement.
+
 ## Lower Natural Code Once
 
 If you do build a static verifier, stop analyzing raw syntax forever.
@@ -76,6 +94,33 @@ Bad verifier subset:
 - shared mutable state captured all over the place
 
 Don't make authors write `add(...)` and `sub(...)` just because the verifier is young. Grow the verifier up to the natural code first.
+
+## Append-Only Arrays Want A Tiny Sequence Domain
+
+Layout code loves arrays, but it often uses a very narrow shape:
+
+- `rowsTop.push(previousBottom + gap)`
+- `visibleRows.push(rowGeometry)`
+- `rects.push(nextRect)` or merge with the previous one
+
+Don't answer that with a giant generic array theory.
+
+Usually a tiny sequence domain goes further:
+
+- exact length when the loop count is known
+- last element
+- joined item shape
+- "strictly increasing numbers" for arrays like `rowsTop`
+- exact small items when the array stays tiny
+
+That is enough to prove a lot of useful layout facts:
+
+- `rowsTop` stays ordered
+- the second row starts at the first row's bottom
+- one output row is produced per input row
+- `rects.at(-1)` really means the last merged rect
+
+Grow the array model around the append-only shapes the code actually uses.
 
 ## Callback Helpers Are Effect Boundaries
 
