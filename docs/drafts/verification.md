@@ -122,6 +122,25 @@ That is enough to prove a lot of useful layout facts:
 
 Grow the array model around the append-only shapes the code actually uses.
 
+## Verifier Changes Want Deliberate Red Tests
+
+When you teach the verifier a new proof surface, don't stop at "the report is still green".
+
+Also make one intentional mistake and keep that as a canary.
+
+Good:
+
+- break one column formula and make sure the grid-slot law fails
+- shift one row top by `1` and make sure the row-contiguity law fails
+- route empty-space selection to the wrong side of a midpoint and make sure the text-offset law fails
+
+Bad:
+
+- only adding new green cases
+- trusting a wider proof because it "sounds right"
+
+A verifier that only ever sees passing examples is still mostly untested.
+
 ## Callback Helpers Are Effect Boundaries
 
 Keep ordinary helper calls pure from the caller's point of view.

@@ -37,21 +37,9 @@ export function runNicerHackerNewsStaticVerification(sourceText: string): Static
 function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
   const layout = expectRangeObject(joinRangeCases(analyzer.evaluateFunctionRange('layoutHNThreadVisualGeometry', [rangeObject({
     rows: rangeArray([
-      rangeObject({
-        indent: rangeNumber(0, 0, true),
-        rowHeight: rangeNumber(100, 140, true),
-        commentLayout: rangeObject({width: rangeNumber(240, 320, true)}),
-      }),
-      rangeObject({
-        indent: rangeNumber(1, 1, true),
-        rowHeight: rangeNumber(80, 96, true),
-        commentLayout: rangeObject({width: rangeNumber(200, 260, true)}),
-      }),
-      rangeObject({
-        indent: rangeNumber(2, 2, true),
-        rowHeight: rangeNumber(60, 72, true),
-        commentLayout: rangeObject({width: rangeNumber(160, 220, true)}),
-      }),
+      rangeThreadRow(0, 100, 140, 240, 320),
+      rangeThreadRow(1, 80, 96, 200, 260),
+      rangeThreadRow(2, 60, 72, 160, 220),
     ]),
     containerWidth: rangeNumber(680, 760, true),
     indentWidth: rangeNumber(24, 24, true),
@@ -75,25 +63,25 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
   const firstRow = expectRangeObject(rows.items[0]!)
   const secondRow = expectRangeObject(rows.items[1]!)
   const thirdRow = expectRangeObject(rows.items[2]!)
-  const firstRowRect = expectRangeObject(getRangeProp(firstRow, 'rowRect'))
-  const secondRowRect = expectRangeObject(getRangeProp(secondRow, 'rowRect'))
-  const thirdRowRect = expectRangeObject(getRangeProp(thirdRow, 'rowRect'))
-  const firstCommentRect = expectRangeObject(getRangeProp(firstRow, 'commentRect'))
-  const secondCommentRect = expectRangeObject(getRangeProp(secondRow, 'commentRect'))
-  const thirdCommentRect = expectRangeObject(getRangeProp(thirdRow, 'commentRect'))
-  const firstTop = expectRangeNumber(getRangeProp(firstRowRect, 'top'))
-  const firstHeight = expectRangeNumber(getRangeProp(firstRowRect, 'height'))
-  const secondTop = expectRangeNumber(getRangeProp(secondRowRect, 'top'))
-  const secondHeight = expectRangeNumber(getRangeProp(secondRowRect, 'height'))
-  const thirdTop = expectRangeNumber(getRangeProp(thirdRowRect, 'top'))
-  const thirdHeight = expectRangeNumber(getRangeProp(thirdRowRect, 'height'))
-  const firstBottom = expectRangeNumber(getRangeProp(firstRow, 'rowBottom'))
-  const secondBottom = expectRangeNumber(getRangeProp(secondRow, 'rowBottom'))
-  const thirdBottom = expectRangeNumber(getRangeProp(thirdRow, 'rowBottom'))
-  const firstVisibleRowIndex = expectRangeNumber(getRangeProp(layout, 'firstVisibleRowIndex'))
-  const lastVisibleRowIndex = expectRangeNumber(getRangeProp(layout, 'lastVisibleRowIndex'))
-  const firstVisibleRowTop = expectRangeNumber(getRangeProp(layout, 'firstVisibleRowTop'))
-  const contentHeight = expectRangeNumber(getRangeProp(layout, 'contentHeight'))
+  const firstRowRect = getRangeObjectProp(firstRow, 'rowRect')
+  const secondRowRect = getRangeObjectProp(secondRow, 'rowRect')
+  const thirdRowRect = getRangeObjectProp(thirdRow, 'rowRect')
+  const firstCommentRect = getRangeObjectProp(firstRow, 'commentRect')
+  const secondCommentRect = getRangeObjectProp(secondRow, 'commentRect')
+  const thirdCommentRect = getRangeObjectProp(thirdRow, 'commentRect')
+  const firstTop = getRangeNumberProp(firstRowRect, 'top')
+  const firstHeight = getRangeNumberProp(firstRowRect, 'height')
+  const secondTop = getRangeNumberProp(secondRowRect, 'top')
+  const secondHeight = getRangeNumberProp(secondRowRect, 'height')
+  const thirdTop = getRangeNumberProp(thirdRowRect, 'top')
+  const thirdHeight = getRangeNumberProp(thirdRowRect, 'height')
+  const firstBottom = getRangeNumberProp(firstRow, 'rowBottom')
+  const secondBottom = getRangeNumberProp(secondRow, 'rowBottom')
+  const thirdBottom = getRangeNumberProp(thirdRow, 'rowBottom')
+  const firstVisibleRowIndex = getRangeNumberProp(layout, 'firstVisibleRowIndex')
+  const lastVisibleRowIndex = getRangeNumberProp(layout, 'lastVisibleRowIndex')
+  const firstVisibleRowTop = getRangeNumberProp(layout, 'firstVisibleRowTop')
+  const contentHeight = getRangeNumberProp(layout, 'contentHeight')
 
   check(laws, 'layoutHNThreadVisualGeometry keeps row tops contiguous over intervals', rangesEqual(
     secondTop,
@@ -117,32 +105,32 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
     expectedThirdTop: describeRange(secondBottom),
   }))
   check(laws, 'layoutHNThreadVisualGeometry keeps comment x tied to indent math over intervals', rangesEqual(
-    expectRangeNumber(getRangeProp(firstCommentRect, 'left')),
+    getRangeNumberProp(firstCommentRect, 'left'),
     rangeNumber(24, 24, true),
   ) && rangesEqual(
-    expectRangeNumber(getRangeProp(secondCommentRect, 'left')),
+    getRangeNumberProp(secondCommentRect, 'left'),
     rangeNumber(48, 48, true),
   ) && rangesEqual(
-    expectRangeNumber(getRangeProp(thirdCommentRect, 'left')),
+    getRangeNumberProp(thirdCommentRect, 'left'),
     rangeNumber(72, 72, true),
   ), () => ({
-    firstLeft: describeRange(expectRangeNumber(getRangeProp(firstCommentRect, 'left'))),
-    secondLeft: describeRange(expectRangeNumber(getRangeProp(secondCommentRect, 'left'))),
-    thirdLeft: describeRange(expectRangeNumber(getRangeProp(thirdCommentRect, 'left'))),
+    firstLeft: describeRange(getRangeNumberProp(firstCommentRect, 'left')),
+    secondLeft: describeRange(getRangeNumberProp(secondCommentRect, 'left')),
+    thirdLeft: describeRange(getRangeNumberProp(thirdCommentRect, 'left')),
   }))
   check(laws, 'layoutHNThreadVisualGeometry keeps comment width tied to comment layout width over intervals', rangesEqual(
-    expectRangeNumber(getRangeProp(firstCommentRect, 'width')),
+    getRangeNumberProp(firstCommentRect, 'width'),
     rangeNumber(260, 340, true),
   ) && rangesEqual(
-    expectRangeNumber(getRangeProp(secondCommentRect, 'width')),
+    getRangeNumberProp(secondCommentRect, 'width'),
     rangeNumber(220, 280, true),
   ) && rangesEqual(
-    expectRangeNumber(getRangeProp(thirdCommentRect, 'width')),
+    getRangeNumberProp(thirdCommentRect, 'width'),
     rangeNumber(180, 240, true),
   ), () => ({
-    firstWidth: describeRange(expectRangeNumber(getRangeProp(firstCommentRect, 'width'))),
-    secondWidth: describeRange(expectRangeNumber(getRangeProp(secondCommentRect, 'width'))),
-    thirdWidth: describeRange(expectRangeNumber(getRangeProp(thirdCommentRect, 'width'))),
+    firstWidth: describeRange(getRangeNumberProp(firstCommentRect, 'width')),
+    secondWidth: describeRange(getRangeNumberProp(secondCommentRect, 'width')),
+    thirdWidth: describeRange(getRangeNumberProp(thirdCommentRect, 'width')),
   }))
   check(laws, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible', rangesEqual(
     firstVisibleRowIndex,
@@ -170,9 +158,9 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
 function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
   const result = expectRangeArray(joinRangeCases(analyzer.evaluateFunctionRange('layoutHNRowHitGeometry', [rangeObject({
     rows: rangeArray([
-      rangeObject({indent: rangeNumber(0, 0, true), rowHeightNatural: rangeNumber(72, 120, true)}),
-      rangeObject({indent: rangeNumber(1, 1, true), rowHeightNatural: rangeNumber(84, 96, true)}),
-      rangeObject({indent: rangeNumber(2, 2, true), rowHeightNatural: rangeNumber(60, 88, true)}),
+      rangeRowHitInput(0, 72, 120),
+      rangeRowHitInput(1, 84, 96),
+      rangeRowHitInput(2, 60, 88),
     ]),
     submissionHeight: rangeNumber(180, 260, true),
     scrollTopCap: rangeNumber(24, 48, true),
@@ -186,23 +174,23 @@ function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<s
   if (result.items == null || result.items.length !== 3) return
   const rows = result.items
 
-  const firstRect = expectRangeObject(getRangeProp(expectRangeObject(rows[0]!), 'rowRect'))
-  const secondRect = expectRangeObject(getRangeProp(expectRangeObject(rows[1]!), 'rowRect'))
-  const thirdRect = expectRangeObject(getRangeProp(expectRangeObject(rows[2]!), 'rowRect'))
-  const firstTop = expectRangeNumber(getRangeProp(firstRect, 'top'))
-  const firstHeight = expectRangeNumber(getRangeProp(firstRect, 'height'))
-  const secondTop = expectRangeNumber(getRangeProp(secondRect, 'top'))
-  const secondHeight = expectRangeNumber(getRangeProp(secondRect, 'height'))
-  const thirdTop = expectRangeNumber(getRangeProp(thirdRect, 'top'))
-  const thirdHeight = expectRangeNumber(getRangeProp(thirdRect, 'height'))
+  const firstRect = getRangeObjectProp(expectRangeObject(rows[0]!), 'rowRect')
+  const secondRect = getRangeObjectProp(expectRangeObject(rows[1]!), 'rowRect')
+  const thirdRect = getRangeObjectProp(expectRangeObject(rows[2]!), 'rowRect')
+  const firstTop = getRangeNumberProp(firstRect, 'top')
+  const firstHeight = getRangeNumberProp(firstRect, 'height')
+  const secondTop = getRangeNumberProp(secondRect, 'top')
+  const secondHeight = getRangeNumberProp(secondRect, 'height')
+  const thirdTop = getRangeNumberProp(thirdRect, 'top')
+  const thirdHeight = getRangeNumberProp(thirdRect, 'height')
 
   let widthMatches = true
   let leftIsZero = true
   for (let rowIndex = 0; rowIndex < result.items.length; rowIndex++) {
     const row = expectRangeObject(result.items[rowIndex]!)
-    const rowRect = expectRangeObject(getRangeProp(row, 'rowRect'))
-    const width = expectRangeNumber(getRangeProp(rowRect, 'width'))
-    const left = expectRangeNumber(getRangeProp(rowRect, 'left'))
+    const rowRect = getRangeObjectProp(row, 'rowRect')
+    const width = getRangeNumberProp(rowRect, 'width')
+    const left = getRangeNumberProp(rowRect, 'left')
     if (left.min !== 0 || left.max !== 0) leftIsZero = false
     if (width.min !== 640 || width.max !== 760) widthMatches = false
   }
@@ -222,8 +210,8 @@ function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<s
   check(laws, 'layoutHNRowHitGeometry keeps each row full-width over width intervals', widthMatches && leftIsZero, () => ({
     leftIsZero: leftIsZero ? 'true' : 'false',
     width: rows.map(item => {
-      const rowRect = expectRangeObject(getRangeProp(expectRangeObject(item), 'rowRect'))
-      return describeRange(expectRangeNumber(getRangeProp(rowRect, 'width')))
+      const rowRect = getRangeObjectProp(expectRangeObject(item), 'rowRect')
+      return describeRange(getRangeNumberProp(rowRect, 'width'))
     }).join('|'),
   }))
   check(laws, 'layoutHNRowHitGeometry keeps row heights non-negative over height intervals', firstHeight.min >= 0 && secondHeight.min >= 0 && thirdHeight.min >= 0, () => ({
@@ -243,6 +231,29 @@ function rangesEqual(left: ReturnType<typeof expectRangeNumber>, right: ReturnTy
 
 function describeRange(value: ReturnType<typeof expectRangeNumber>) {
   return `[${value.min},${value.max}]${value.isInteger ? ':int' : ''}`
+}
+
+function rangeRowHitInput(indent: number, rowHeightMin: number, rowHeightMax: number) {
+  return rangeObject({
+    indent: rangeNumber(indent, indent, true),
+    rowHeightNatural: rangeNumber(rowHeightMin, rowHeightMax, true),
+  })
+}
+
+function rangeThreadRow(indent: number, rowHeightMin: number, rowHeightMax: number, commentWidthMin: number, commentWidthMax: number) {
+  return rangeObject({
+    indent: rangeNumber(indent, indent, true),
+    rowHeight: rangeNumber(rowHeightMin, rowHeightMax, true),
+    commentLayout: rangeObject({width: rangeNumber(commentWidthMin, commentWidthMax, true)}),
+  })
+}
+
+function getRangeObjectProp(object: ReturnType<typeof expectRangeObject>, key: string) {
+  return expectRangeObject(getRangeProp(object, key))
+}
+
+function getRangeNumberProp(object: ReturnType<typeof expectRangeObject>, key: string) {
+  return expectRangeNumber(getRangeProp(object, key))
 }
 
 function verifyRowHitGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {

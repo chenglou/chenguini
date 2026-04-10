@@ -32,6 +32,12 @@ function replaceOnce(source, from, to) {
   return next
 }
 
+function getLaw(report, name) {
+  const law = report.laws.find(candidate => candidate.name === name)
+  expect(law).toBeDefined()
+  return law
+}
+
 test('photo-gallery static verifier keeps its current proof surface', async () => {
   const sourceFilePath = new URL('./photo-gallery/layout-model.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
@@ -39,9 +45,9 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
   const report = runPhotoGalleryStaticVerification(source, overrides)
 
   expect(report.phase).toBe('ready')
-  expect(report.laws.find(law => law.name === 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'getGridLayout keeps each item centered in its column slot')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'colsBoxMaxSizeXF exactly fills the horizontal track')?.checks).toBe(1281)
+  expect(getLaw(report, 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout keeps each item centered in its column slot')?.status).toBe('pass')
+  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.checks).toBe(1281)
 })
 
 test('nicer-hacker-news static verifier keeps the row geometry slice ready', async () => {
@@ -49,10 +55,10 @@ test('nicer-hacker-news static verifier keeps the row geometry slice ready', asy
   const report = runNicerHackerNewsStaticVerification(source)
 
   expect(report.phase).toBe('ready')
-  expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping internally consistent')?.checks).toBe(2)
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('pass')
+  expect(getLaw(report, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals')?.status).toBe('pass')
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible')?.status).toBe('pass')
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping internally consistent')?.checks).toBe(2)
 })
 
 test('nicer-hacker-news comment verifier keeps the text layout kernel ready', async () => {
@@ -62,10 +68,11 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
   const report = runHNCommentLayoutStaticVerification(source, overrides)
 
   expect(report.phase).toBe('ready')
-  expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('pass')
-  expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps')?.checks).toBe(2)
+  expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')?.status).toBe('pass')
+  expect(getLaw(report, 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes')?.status).toBe('pass')
+  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('pass')
+  expect(getLaw(report, 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps')?.checks).toBe(2)
 })
 
 test('photo-gallery verifier can auto-load imported sidecar contracts from the source file', async () => {
@@ -73,7 +80,7 @@ test('photo-gallery verifier can auto-load imported sidecar contracts from the s
   const report = await runPhotoGalleryStaticVerificationForSourceFile(sourceFilePath)
 
   expect(report.phase).toBe('ready')
-  expect(report.laws.find(law => law.name === 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
 })
 
 test('HN comment verifier can auto-load same-file sidecar contracts', async () => {
@@ -81,7 +88,7 @@ test('HN comment verifier can auto-load same-file sidecar contracts', async () =
   const report = await runHNCommentLayoutStaticVerificationForSourceFile(sourceFilePath)
 
   expect(report.phase).toBe('ready')
-  expect(report.laws.find(law => law.name === 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
+  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
 })
 
 test('photo-gallery verifier catches broken track-fill math', async () => {
@@ -96,7 +103,7 @@ test('photo-gallery verifier catches broken track-fill math', async () => {
   const report = runPhotoGalleryStaticVerification(buggySource, overrides)
 
   expect(report.phase).toBe('error')
-  expect(report.laws.find(law => law.name === 'colsBoxMaxSizeXF exactly fills the horizontal track')?.status).toBe('fail')
+  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.status).toBe('fail')
 })
 
 test('photo-gallery verifier catches broken column-slot math', async () => {
@@ -109,9 +116,12 @@ test('photo-gallery verifier catches broken column-slot math', async () => {
     'const x = boxesGapX + (boxMaxSizeX + boxesGapX) * ((i + 1) % cols) + (boxMaxSizeX - measurement.imageSizeX) / 2',
   )
   const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'getGridLayout keeps each item centered in its column slot')
 
   expect(report.phase).toBe('error')
-  expect(report.laws.find(law => law.name === 'getGridLayout keeps each item centered in its column slot')?.status).toBe('fail')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.column).toBe(0)
+  expect(law?.firstFailure?.expectedCenterX).toBeDefined()
 })
 
 test('HN row verifier catches broken comment width math', async () => {
@@ -124,7 +134,38 @@ test('HN row verifier catches broken comment width math', async () => {
   const report = runNicerHackerNewsStaticVerification(buggySource)
 
   expect(report.phase).toBe('error')
-  expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('fail')
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('fail')
+})
+
+test('HN row verifier catches broken row-top interval math', async () => {
+  const source = await Bun.file(new URL('./nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'rowTop += row.rowHeightNatural',
+    'rowTop += row.rowHeightNatural + 1',
+  )
+  const report = runNicerHackerNewsStaticVerification(buggySource)
+  const law = getLaw(report, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals')
+
+  expect(report.phase).toBe('error')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.secondTop).toBeDefined()
+  expect(law?.firstFailure?.expectedSecondTop).toBeDefined()
+})
+
+test('HN thread verifier catches broken visible-row interval bookkeeping', async () => {
+  const source = await Bun.file(new URL('./nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'firstVisibleRowTop = rowTop',
+    'firstVisibleRowTop = rowBottom',
+  )
+  const report = runNicerHackerNewsStaticVerification(buggySource)
+  const law = getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible')
+
+  expect(report.phase).toBe('error')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.firstVisibleRowTop).toBeDefined()
 })
 
 test('HN comment verifier catches a broken minimum width clamp', async () => {
@@ -139,7 +180,24 @@ test('HN comment verifier catches a broken minimum width clamp', async () => {
   const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
 
   expect(report.phase).toBe('error')
-  expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc clamps width to at least one pixel')?.status).toBe('fail')
+  expect(getLaw(report, 'layoutPreparedHNCommentDoc clamps width to at least one pixel')?.status).toBe('fail')
+})
+
+test('HN comment verifier catches broken CRLF counting', async () => {
+  const sourceFilePath = new URL('./nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    "if (ch === '\\r' && text[index + 1] === '\\n') return 2",
+    "if (ch === '\\r' && text[index + 1] === '\\n') return 1",
+  )
+  const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')
+
+  expect(report.phase).toBe('error')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.scenario).toBe('crlf')
 })
 
 test('HN comment verifier catches a broken substring offset in text rect geometry', async () => {
@@ -154,7 +212,7 @@ test('HN comment verifier catches a broken substring offset in text rect geometr
   const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
 
   expect(report.phase).toBe('error')
-  expect(report.laws.find(law => law.name === 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('fail')
+  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('fail')
 })
 
 test('HN comment verifier catches a broken midpoint decision in empty-space offsets', async () => {
@@ -169,7 +227,7 @@ test('HN comment verifier catches a broken midpoint decision in empty-space offs
   const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
 
   expect(report.phase).toBe('error')
-  expect(report.laws.find(law => law.name === 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('fail')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('fail')
 })
 
 test('callback overrides thread outer local mutations back to the caller', () => {
@@ -302,6 +360,26 @@ function demo() {
   expect(expectRangeNumber(tops.last)).toEqual(rangeNumber(180, 180, true))
 })
 
+test('range mode drops the strict-increase flag when pushed values go backward', () => {
+  const source = `
+function demo() {
+  const tops = [40]
+  tops.push(120)
+  tops.push(100)
+  return tops
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  const returns = analyzer.evaluateFunctionRange('demo', [])
+  const tops = expectRangeArray(joinRangeCases(returns))
+
+  expect(tops.lengthMin).toBe(3)
+  expect(tops.isStrictlyIncreasingNumeric).toBe(false)
+})
+
 test('range mode keeps exact array indexing and at(-1)', () => {
   const source = `
 function byIndex() {
@@ -334,4 +412,32 @@ function demo(width: number) {
 
   const remainder = expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [rangeNumber(0, 100, true)])))
   expect(remainder).toEqual(rangeNumber(0, 2, true))
+})
+
+test('range mode tracks exact string lengths', () => {
+  const source = `
+function demo() {
+  const text = 'hello'
+  return text.length
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  expect(expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [])))).toEqual(rangeNumber(5, 5, true))
+})
+
+test('range mode can index exact strings', () => {
+  const source = `
+function demo() {
+  const text = 'hello'
+  return text[1].length
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  expect(expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [])))).toEqual(rangeNumber(1, 1, true))
 })

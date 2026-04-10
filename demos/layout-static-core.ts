@@ -108,6 +108,13 @@ export type RangeBooleanValue = {
   truth: RangeTruth
 }
 
+export type RangeStringValue = {
+  kind: 'range-string'
+  minLength: number
+  maxLength: number
+  exactValue: string | null
+}
+
 export type RangeObjectValue = {
   kind: 'range-object'
   props: Record<string, RangeValue>
@@ -132,7 +139,7 @@ export type RangeNullValue = {
   kind: 'range-null'
 }
 
-export type RangeValue = RangeNumberValue | RangeBooleanValue | RangeObjectValue | RangeArrayValue | RangeOpaqueValue | RangeNullValue
+export type RangeValue = RangeNumberValue | RangeBooleanValue | RangeStringValue | RangeObjectValue | RangeArrayValue | RangeOpaqueValue | RangeNullValue
 
 export type FunctionOverride = {
   evaluate?: (args: Value[], mode: Mode, context: {
@@ -483,7 +490,7 @@ export class LoweredProgramAnalyzer {
       case 'number':
         return [{state, value: rangeNumber(expression.value, expression.value, Number.isInteger(expression.value))}]
       case 'string':
-        throw new Error('Range strings are not supported yet')
+        return [{state, value: rangeString(expression.value)}]
       case 'null':
         return [{state, value: rangeNull()}]
       case 'boolean':
@@ -538,6 +545,8 @@ export class LoweredProgramAnalyzer {
           value:
             result.value.kind === 'range-array'
               ? getRangeArrayProperty(result.value, expression.property)
+              : result.value.kind === 'range-string'
+                ? getRangeStringProperty(result.value, expression.property)
               : getRangeProp(expectRangeObject(result.value), expression.property),
         }))
       }
@@ -1442,6 +1451,14 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
           })
           continue
         }
+        const stringTruth = compareRangeStringValues(leftCase.value, rightCase.value, expression.operator)
+        if (stringTruth != null) {
+          results.push({
+            state: rightCase.state,
+            value: rangeBoolean(stringTruth),
+          })
+          continue
+        }
       }
 
       if (
@@ -2166,6 +2183,24 @@ function rangeBoolean(truth: RangeTruth): RangeBooleanValue {
   return {kind: 'range-boolean', truth}
 }
 
+export function rangeString(exactValue: string): RangeStringValue {
+  return {
+    kind: 'range-string',
+    minLength: exactValue.length,
+    maxLength: exactValue.length,
+    exactValue,
+  }
+}
+
+function rangeStringWithLength(minLength: number, maxLength: number, exactValue: string | null = null): RangeStringValue {
+  return {
+    kind: 'range-string',
+    minLength,
+    maxLength,
+    exactValue,
+  }
+}
+
 export function rangeObject(props: Record<string, RangeValue>): RangeObjectValue {
   return {kind: 'range-object', props}
 }
@@ -2196,6 +2231,11 @@ function expectRangeBoolean(value: RangeValue): RangeBooleanValue {
   return value
 }
 
+export function expectRangeString(value: RangeValue): RangeStringValue {
+  if (value.kind !== 'range-string') throw new Error(`Expected range string, got ${value.kind}`)
+  return value
+}
+
 export function expectRangeObject(value: RangeValue): RangeObjectValue {
   if (value.kind !== 'range-object') throw new Error(`Expected range object, got ${value.kind}`)
   return value
@@ -2217,8 +2257,14 @@ function getRangeArrayProperty(array: RangeArrayValue, key: string) {
   throw new Error(`Unsupported range array property: ${key}`)
 }
 
+function getRangeStringProperty(value: RangeStringValue, key: string) {
+  if (key === 'length') return rangeNumber(value.minLength, value.maxLength, true)
+  throw new Error(`Unsupported range string property: ${key}`)
+}
+
 function getRangeIndexableItem(value: RangeValue, index: RangeNumberValue) {
   if (value.kind === 'range-array') return getRangeArrayItemAt(value, index)
+  if (value.kind === 'range-string') return getRangeStringItemAt(value, index)
   throw new Error(`Expected range array index access, got ${value.kind}`)
 }
 
@@ -2245,6 +2291,15 @@ function appendRangeArrayItem(array: RangeArrayValue, next: RangeValue): RangeAr
       array.isStrictlyIncreasingNumeric &&
       rangeValuesAreStrictlyIncreasingPair(array.last, next),
   }
+}
+
+function getRangeStringItemAt(value: RangeStringValue, index: RangeNumberValue) {
+  if (!index.isInteger) return rangeStringWithLength(0, 1)
+  if (value.exactValue != null && Math.abs(index.min - index.max) <= epsilon) {
+    const rawIndex = index.min < 0 ? value.exactValue.length + index.min : index.min
+    return rangeString(value.exactValue[rawIndex] ?? '')
+  }
+  return rangeStringWithLength(0, 1)
 }
 
 function normalizeRangeArrayIndex(array: RangeArrayValue, index: RangeNumberValue) {
@@ -2295,6 +2350,13 @@ function joinRangeValues(left: RangeValue, right: RangeValue): RangeValue {
   }
   if (left.kind === 'range-boolean' && right.kind === 'range-boolean') {
     return left.truth === right.truth ? left : rangeBoolean('maybe')
+  }
+  if (left.kind === 'range-string' && right.kind === 'range-string') {
+    return rangeStringWithLength(
+      Math.min(left.minLength, right.minLength),
+      Math.max(left.maxLength, right.maxLength),
+      left.exactValue != null && left.exactValue === right.exactValue ? left.exactValue : null,
+    )
   }
   if (left.kind === 'range-object' && right.kind === 'range-object') {
     const props: Record<string, RangeValue> = {}
@@ -2410,6 +2472,22 @@ function compareNullableRangeValues(left: RangeValue, right: RangeValue, operato
   return operator === '==' || operator === '==='
     ? equal ? 'always-true' : 'always-false'
     : equal ? 'always-false' : 'always-true'
+}
+
+function compareRangeStringValues(left: RangeValue, right: RangeValue, operator: '==' | '!=' | '===' | '!=='): RangeTruth | null {
+  if (left.kind !== 'range-string' || right.kind !== 'range-string') return null
+  const leftString = expectRangeString(left)
+  const rightString = expectRangeString(right)
+  if (leftString.exactValue != null && rightString.exactValue != null) {
+    const equal = leftString.exactValue === rightString.exactValue
+    return operator === '==' || operator === '==='
+      ? equal ? 'always-true' : 'always-false'
+      : equal ? 'always-false' : 'always-true'
+  }
+  if (leftString.maxLength < rightString.minLength || rightString.maxLength < leftString.minLength) {
+    return operator === '==' || operator === '===' ? 'always-false' : 'always-true'
+  }
+  return 'maybe'
 }
 
 function minRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeNumberValue {

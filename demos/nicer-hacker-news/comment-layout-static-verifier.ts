@@ -10,10 +10,14 @@ import {
   expectArray,
   expectConcreteNumber,
   expectObject,
+  expectRangeNumber,
   getProp,
   type FunctionOverride,
   type InternalLawSummary,
+  joinRangeCases,
   LoweredProgramAnalyzer,
+  rangeNumber,
+  rangeString,
   type StaticLayoutVerificationReport,
 } from '../layout-static-core'
 import {loadStaticContractOverridesForSourceFile} from '../layout-static-contracts'
@@ -27,6 +31,7 @@ export function runHNCommentLayoutStaticVerification(
   })
   const laws = new Map<string, InternalLawSummary>()
 
+  verifyLineBreakCharCountAtRange(analyzer, laws)
   verifyLayoutPreparedHNCommentDocConcrete(analyzer, laws)
   verifyFindHNCommentTextRectsConcrete(analyzer, laws)
   verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer, laws)
@@ -40,6 +45,31 @@ export async function runHNCommentLayoutStaticVerificationForSourceFile(sourceFi
     loadStaticContractOverridesForSourceFile(sourceFilePath),
   ])
   return runHNCommentLayoutStaticVerification(sourceText, autoContractOverrides)
+}
+
+function verifyLineBreakCharCountAtRange(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const scenarios = [
+    {label: 'crlf', text: '\r\nhello', index: 0, expected: 2},
+    {label: 'cr', text: '\rhello', index: 0, expected: 1},
+    {label: 'lf', text: '\nhello', index: 0, expected: 1},
+    {label: 'plain', text: 'hello', index: 2, expected: 0},
+    {label: 'past_end', text: 'hi', index: 5, expected: 0},
+  ]
+
+  for (const scenario of scenarios) {
+    const result = joinRangeCases(analyzer.evaluateFunctionRange('lineBreakCharCountAt', [
+      rangeString(scenario.text),
+      rangeNumber(scenario.index, scenario.index, true),
+    ]))
+    const count = expectRangeNumber(result)
+
+    check(laws, 'lineBreakCharCountAt returns exact line-break widths on exact strings', count.min === scenario.expected && count.max === scenario.expected, () => ({
+      scenario: scenario.label,
+      countMin: count.min,
+      countMax: count.max,
+      expected: scenario.expected,
+    }))
+  }
 }
 
 function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
