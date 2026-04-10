@@ -640,7 +640,7 @@ function lowerFunction(name: string, parameters: ts.NodeArray<ts.ParameterDeclar
     if (!ts.isIdentifier(parameter.name)) throw new Error(`Unsupported parameter pattern in ${name}`)
     return parameter.name.text
   })
-  const finalBlockId = lowerStatementsInto(context, entryBlockId, statements, null)
+  const finalBlockId = lowerStatementsInto(context, entryBlockId, statements, null, null)
   if (finalBlockId != null) ensureBlockTerminator(context, finalBlockId, {kind: 'end'})
   return {
     name,
@@ -658,7 +658,7 @@ function lowerInlineFunction(parameters: ts.NodeArray<ts.ParameterDeclaration>, 
     return parameter.name.text
   })
   if (ts.isBlock(body)) {
-    const finalBlockId = lowerStatementsInto(context, entryBlockId, body.statements, null)
+    const finalBlockId = lowerStatementsInto(context, entryBlockId, body.statements, null, null)
     if (finalBlockId != null) ensureBlockTerminator(context, finalBlockId, {kind: 'end'})
   } else {
     context.getBlock(entryBlockId).terminator = {kind: 'return', expression: lowerExpression(body)}
@@ -704,11 +704,12 @@ function lowerStatementsInto(
   initialBlockId: string | null,
   statements: readonly ts.Statement[],
   breakTargetBlockId: string | null,
+  continueTargetBlockId: string | null,
 ): string | null {
   let currentBlockId = initialBlockId
   for (const statement of statements) {
     if (currentBlockId == null) break
-    currentBlockId = lowerStatementInto(context, currentBlockId, statement, breakTargetBlockId)
+    currentBlockId = lowerStatementInto(context, currentBlockId, statement, breakTargetBlockId, continueTargetBlockId)
   }
   return currentBlockId
 }
@@ -718,6 +719,7 @@ function lowerStatementInto(
   currentBlockId: string,
   statement: ts.Statement,
   breakTargetBlockId: string | null,
+  continueTargetBlockId: string | null,
 ): string | null {
   const block = context.getBlock(currentBlockId)
 
@@ -750,7 +752,7 @@ function lowerStatementInto(
   }
 
   if (ts.isBlock(statement)) {
-    return lowerStatementsInto(context, currentBlockId, statement.statements, breakTargetBlockId)
+    return lowerStatementsInto(context, currentBlockId, statement.statements, breakTargetBlockId, continueTargetBlockId)
   }
 
   if (ts.isIfStatement(statement)) {
@@ -765,13 +767,13 @@ function lowerStatementInto(
       elseBlockId,
     })
 
-    const thenExit = lowerStatementInto(context, thenBlockId, statement.thenStatement, breakTargetBlockId)
+    const thenExit = lowerStatementInto(context, thenBlockId, statement.thenStatement, breakTargetBlockId, continueTargetBlockId)
     if (thenExit != null) ensureBlockTerminator(context, thenExit, {kind: 'goto', targetBlockId: joinBlockId})
 
     const elseExit =
       statement.elseStatement == null
         ? elseBlockId
-        : lowerStatementInto(context, elseBlockId, statement.elseStatement, breakTargetBlockId)
+        : lowerStatementInto(context, elseBlockId, statement.elseStatement, breakTargetBlockId, continueTargetBlockId)
     if (elseExit != null) ensureBlockTerminator(context, elseExit, {kind: 'goto', targetBlockId: joinBlockId})
 
     return joinBlockId
@@ -802,7 +804,7 @@ function lowerStatementInto(
         elseBlockId: nextTestBlockId,
       })
 
-      const clauseExit = lowerStatementsInto(context, clauseBlockId, stripTrailingCaseBreak(clause.statements), afterSwitchBlockId)
+      const clauseExit = lowerStatementsInto(context, clauseBlockId, stripTrailingCaseBreak(clause.statements), afterSwitchBlockId, continueTargetBlockId)
       if (clauseExit != null) ensureBlockTerminator(context, clauseExit, {kind: 'goto', targetBlockId: afterSwitchBlockId})
       currentTestBlockId = nextTestBlockId
     }
@@ -810,7 +812,7 @@ function lowerStatementInto(
     if (defaultClause != null) {
       const defaultBlockId = context.createBlock('switch_default')
       ensureBlockTerminator(context, currentTestBlockId, {kind: 'goto', targetBlockId: defaultBlockId})
-      const defaultExit = lowerStatementsInto(context, defaultBlockId, stripTrailingCaseBreak(defaultClause.statements), afterSwitchBlockId)
+      const defaultExit = lowerStatementsInto(context, defaultBlockId, stripTrailingCaseBreak(defaultClause.statements), afterSwitchBlockId, continueTargetBlockId)
       if (defaultExit != null) ensureBlockTerminator(context, defaultExit, {kind: 'goto', targetBlockId: afterSwitchBlockId})
     } else if (caseClauses.length === 0) {
       ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: afterSwitchBlockId})
@@ -858,7 +860,7 @@ function lowerStatementInto(
             elseBlockId: afterBlockId,
           }
 
-    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId)
+    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId, incrementBlockId)
     if (bodyExit != null) ensureBlockTerminator(context, bodyExit, {kind: 'goto', targetBlockId: incrementBlockId})
 
     const incrementBlock = context.getBlock(incrementBlockId)
@@ -887,7 +889,7 @@ function lowerStatementInto(
       elseBlockId: afterBlockId,
     }
 
-    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId)
+    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId, conditionBlockId)
     if (bodyExit != null) ensureBlockTerminator(context, bodyExit, {kind: 'goto', targetBlockId: conditionBlockId})
     return afterBlockId
   }
@@ -895,6 +897,12 @@ function lowerStatementInto(
   if (ts.isBreakStatement(statement)) {
     if (breakTargetBlockId == null) throw new Error('Break statement is only supported inside loop/switch lowering')
     ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: breakTargetBlockId})
+    return null
+  }
+
+  if (ts.isContinueStatement(statement)) {
+    if (continueTargetBlockId == null) throw new Error('Continue statement is only supported inside loop lowering')
+    ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: continueTargetBlockId})
     return null
   }
 
@@ -1355,6 +1363,35 @@ function evaluateCallExpression(analyzer: LoweredProgramAnalyzer, state: EvalSta
     }))
   }
 
+  if (expression.callee.kind === 'property' && expression.callee.property === 'slice') {
+    const targetCases = analyzer.evalExpression(state, expression.callee.object)
+    const results: EvalCase[] = []
+    for (const targetCase of targetCases) {
+      const target = expectString(targetCase.value)
+      if (expression.args.length < 1 || expression.args.length > 2) throw new Error('String.slice expects 1 or 2 arguments')
+      const startCases = analyzer.evalExpression(targetCase.state, expression.args[0]!)
+      for (const startCase of startCases) {
+        const start = expectConcreteNumber(startCase.value)
+        const endArg = expression.args[1]
+        if (endArg == null) {
+          results.push({
+            state: startCase.state,
+            value: concreteString(target.value.slice(start)),
+          })
+          continue
+        }
+        for (const endCase of analyzer.evalExpression(startCase.state, endArg)) {
+          const end = expectConcreteNumber(endCase.value)
+          results.push({
+            state: endCase.state,
+            value: concreteString(target.value.slice(start, end)),
+          })
+        }
+      }
+    }
+    return results
+  }
+
   if (expression.callee.kind === 'property' && expression.callee.property === 'map') {
     if (expression.args.length < 1) throw new Error('Array.map expects a callback')
     const callbackCases = analyzer.evalExpression(state, expression.args[0]!)
@@ -1418,7 +1455,8 @@ function evaluateCallExpression(analyzer: LoweredProgramAnalyzer, state: EvalSta
         results.push({
           state: {
             ...argumentCase.state,
-            constraints: [...argumentCase.state.constraints, ...returned.constraints],
+            constraints: override != null ? returned.constraints : [...argumentCase.state.constraints, ...returned.constraints],
+            env: override != null ? (returned.env ?? argumentCase.state.env) : argumentCase.state.env,
           },
           value: returned.value,
         })

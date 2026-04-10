@@ -10,6 +10,7 @@ import {
   expectArray,
   expectConcreteNumber,
   expectObject,
+  expectString,
   getProp,
   type InternalLawSummary,
   invokeConcreteFunctionValue,
@@ -66,12 +67,62 @@ export function runHNCommentLayoutStaticVerification(sourceText: string): Static
         }]
       },
     },
+    measureFragmentTextWidth: {
+      evaluate(args, mode, context) {
+        if (mode !== 'concrete') throw new Error('measureFragmentTextWidth override only supports concrete mode')
+        const text = expectString(args[1]!)
+        return [{
+          constraints: context.state.constraints,
+          env: context.state.env,
+          value: concreteNumber(text.value.length * 10),
+        }]
+      },
+    },
+    pushMergedRect: {
+      evaluate(args, mode, context) {
+        if (mode !== 'concrete') throw new Error('pushMergedRect override only supports concrete mode')
+        const rects = expectArray(args[0]!)
+        const next = expectObject(args[1]!)
+        const previous = rects.items.at(-1)
+        if (previous != null) {
+          const previousRect = expectObject(previous)
+          const previousTop = expectConcreteNumber(getProp(previousRect, 'top'))
+          const previousHeight = expectConcreteNumber(getProp(previousRect, 'height'))
+          const previousLeft = expectConcreteNumber(getProp(previousRect, 'left'))
+          const previousWidth = expectConcreteNumber(getProp(previousRect, 'width'))
+          const nextTop = expectConcreteNumber(getProp(next, 'top'))
+          const nextHeight = expectConcreteNumber(getProp(next, 'height'))
+          const nextLeft = expectConcreteNumber(getProp(next, 'left'))
+          const nextWidth = expectConcreteNumber(getProp(next, 'width'))
+          if (
+            previousTop === nextTop &&
+            previousHeight === nextHeight &&
+            Math.abs(previousLeft + previousWidth - nextLeft) < 0.5
+          ) {
+            previousRect.props['width'] = concreteNumber(nextLeft + nextWidth - previousLeft)
+            return [{
+              constraints: context.state.constraints,
+              env: context.state.env,
+              value: concreteNull('concrete'),
+            }]
+          }
+        }
+
+        rects.items.push(next)
+        return [{
+          constraints: context.state.constraints,
+          env: context.state.env,
+          value: concreteNull('concrete'),
+        }]
+      },
+    },
   }, {
-    includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt'],
+    includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'findHNCommentTextRects'],
   })
   const laws = new Map<string, InternalLawSummary>()
 
   verifyLayoutPreparedHNCommentDocConcrete(analyzer, laws)
+  verifyFindHNCommentTextRectsConcrete(analyzer, laws)
 
   return buildStaticLayoutReport('nicer-hacker-news-comment-static-layout', 'demos/nicer-hacker-news/hn-comment-layout.ts', laws)
 }
@@ -252,6 +303,186 @@ function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyz
       scenario: scenario.label,
       height,
       expectedHeight: totalHeight,
+    }))
+  }
+}
+
+function verifyFindHNCommentTextRectsConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const layout = concreteObject({
+    width: concreteNumber(200),
+    height: concreteNumber(28),
+    blocks: concreteArray([
+      concreteObject({
+        kind: concreteString('paragraph'),
+        height: concreteNumber(28),
+        lines: concreteArray([
+          concreteObject({
+            top: concreteNumber(0),
+            width: concreteNumber(110),
+            height: concreteNumber(14),
+            textStart: concreteNumber(0),
+            textEnd: concreteNumber(11),
+            fragments: concreteArray([
+              concreteObject({
+                kind: concreteString('text'),
+                href: concreteNull('concrete'),
+                text: concreteString('hello'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(0),
+                top: concreteNumber(0),
+                width: concreteNumber(50),
+                height: concreteNumber(14),
+                textStart: concreteNumber(0),
+                textEnd: concreteNumber(5),
+              }),
+              concreteObject({
+                kind: concreteString('link'),
+                href: concreteString('https://example.com'),
+                text: concreteString('world'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(50),
+                top: concreteNumber(0),
+                width: concreteNumber(50),
+                height: concreteNumber(14),
+                textStart: concreteNumber(5),
+                textEnd: concreteNumber(10),
+              }),
+              concreteObject({
+                kind: concreteString('italic'),
+                href: concreteNull('concrete'),
+                text: concreteString('!'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(100),
+                top: concreteNumber(0),
+                width: concreteNumber(10),
+                height: concreteNumber(14),
+                textStart: concreteNumber(10),
+                textEnd: concreteNumber(11),
+              }),
+            ]),
+          }),
+          concreteObject({
+            top: concreteNumber(14),
+            width: concreteNumber(40),
+            height: concreteNumber(14),
+            textStart: concreteNumber(11),
+            textEnd: concreteNumber(15),
+            fragments: concreteArray([
+              concreteObject({
+                kind: concreteString('code'),
+                href: concreteNull('concrete'),
+                text: concreteString('code'),
+                gapBefore: concreteNumber(0),
+                left: concreteNumber(0),
+                top: concreteNumber(14),
+                width: concreteNumber(40),
+                height: concreteNumber(14),
+                textStart: concreteNumber(11),
+                textEnd: concreteNumber(15),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]),
+  })
+
+  const scenarios = [
+    {
+      label: 'empty_length',
+      start: 4,
+      length: 0,
+      expectedRects: [] as Array<{left: number; top: number; width: number; height: number}>,
+    },
+    {
+      label: 'single_fragment_middle',
+      start: 1,
+      length: 3,
+      expectedRects: [{left: 10, top: 0, width: 30, height: 14}],
+    },
+    {
+      label: 'merge_adjacent_fragments',
+      start: 2,
+      length: 6,
+      expectedRects: [{left: 20, top: 0, width: 60, height: 14}],
+    },
+    {
+      label: 'split_across_lines',
+      start: 8,
+      length: 5,
+      expectedRects: [
+        {left: 80, top: 0, width: 30, height: 14},
+        {left: 0, top: 14, width: 20, height: 14},
+      ],
+    },
+  ]
+
+  for (const scenario of scenarios) {
+    const returns = analyzer.evaluateFunction('findHNCommentTextRects', [
+      layout,
+      concreteNumber(scenario.start),
+      concreteNumber(scenario.length),
+    ], 'concrete')
+    check(laws, 'findHNCommentTextRects stays branch-free per concrete scenario', returns.length === 1, () => ({
+      scenario: scenario.label,
+      cases: returns.length,
+    }))
+    if (returns.length !== 1) continue
+
+    const rects = expectArray(returns[0]!.value)
+    const actualRects = rects.items.map(item => {
+      const rect = expectObject(item)
+      return {
+        left: expectConcreteNumber(getProp(rect, 'left')),
+        top: expectConcreteNumber(getProp(rect, 'top')),
+        width: expectConcreteNumber(getProp(rect, 'width')),
+        height: expectConcreteNumber(getProp(rect, 'height')),
+      }
+    })
+
+    let matchesExpectedRects = actualRects.length === scenario.expectedRects.length
+    for (let i = 0; i < actualRects.length && i < scenario.expectedRects.length; i++) {
+      const actual = actualRects[i]!
+      const expected = scenario.expectedRects[i]!
+      if (
+        Math.abs(actual.left - expected.left) > epsilon ||
+        Math.abs(actual.top - expected.top) > epsilon ||
+        Math.abs(actual.width - expected.width) > epsilon ||
+        Math.abs(actual.height - expected.height) > epsilon
+      ) {
+        matchesExpectedRects = false
+      }
+    }
+
+    let orderedAndInsideLines = true
+    let previousTop = -Infinity
+    let previousLeft = -Infinity
+    for (const rect of actualRects) {
+      if (rect.top < previousTop - epsilon || (Math.abs(rect.top - previousTop) <= epsilon && rect.left < previousLeft - epsilon)) {
+        orderedAndInsideLines = false
+      }
+
+      const line = rect.top === 0
+        ? {width: 110, height: 14}
+        : rect.top === 14
+          ? {width: 40, height: 14}
+          : null
+      if (line == null || rect.left < -epsilon || rect.width < -epsilon || rect.left + rect.width > line.width + epsilon || rect.height !== line.height) {
+        orderedAndInsideLines = false
+      }
+
+      previousTop = rect.top
+      previousLeft = rect.left
+    }
+
+    check(laws, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios', matchesExpectedRects, () => ({
+      scenario: scenario.label,
+      rectCount: actualRects.length,
+      expectedRectCount: scenario.expectedRects.length,
+    }))
+    check(laws, 'findHNCommentTextRects keeps returned rects ordered and inside their line boxes', orderedAndInsideLines, () => ({
+      scenario: scenario.label,
+      rectCount: actualRects.length,
     }))
   }
 }
