@@ -144,3 +144,24 @@ function demo() {
   expect(returns).toHaveLength(1)
   expect(expectConcreteNumber(returns[0].value)).toBe(1)
 })
+
+test('ordinary helper calls stay pure from the caller env point of view', () => {
+  const source = `
+function plusOne(n: number) {
+  return n + 1
+}
+
+function demo() {
+  let total = 1
+  const next = plusOne(total)
+  return total + next
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['plusOne', 'demo'],
+  })
+
+  const returns = analyzer.evaluateFunction('demo', [], 'concrete')
+  expect(returns).toHaveLength(1)
+  expect(expectConcreteNumber(returns[0].value)).toBe(3)
+})
