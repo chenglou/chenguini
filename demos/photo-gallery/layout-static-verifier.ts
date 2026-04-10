@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import {promptPaddingBottom} from './prompt-layout'
+import {prompt1DLineHeight, promptPaddingBottom} from './prompt-layout'
 
 type WitnessValue = boolean | number | string | null
 
@@ -57,13 +57,24 @@ type ObjectValue = {
   props: Record<string, Value>
 }
 
+type ArrayValue = {
+  kind: 'array'
+  mode: 'concrete'
+  items: Value[]
+}
+
 type OpaqueValue = {
   kind: 'opaque'
   mode: Mode
   label: string
 }
 
-type Value = NumberValue | BooleanValue | ObjectValue | OpaqueValue
+type NullValue = {
+  kind: 'null'
+  mode: Mode
+}
+
+type Value = NumberValue | BooleanValue | ObjectValue | ArrayValue | OpaqueValue | NullValue
 
 type RangeTruth = 'always-true' | 'always-false' | 'maybe'
 
@@ -89,7 +100,16 @@ type RangeOpaqueValue = {
   label: string
 }
 
-type RangeValue = RangeNumberValue | RangeBooleanValue | RangeObjectValue | RangeOpaqueValue
+type RangeNullValue = {
+  kind: 'range-null'
+}
+
+type RangeValue = RangeNumberValue | RangeBooleanValue | RangeObjectValue | RangeOpaqueValue | RangeNullValue
+
+type FunctionOverride = {
+  evaluate?: (args: Value[], mode: Mode) => ReturnCase[]
+  evaluateRange?: (args: RangeValue[]) => RangeReturnCase[]
+}
 
 type RangeState = {
   env: Map<string, RangeValue>
@@ -123,10 +143,11 @@ type ReturnCase = {
 const epsilon = 0.0001
 
 export function runPhotoGalleryStaticVerification(sourceText: string): StaticLayoutVerificationReport {
-  const analyzer = new SourceAnalyzer(sourceText, {promptPaddingBottom})
+  const analyzer = new SourceAnalyzer(sourceText, {prompt1DLineHeight, promptPaddingBottom})
   const laws = new Map<string, InternalLawSummary>()
 
   verifyMakeItemLayoutGeometry(analyzer, laws)
+  verifyGetLineLayoutConcrete(sourceText, laws)
   verifyColsBoxMaxSizeXFRange(analyzer, laws)
   verifyColsBoxMaxSizeXF(analyzer, laws)
 
@@ -142,6 +163,138 @@ export function runPhotoGalleryStaticVerification(sourceText: string): StaticLay
     suite: 'photo-gallery-static-layout',
     analyzedFile: 'demos/photo-gallery/layout-model.ts',
     laws: lawSummaries,
+  }
+}
+
+function verifyGetLineLayoutConcrete(sourceText: string, laws: Map<string, InternalLawSummary>) {
+  const analyzer = new SourceAnalyzer(sourceText, {prompt1DLineHeight, promptPaddingBottom}, {
+    get1DItemSize: {
+      evaluate(args, mode) {
+        if (mode !== 'concrete') throw new Error('get1DItemSize override only supports concrete mode')
+        const source = expectObject(args[0]!)
+        const box1DMaxSizeX = expectConcreteNumber(args[1]!)
+        const box1DMaxSizeY = expectConcreteNumber(args[2]!)
+        const scaleFactor = expectConcreteNumber(args[3]!)
+        const ar = expectConcreteNumber(getProp(source, 'ar'))
+        const naturalSizeX = expectConcreteNumber(getProp(source, 'naturalSizeX'))
+        const imageSizeX = Math.min(naturalSizeX, box1DMaxSizeX, box1DMaxSizeY * ar) * scaleFactor
+        const imageSizeY = imageSizeX / ar
+        const promptVisibleHeight = 24
+        return [{
+          constraints: [],
+          value: concreteObject({
+            imageSizeX: concreteNumber(imageSizeX),
+            imageSizeY: concreteNumber(imageSizeY),
+            promptLayout: concreteObject({
+              width: concreteNumber(imageSizeX),
+              visibleHeight: concreteNumber(promptVisibleHeight),
+              lines: concreteArray([]),
+            }),
+            layoutHeight: concreteNumber(imageSizeY + promptVisibleHeight + promptPaddingBottom),
+          }),
+        }]
+      },
+    },
+  })
+
+  const layoutSources = concreteArray([
+    concreteObject({ar: concreteNumber(1), naturalSizeX: concreteNumber(400), preparedPrompt: concreteNull('concrete')}),
+    concreteObject({ar: concreteNumber(1.5), naturalSizeX: concreteNumber(700), preparedPrompt: concreteNull('concrete')}),
+    concreteObject({ar: concreteNumber(0.75), naturalSizeX: concreteNumber(480), preparedPrompt: concreteNull('concrete')}),
+    concreteObject({ar: concreteNumber(2), naturalSizeX: concreteNumber(900), preparedPrompt: concreteNull('concrete')}),
+  ])
+
+  const lineCases = [
+    {focused: 0, label: 'first'},
+    {focused: 2, label: 'middle'},
+    {focused: 3, label: 'last'},
+  ]
+  const windowSizeX = 1000
+  const windowSizeY = 700
+  const scrollY = 123.5
+  const hitArea1DSizeX = analyzer.getGlobalNumber('hitArea1DSizeX')
+
+  for (const lineCase of lineCases) {
+    const returns = analyzer.evaluateFunction('getLineLayout', [
+      layoutSources,
+      concreteNumber(lineCase.focused),
+      concreteNumber(windowSizeX),
+      concreteNumber(windowSizeY),
+      concreteNumber(scrollY),
+    ], 'concrete')
+    check(laws, 'getLineLayout stays branch-free per concrete scenario', returns.length === 1, () => ({
+      scenario: lineCase.label,
+      cases: returns.length,
+    }))
+    if (returns.length !== 1) continue
+
+    const layout = expectObject(returns[0]!.value)
+    const items = expectArray(getProp(layout, 'items'))
+    const leftHitArea = getProp(layout, 'leftHitArea')
+    const rightHitArea = getProp(layout, 'rightHitArea')
+
+    check(laws, 'getLineLayout preserves item count', items.items.length === layoutSources.items.length, () => ({
+      scenario: lineCase.label,
+      itemCount: items.items.length,
+      expectedItemCount: layoutSources.items.length,
+    }))
+
+    const focusedItem = expectObject(items.items[lineCase.focused]!)
+    const focusedImageBox = expectObject(getProp(focusedItem, 'imageBox'))
+    const focusedCenterX = expectConcreteNumber(getProp(focusedImageBox, 'x')) + expectConcreteNumber(getProp(focusedImageBox, 'sizeX')) / 2
+    check(laws, 'getLineLayout keeps the focused image centered', Math.abs(focusedCenterX - windowSizeX / 2) <= epsilon, () => ({
+      scenario: lineCase.label,
+      focused: lineCase.focused,
+      focusedCenterX,
+      expectedCenterX: windowSizeX / 2,
+    }))
+
+    check(laws, 'getLineLayout left hit area matches the focused index at the edges', hitAreaMatches(
+      leftHitArea,
+      lineCase.focused === 0 ? null : {
+        targetIndex: lineCase.focused - 1,
+        x: 0,
+        y: scrollY,
+        sizeX: hitArea1DSizeX,
+        sizeY: windowSizeY,
+      },
+    ), () => ({
+      scenario: lineCase.label,
+      side: 'left',
+      focused: lineCase.focused,
+      actual: describeHitArea(leftHitArea),
+    }))
+    check(laws, 'getLineLayout right hit area matches the focused index at the edges', hitAreaMatches(
+      rightHitArea,
+      lineCase.focused === layoutSources.items.length - 1 ? null : {
+        targetIndex: lineCase.focused + 1,
+        x: windowSizeX - hitArea1DSizeX,
+        y: scrollY,
+        sizeX: hitArea1DSizeX,
+        sizeY: windowSizeY,
+      },
+    ), () => ({
+      scenario: lineCase.label,
+      side: 'right',
+      focused: lineCase.focused,
+      actual: describeHitArea(rightHitArea),
+    }))
+
+    let monotone = true
+    for (let i = 0; i < items.items.length - 1; i++) {
+      const left = expectObject(items.items[i]!)
+      const right = expectObject(items.items[i + 1]!)
+      const leftImageBox = expectObject(getProp(left, 'imageBox'))
+      const rightImageBox = expectObject(getProp(right, 'imageBox'))
+      if (expectConcreteNumber(getProp(leftImageBox, 'x')) > expectConcreteNumber(getProp(rightImageBox, 'x')) + epsilon) {
+        monotone = false
+        break
+      }
+    }
+    check(laws, 'getLineLayout keeps item x order monotone', monotone, () => ({
+      scenario: lineCase.label,
+      focused: lineCase.focused,
+    }))
   }
 }
 
@@ -264,8 +417,10 @@ function verifyColsBoxMaxSizeXF(analyzer: SourceAnalyzer, laws: Map<string, Inte
 class SourceAnalyzer {
   private readonly functions = new Map<string, ts.FunctionDeclaration>()
   private readonly globals = new Map<string, number>()
+  private readonly overrides: Record<string, FunctionOverride>
 
-  constructor(sourceText: string, externalGlobals: Record<string, number>) {
+  constructor(sourceText: string, externalGlobals: Record<string, number>, overrides: Record<string, FunctionOverride> = {}) {
+    this.overrides = overrides
     const sourceFile = ts.createSourceFile('layout-model.ts', sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
     for (const statement of sourceFile.statements) {
       if (ts.isFunctionDeclaration(statement) && statement.name != null) {
@@ -288,6 +443,9 @@ class SourceAnalyzer {
   }
 
   evaluateFunction(name: string, args: Value[], mode: Mode): ReturnCase[] {
+    const override = this.overrides[name]?.evaluate
+    if (override != null) return override(args, mode)
+
     const declaration = this.functions.get(name)
     if (declaration?.body == null) throw new Error(`Function ${name} not found`)
     if (declaration.parameters.length !== args.length) {
@@ -304,6 +462,9 @@ class SourceAnalyzer {
   }
 
   evaluateFunctionRange(name: string, args: RangeValue[]): RangeReturnCase[] {
+    const override = this.overrides[name]?.evaluateRange
+    if (override != null) return override(args)
+
     const declaration = this.functions.get(name)
     if (declaration?.body == null) throw new Error(`Function ${name} not found`)
     if (declaration.parameters.length !== args.length) {
@@ -321,7 +482,9 @@ class SourceAnalyzer {
 
   evalExpression(state: EvalState, expression: ts.Expression): EvalCase[] {
     if (ts.isParenthesizedExpression(expression)) return this.evalExpression(state, expression.expression)
+    if (ts.isNonNullExpression(expression)) return this.evalExpression(state, expression.expression)
     if (ts.isNumericLiteral(expression)) return [{state, value: numberValue(state.mode, Number(expression.text))}]
+    if (expression.kind === ts.SyntaxKind.NullKeyword) return [{state, value: concreteNull(state.mode)}]
     if (expression.kind === ts.SyntaxKind.TrueKeyword) return [{state, value: booleanValue(state.mode, true)}]
     if (expression.kind === ts.SyntaxKind.FalseKeyword) return [{state, value: booleanValue(state.mode, false)}]
 
@@ -345,12 +508,73 @@ class SourceAnalyzer {
       }))
     }
 
+    if (ts.isArrayLiteralExpression(expression)) {
+      if (state.mode !== 'concrete') throw new Error('Array literals are only supported in concrete mode')
+      let arrayCases: Array<{state: EvalState; items: Value[]}> = [{state, items: []}]
+      for (const element of expression.elements) {
+        if (ts.isSpreadElement(element)) throw new Error('Array spread is not supported yet')
+        const nextArrayCases: Array<{state: EvalState; items: Value[]}> = []
+        for (const arrayCase of arrayCases) {
+          for (const evaluated of this.evalExpression(arrayCase.state, element)) {
+            nextArrayCases.push({
+              state: evaluated.state,
+              items: [...arrayCase.items, evaluated.value],
+            })
+          }
+        }
+        arrayCases = nextArrayCases
+      }
+      return arrayCases.map(arrayCase => ({
+        state: arrayCase.state,
+        value: concreteArray(arrayCase.items),
+      }))
+    }
+
     if (ts.isPropertyAccessExpression(expression)) {
       const targetCases = this.evalExpression(state, expression.expression)
       return targetCases.map(result => ({
         state: result.state,
-        value: getProp(expectObject(result.value), expression.name.text),
+        value:
+          result.value.kind === 'array'
+            ? getArrayProperty(result.value, expression.name.text)
+            : getProp(expectObject(result.value), expression.name.text),
       }))
+    }
+
+    if (ts.isElementAccessExpression(expression)) {
+      const targetCases = this.evalExpression(state, expression.expression)
+      const results: EvalCase[] = []
+      for (const targetCase of targetCases) {
+        const argumentExpression = expression.argumentExpression
+        for (const evaluatedIndex of this.evalExpression(targetCase.state, argumentExpression)) {
+          const array = expectArray(targetCase.value)
+          const index = expectConcreteNumber(evaluatedIndex.value)
+          results.push({
+            state: evaluatedIndex.state,
+            value: getArrayItem(array, index),
+          })
+        }
+      }
+      return results
+    }
+
+    if (ts.isArrowFunction(expression)) {
+      if (state.mode !== 'concrete') throw new Error('Arrow functions are only supported in concrete mode')
+      return [{state, value: concreteOpaque('arrow-function')}]
+    }
+
+    if (ts.isPostfixUnaryExpression(expression)) {
+      if (state.mode !== 'concrete') throw new Error('Postfix unary expressions are only supported in concrete mode')
+      if (!ts.isIdentifier(expression.operand)) throw new Error('Only identifier postfix expressions are supported')
+      const currentValue = expectConcreteNumber(state.env.get(expression.operand.text) ?? unsupported(`Unknown identifier ${expression.operand.text}`))
+      const nextValue =
+        expression.operator === ts.SyntaxKind.PlusPlusToken ? currentValue + 1 : currentValue - 1
+      const env = new Map(state.env)
+      env.set(expression.operand.text, concreteNumber(nextValue))
+      return [{
+        state: {...state, env},
+        value: concreteNumber(currentValue),
+      }]
     }
 
     if (ts.isBinaryExpression(expression)) {
@@ -408,7 +632,9 @@ class SourceAnalyzer {
 
   evalRangeExpression(state: RangeState, expression: ts.Expression): RangeEvalCase[] {
     if (ts.isParenthesizedExpression(expression)) return this.evalRangeExpression(state, expression.expression)
+    if (ts.isNonNullExpression(expression)) return this.evalRangeExpression(state, expression.expression)
     if (ts.isNumericLiteral(expression)) return [{state, value: rangeNumber(Number(expression.text), Number(expression.text), Number.isInteger(Number(expression.text)))}]
+    if (expression.kind === ts.SyntaxKind.NullKeyword) return [{state, value: rangeNull()}]
     if (expression.kind === ts.SyntaxKind.TrueKeyword) return [{state, value: rangeBoolean('always-true')}]
     if (expression.kind === ts.SyntaxKind.FalseKeyword) return [{state, value: rangeBoolean('always-false')}]
 
@@ -501,6 +727,10 @@ function executeStatements(analyzer: SourceAnalyzer, statements: ts.NodeArray<ts
   for (const statement of statements) {
     const nextStates: EvalState[] = []
     for (const state of activeStates) {
+      if (ts.isBlock(statement)) {
+        throw new Error('Standalone blocks are not supported in generic execution')
+      }
+
       if (ts.isVariableStatement(statement)) {
         let declarationStates = [state]
         for (const declaration of statement.declarationList.declarations) {
@@ -518,6 +748,16 @@ function executeStatements(analyzer: SourceAnalyzer, statements: ts.NodeArray<ts
           declarationStates = newStates
         }
         nextStates.push(...declarationStates)
+        continue
+      }
+
+      if (ts.isExpressionStatement(statement)) {
+        nextStates.push(...executeConcreteExpressionStatement(analyzer, state, statement.expression))
+        continue
+      }
+
+      if (ts.isForStatement(statement)) {
+        nextStates.push(...executeConcreteForStatement(analyzer, state, statement))
         continue
       }
 
@@ -581,6 +821,147 @@ function executeRangeStatements(analyzer: SourceAnalyzer, statements: ts.NodeArr
   }
 
   return returnCases
+}
+
+function executeConcreteExpressionStatement(analyzer: SourceAnalyzer, state: EvalState, expression: ts.Expression): EvalState[] {
+  if (state.mode !== 'concrete') throw new Error('Expression statements are only supported in concrete mode')
+
+  if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === 'push') {
+    const target = expression.expression.expression
+    if (!ts.isIdentifier(target)) throw new Error('Only identifier.push(...) is supported')
+    const arrayValue = expectArray(state.env.get(target.text) ?? unsupported(`Unknown array identifier ${target.text}`))
+    let activeStates: EvalState[] = [state]
+    for (const argument of expression.arguments) {
+      const nextStates: EvalState[] = []
+      for (const activeState of activeStates) {
+        for (const evaluated of analyzer.evalExpression(activeState, argument)) {
+          const currentArray = expectArray(evaluated.state.env.get(target.text) ?? arrayValue)
+          const env = new Map(evaluated.state.env)
+          env.set(target.text, concreteArray([...currentArray.items, evaluated.value]))
+          nextStates.push({...evaluated.state, env})
+        }
+      }
+      activeStates = nextStates
+    }
+    return activeStates
+  }
+
+  if (ts.isBinaryExpression(expression) && isAssignmentOperator(expression.operatorToken.kind)) {
+    if (!ts.isIdentifier(expression.left)) throw new Error('Only identifier assignments are supported')
+    const targetName = expression.left.text
+    return analyzer.evalExpression(state, expression.right).map(evaluated => {
+      const env = new Map(evaluated.state.env)
+      const nextValue =
+        expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+          ? evaluated.value
+          : applyAssignmentOperator(
+              expectNumber(env.get(targetName) ?? unsupported(`Unknown identifier ${targetName}`)),
+              expectNumber(evaluated.value),
+              expression.operatorToken.kind,
+            )
+      env.set(targetName, nextValue)
+      return {...evaluated.state, env}
+    })
+  }
+
+  if (ts.isPostfixUnaryExpression(expression)) {
+    return analyzer.evalExpression(state, expression).map(result => result.state)
+  }
+
+  return analyzer.evalExpression(state, expression).map(result => result.state)
+}
+
+function executeConcreteForStatement(analyzer: SourceAnalyzer, state: EvalState, statement: ts.ForStatement): EvalState[] {
+  if (state.mode !== 'concrete') throw new Error('For statements are only supported in concrete mode')
+  let activeStates = [state]
+
+  if (statement.initializer != null) {
+    const initializer = statement.initializer
+    if (ts.isVariableDeclarationList(initializer)) {
+      activeStates = activeStates.flatMap(activeState =>
+        executeConcreteVariableDeclarations(analyzer, activeState, initializer))
+    } else {
+      activeStates = activeStates.flatMap(activeState =>
+        executeConcreteExpressionStatement(analyzer, activeState, initializer))
+    }
+  }
+
+  let loopStates = activeStates
+  const completedStates: EvalState[] = []
+  let guard = 0
+  while (loopStates.length > 0) {
+    if (guard++ > 200) throw new Error('Concrete for loop did not terminate')
+    const continuingStates: EvalState[] = []
+
+    for (const loopState of loopStates) {
+      let condition = true
+      if (statement.condition != null) {
+        const conditionCases = analyzer.evalExpression(loopState, statement.condition)
+        if (conditionCases.length !== 1) throw new Error('Concrete for loop conditions must resolve to 1 case')
+        const evaluatedCondition = expectBoolean(conditionCases[0]!.value)
+        if (evaluatedCondition.mode !== 'concrete') throw new Error('Concrete for loop condition must be concrete')
+        condition = evaluatedCondition.value
+      }
+
+      if (!condition) {
+        completedStates.push(loopState)
+        continue
+      }
+
+      const bodyStates =
+        ts.isBlock(statement.statement)
+          ? executeBlockConcrete(analyzer, statement.statement, loopState)
+          : executeStatementConcrete(analyzer, statement.statement, loopState)
+
+      for (const bodyState of bodyStates) {
+        const incrementedStates =
+          statement.incrementor == null
+            ? [bodyState]
+            : executeConcreteExpressionStatement(analyzer, bodyState, statement.incrementor)
+        continuingStates.push(...incrementedStates)
+      }
+    }
+
+    loopStates = continuingStates
+  }
+
+  return completedStates
+}
+
+function executeBlockConcrete(analyzer: SourceAnalyzer, block: ts.Block, state: EvalState) {
+  let activeStates = [state]
+  for (const statement of block.statements) {
+    const nextStates: EvalState[] = []
+    for (const activeState of activeStates) nextStates.push(...executeStatementConcrete(analyzer, statement, activeState))
+    activeStates = nextStates
+  }
+  return activeStates
+}
+
+function executeStatementConcrete(analyzer: SourceAnalyzer, statement: ts.Statement, state: EvalState): EvalState[] {
+  if (ts.isVariableStatement(statement)) return executeConcreteVariableDeclarations(analyzer, state, statement.declarationList)
+  if (ts.isExpressionStatement(statement)) return executeConcreteExpressionStatement(analyzer, state, statement.expression)
+  if (ts.isBlock(statement)) return executeBlockConcrete(analyzer, statement, state)
+  throw new Error(`Unsupported concrete loop statement kind: ${ts.SyntaxKind[statement.kind]}`)
+}
+
+function executeConcreteVariableDeclarations(analyzer: SourceAnalyzer, state: EvalState, declarations: ts.VariableDeclarationList) {
+  let activeStates = [state]
+  for (const declaration of declarations.declarations) {
+    if (!ts.isIdentifier(declaration.name) || declaration.initializer == null) {
+      throw new Error('Only initialized identifier declarations are supported in concrete execution')
+    }
+    const nextStates: EvalState[] = []
+    for (const activeState of activeStates) {
+      for (const evaluated of analyzer.evalExpression(activeState, declaration.initializer)) {
+        const env = new Map(evaluated.state.env)
+        env.set(declaration.name.text, evaluated.value)
+        nextStates.push({...evaluated.state, env})
+      }
+    }
+    activeStates = nextStates
+  }
+  return activeStates
 }
 
 function combineBinaryCases(analyzer: SourceAnalyzer, state: EvalState, expression: ts.BinaryExpression): EvalCase[] {
@@ -666,6 +1047,36 @@ function combineRangeBinaryCases(analyzer: SourceAnalyzer, state: RangeState, ex
 }
 
 function evaluateCallExpression(analyzer: SourceAnalyzer, state: EvalState, expression: ts.CallExpression): EvalCase[] {
+  const callee = expression.expression
+
+  if (
+    ts.isPropertyAccessExpression(callee) &&
+    callee.name.text === 'map' &&
+    expression.arguments.length >= 1 &&
+    ts.isArrowFunction(expression.arguments[0]!)
+  ) {
+    const callback = expression.arguments[0]
+    if (!ts.isArrowFunction(callback)) throw new Error('Array.map callback must be an arrow function')
+    const targetCases = analyzer.evalExpression(state, callee.expression)
+    const results: EvalCase[] = []
+    for (const targetCase of targetCases) {
+      const array = expectArray(targetCase.value)
+      const mappedItems: Value[] = []
+      let currentState = targetCase.state
+      for (let i = 0; i < array.items.length; i++) {
+        const callbackCases = evaluateConcreteArrayCallback(analyzer, currentState, callback, array.items[i]!, i)
+        if (callbackCases.length !== 1) throw new Error('Concrete array.map callback must resolve to 1 case')
+        currentState = callbackCases[0]!.state
+        mappedItems.push(callbackCases[0]!.value)
+      }
+      results.push({
+        state: currentState,
+        value: concreteArray(mappedItems),
+      })
+    }
+    return results
+  }
+
   let argumentCases: Array<{state: EvalState; values: Value[]}> = [{state, values: []}]
   for (const argument of expression.arguments) {
     const nextArgumentCases: Array<{state: EvalState; values: Value[]}> = []
@@ -680,7 +1091,6 @@ function evaluateCallExpression(analyzer: SourceAnalyzer, state: EvalState, expr
     argumentCases = nextArgumentCases
   }
 
-  const callee = expression.expression
   if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'Math') {
     return argumentCases.map(argumentCase => ({
       state: argumentCase.state,
@@ -1003,6 +1413,17 @@ function getProp(object: ObjectValue, key: string) {
   return value
 }
 
+function getArrayProperty(array: ArrayValue, key: string) {
+  if (key === 'length') return concreteNumber(array.items.length)
+  throw new Error(`Unsupported array property: ${key}`)
+}
+
+function getArrayItem(array: ArrayValue, index: number) {
+  const item = array.items[index]
+  if (item == null) throw new Error(`Array index ${index} is out of bounds`)
+  return item
+}
+
 function withConstraint(state: EvalState, constraint: BoolExpr): EvalState {
   return {
     ...state,
@@ -1040,6 +1461,22 @@ function booleanValue(mode: Mode, value: boolean): BooleanValue {
 
 function concreteNumber(value: number): NumberValue {
   return {kind: 'number', mode: 'concrete', value}
+}
+
+function concreteNull(mode: Mode): NullValue {
+  return {kind: 'null', mode}
+}
+
+function concreteArray(items: Value[]): ArrayValue {
+  return {kind: 'array', mode: 'concrete', items}
+}
+
+function concreteObject(props: Record<string, Value>): ObjectValue {
+  return objectValue('concrete', props)
+}
+
+function concreteOpaque(label: string): OpaqueValue {
+  return {kind: 'opaque', mode: 'concrete', label}
 }
 
 function symbolicNumber(name: string): NumberValue {
@@ -1091,6 +1528,11 @@ function expectObject(value: Value): ObjectValue {
   return value
 }
 
+function expectArray(value: Value): ArrayValue {
+  if (value.kind !== 'array') throw new Error(`Expected array, got ${value.kind}`)
+  return value
+}
+
 function negateNumber(value: NumberValue): NumberValue {
   return value.mode === 'concrete'
     ? concreteNumber(-expectConcreteNumberValue(value))
@@ -1117,6 +1559,10 @@ function rangeBoolean(truth: RangeTruth): RangeBooleanValue {
 
 function rangeObject(props: Record<string, RangeValue>): RangeObjectValue {
   return {kind: 'range-object', props}
+}
+
+function rangeNull(): RangeNullValue {
+  return {kind: 'range-null'}
 }
 
 function expectRangeNumber(value: RangeValue): RangeNumberValue {
@@ -1166,6 +1612,7 @@ function joinRangeValues(left: RangeValue, right: RangeValue): RangeValue {
     if (left.label !== right.label) throw new Error(`Cannot join opaque values ${left.label} and ${right.label}`)
     return left
   }
+  if (left.kind === 'range-null' && right.kind === 'range-null') return left
   throw new Error(`Unsupported range join for ${left.kind}`)
 }
 
@@ -1248,6 +1695,82 @@ function maxRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeN
     Math.max(left.max, right.max),
     left.isInteger && right.isInteger,
   )
+}
+
+function isAssignmentOperator(operator: ts.SyntaxKind) {
+  return (
+    operator === ts.SyntaxKind.EqualsToken ||
+    operator === ts.SyntaxKind.PlusEqualsToken ||
+    operator === ts.SyntaxKind.MinusEqualsToken
+  )
+}
+
+function applyAssignmentOperator(current: NumberValue, next: NumberValue, operator: ts.SyntaxKind): NumberValue {
+  if (operator === ts.SyntaxKind.EqualsToken) return next
+  if (current.mode !== 'concrete' || next.mode !== 'concrete') throw new Error('Assignment operators are only supported in concrete mode')
+  const currentValue = expectConcreteNumberValue(current)
+  const nextValue = expectConcreteNumberValue(next)
+  return concreteNumber(
+    operator === ts.SyntaxKind.PlusEqualsToken ? currentValue + nextValue
+    : operator === ts.SyntaxKind.MinusEqualsToken ? currentValue - nextValue
+    : unsupported(`Unsupported assignment operator: ${ts.tokenToString(operator)}`),
+  )
+}
+
+function evaluateConcreteArrayCallback(
+  analyzer: SourceAnalyzer,
+  state: EvalState,
+  callback: ts.ArrowFunction,
+  item: Value,
+  index: number,
+): EvalCase[] {
+  if (state.mode !== 'concrete') throw new Error('Concrete array callbacks require concrete mode')
+  if (callback.parameters.length > 2) throw new Error('Array callbacks with more than 2 parameters are not supported')
+
+  const env = new Map(state.env)
+  const firstParameter = callback.parameters[0]
+  if (firstParameter != null) {
+    if (!ts.isIdentifier(firstParameter.name)) throw new Error('Only identifier callback parameters are supported')
+    env.set(firstParameter.name.text, item)
+  }
+  const secondParameter = callback.parameters[1]
+  if (secondParameter != null) {
+    if (!ts.isIdentifier(secondParameter.name)) throw new Error('Only identifier callback parameters are supported')
+    env.set(secondParameter.name.text, concreteNumber(index))
+  }
+  const callbackState: EvalState = {...state, env}
+
+  if (ts.isBlock(callback.body)) {
+    const returns = executeStatements(analyzer, callback.body.statements, [callbackState])
+    return returns.map(returned => ({
+      state: callbackState,
+      value: returned.value,
+    }))
+  }
+  return analyzer.evalExpression(callbackState, callback.body)
+}
+
+function hitAreaMatches(
+  actual: Value,
+  expected: {targetIndex: number; x: number; y: number; sizeX: number; sizeY: number} | null,
+) {
+  if (expected == null) return actual.kind === 'null'
+  if (actual.kind !== 'object') return false
+  const box = expectObject(getProp(actual, 'box'))
+  return (
+    expectConcreteNumber(getProp(actual, 'targetIndex')) === expected.targetIndex &&
+    Math.abs(expectConcreteNumber(getProp(box, 'x')) - expected.x) <= epsilon &&
+    Math.abs(expectConcreteNumber(getProp(box, 'y')) - expected.y) <= epsilon &&
+    Math.abs(expectConcreteNumber(getProp(box, 'sizeX')) - expected.sizeX) <= epsilon &&
+    Math.abs(expectConcreteNumber(getProp(box, 'sizeY')) - expected.sizeY) <= epsilon
+  )
+}
+
+function describeHitArea(actual: Value) {
+  if (actual.kind === 'null') return 'null'
+  if (actual.kind !== 'object') return actual.kind
+  const box = expectObject(getProp(actual, 'box'))
+  return `${expectConcreteNumber(getProp(actual, 'targetIndex'))}:${expectConcreteNumber(getProp(box, 'x'))},${expectConcreteNumber(getProp(box, 'y'))},${expectConcreteNumber(getProp(box, 'sizeX'))},${expectConcreteNumber(getProp(box, 'sizeY'))}`
 }
 
 function constExpr(value: number): ScalarExpr {
