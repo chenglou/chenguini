@@ -131,6 +131,8 @@ That keeps the analyzer generic:
 
 This is closer to a semantic `.d.ts` than a hard-coded verifier plugin.
 
+If the verifier can discover sibling `*.static-contracts.ts` files from the analyzed source and its relative imports, then "bring in the lib and it works" starts becoming realistic.
+
 ## Start Narrow, Then Widen
 
 Start with the smallest repro you can trust.

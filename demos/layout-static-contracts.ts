@@ -1,3 +1,6 @@
+import {existsSync, readFileSync} from 'node:fs'
+import path from 'node:path'
+import {pathToFileURL} from 'node:url'
 import {
   concreteArray,
   concreteNull,
@@ -12,6 +15,7 @@ import {
   type FunctionOverride,
   type Value,
 } from './layout-static-core'
+import * as ts from 'typescript'
 
 export type ConcreteValueExpr =
   | {kind: 'arg'; argIndex: number}
@@ -258,6 +262,41 @@ function getValueAtPath(root: Value, path: string[]) {
   return current
 }
 
+export async function loadStaticContractOverridesForSourceFile(sourceFilePath: string): Promise<Record<string, FunctionOverride>> {
+  const sourceText = readFileSync(sourceFilePath, 'utf8')
+  const sourceFile = ts.createSourceFile(sourceFilePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const specs: Record<string, ConcreteContractSpec> = {}
+
+  const ownSidecar = await loadStaticContractsModule(toStaticContractsPath(sourceFilePath))
+  if (ownSidecar != null) mergeContractSpecs(specs, ownSidecar, sourceFilePath)
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
+    const specifier = statement.moduleSpecifier.text
+    if (!specifier.startsWith('.')) continue
+
+    const importClause = statement.importClause
+    const namedBindings = importClause?.namedBindings
+    if (namedBindings == null || !ts.isNamedImports(namedBindings)) continue
+
+    const importedModulePath = resolveRelativeModulePath(sourceFilePath, specifier)
+    if (importedModulePath == null) continue
+    const importedSidecar = await loadStaticContractsModule(toStaticContractsPath(importedModulePath))
+    if (importedSidecar == null) continue
+
+    const localSpecs: Record<string, ConcreteContractSpec> = {}
+    for (const element of namedBindings.elements) {
+      const importedName = element.propertyName?.text ?? element.name.text
+      const localName = element.name.text
+      const contract = importedSidecar[importedName]
+      if (contract != null) localSpecs[localName] = contract
+    }
+    mergeContractSpecs(specs, localSpecs, importedModulePath)
+  }
+
+  return buildConcreteContractOverrides(specs)
+}
+
 function evaluateConcreteValueExpr(expression: ConcreteValueExpr, args: Value[]): Value {
   switch (expression.kind) {
     case 'arg':
@@ -285,5 +324,40 @@ function evaluateConcreteValueExpr(expression: ConcreteValueExpr, args: Value[])
       const right = expectConcreteNumber(evaluateConcreteValueExpr(expression.right, args))
       return concreteNumber(left * right)
     }
+  }
+}
+
+function toStaticContractsPath(sourceFilePath: string) {
+  const extension = path.extname(sourceFilePath)
+  return sourceFilePath.slice(0, -extension.length) + '.static-contracts.ts'
+}
+
+function resolveRelativeModulePath(sourceFilePath: string, specifier: string) {
+  const absoluteBase = path.resolve(path.dirname(sourceFilePath), specifier)
+  const candidates = [
+    absoluteBase + '.ts',
+    absoluteBase + '.tsx',
+    path.join(absoluteBase, 'index.ts'),
+    path.join(absoluteBase, 'index.tsx'),
+  ]
+  return candidates.find(candidate => existsSync(candidate)) ?? null
+}
+
+async function loadStaticContractsModule(modulePath: string): Promise<Record<string, ConcreteContractSpec> | null> {
+  if (!existsSync(modulePath)) return null
+  const module = await import(pathToFileURL(modulePath).href) as {
+    staticLayoutContracts?: Record<string, ConcreteContractSpec>
+  }
+  return module.staticLayoutContracts ?? null
+}
+
+function mergeContractSpecs(
+  target: Record<string, ConcreteContractSpec>,
+  incoming: Record<string, ConcreteContractSpec>,
+  modulePath: string,
+) {
+  for (const [name, spec] of Object.entries(incoming)) {
+    if (target[name] != null) throw new Error(`Duplicate static contract for ${name} while loading ${modulePath}`)
+    target[name] = spec
   }
 }

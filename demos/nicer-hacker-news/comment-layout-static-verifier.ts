@@ -11,15 +11,18 @@ import {
   expectConcreteNumber,
   expectObject,
   getProp,
+  type FunctionOverride,
   type InternalLawSummary,
   LoweredProgramAnalyzer,
   type StaticLayoutVerificationReport,
 } from '../layout-static-core'
-import {buildConcreteContractOverrides} from '../layout-static-contracts'
-import {staticLayoutContracts} from './hn-comment-layout.static-contracts'
+import {loadStaticContractOverridesForSourceFile} from '../layout-static-contracts'
 
-export function runHNCommentLayoutStaticVerification(sourceText: string): StaticLayoutVerificationReport {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {}, buildConcreteContractOverrides(staticLayoutContracts), {
+export function runHNCommentLayoutStaticVerification(
+  sourceText: string,
+  autoContractOverrides: Record<string, FunctionOverride> = {},
+): StaticLayoutVerificationReport {
+  const analyzer = new LoweredProgramAnalyzer(sourceText, {}, autoContractOverrides, {
     includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'findHNCommentTextRects', 'findHNCommentTextOffsetInEmptySpace'],
   })
   const laws = new Map<string, InternalLawSummary>()
@@ -29,6 +32,14 @@ export function runHNCommentLayoutStaticVerification(sourceText: string): Static
   verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer, laws)
 
   return buildStaticLayoutReport('nicer-hacker-news-comment-static-layout', 'demos/nicer-hacker-news/hn-comment-layout.ts', laws)
+}
+
+export async function runHNCommentLayoutStaticVerificationForSourceFile(sourceFilePath: string): Promise<StaticLayoutVerificationReport> {
+  const [sourceText, autoContractOverrides] = await Promise.all([
+    Bun.file(sourceFilePath).text(),
+    loadStaticContractOverridesForSourceFile(sourceFilePath),
+  ])
+  return runHNCommentLayoutStaticVerification(sourceText, autoContractOverrides)
 }
 
 function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {

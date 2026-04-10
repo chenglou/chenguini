@@ -24,6 +24,7 @@ import {
   joinRangeCases,
   LoweredProgramAnalyzer,
   rangeNumber,
+  type FunctionOverride,
   type StaticLayoutVerificationReport,
   symbolicExprEquals,
   symbolicNumber,
@@ -31,34 +32,49 @@ import {
   symbolicOpaque,
   type Value,
 } from '../layout-static-core'
-import {buildConcreteContractOverrides} from '../layout-static-contracts'
-import {staticLayoutContracts as promptLayoutContracts} from './prompt-layout.static-contracts'
+import {loadStaticContractOverridesForSourceFile} from '../layout-static-contracts'
 
-export function runPhotoGalleryStaticVerification(sourceText: string): StaticLayoutVerificationReport {
+export function runPhotoGalleryStaticVerification(
+  sourceText: string,
+  autoContractOverrides: Record<string, FunctionOverride> = {},
+): StaticLayoutVerificationReport {
   const analyzer = new LoweredProgramAnalyzer(sourceText, {
     prompt1DLineHeight,
     prompt2DLineHeight,
     prompt2DMaxLines,
     promptPaddingBottom,
-  })
+  }, autoContractOverrides)
   const laws = new Map<string, InternalLawSummary>()
 
   verifyMakeItemLayoutGeometry(analyzer, laws)
-  verifyGetLineLayoutConcrete(sourceText, laws)
-  verifyGetGridLayoutConcrete(sourceText, laws)
+  verifyGetLineLayoutConcrete(sourceText, autoContractOverrides, laws)
+  verifyGetGridLayoutConcrete(sourceText, autoContractOverrides, laws)
   verifyColsBoxMaxSizeXFRange(analyzer, laws)
   verifyColsBoxMaxSizeXF(analyzer, laws)
 
   return buildStaticLayoutReport('photo-gallery-static-layout', 'demos/photo-gallery/layout-model.ts', laws)
 }
 
-function verifyGetLineLayoutConcrete(sourceText: string, laws: Map<string, InternalLawSummary>) {
+export async function runPhotoGalleryStaticVerificationForSourceFile(sourceFilePath: string): Promise<StaticLayoutVerificationReport> {
+  const [sourceText, autoContractOverrides] = await Promise.all([
+    Bun.file(sourceFilePath).text(),
+    loadStaticContractOverridesForSourceFile(sourceFilePath),
+  ])
+  return runPhotoGalleryStaticVerification(sourceText, autoContractOverrides)
+}
+
+function verifyGetLineLayoutConcrete(
+  sourceText: string,
+  autoContractOverrides: Record<string, FunctionOverride>,
+  laws: Map<string, InternalLawSummary>,
+) {
   const analyzer = new LoweredProgramAnalyzer(sourceText, {
     prompt1DLineHeight,
     prompt2DLineHeight,
     prompt2DMaxLines,
     promptPaddingBottom,
   }, {
+    ...autoContractOverrides,
     get1DItemSize: {
       evaluate(args, mode) {
         if (mode !== 'concrete') throw new Error('get1DItemSize override only supports concrete mode')
@@ -189,13 +205,17 @@ function verifyGetLineLayoutConcrete(sourceText: string, laws: Map<string, Inter
   }
 }
 
-function verifyGetGridLayoutConcrete(sourceText: string, laws: Map<string, InternalLawSummary>) {
+function verifyGetGridLayoutConcrete(
+  sourceText: string,
+  autoContractOverrides: Record<string, FunctionOverride>,
+  laws: Map<string, InternalLawSummary>,
+) {
   const analyzer = new LoweredProgramAnalyzer(sourceText, {
     prompt1DLineHeight,
     prompt2DLineHeight,
     prompt2DMaxLines,
     promptPaddingBottom,
-  }, buildConcreteContractOverrides(promptLayoutContracts))
+  }, autoContractOverrides)
 
   const layoutSources = concreteArray([
     concreteObject({ar: concreteNumber(1), naturalSizeX: concreteNumber(400), preparedPrompt: concreteNull('concrete')}),
