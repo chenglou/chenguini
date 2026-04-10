@@ -3,6 +3,12 @@ import {runHNCommentLayoutStaticVerification} from './nicer-hacker-news/comment-
 import {runNicerHackerNewsStaticVerification} from './nicer-hacker-news/layout-static-verifier.ts'
 import {runPhotoGalleryStaticVerification} from './photo-gallery/layout-static-verifier.ts'
 
+function replaceOnce(source, from, to) {
+  const next = source.replace(from, to)
+  expect(next).not.toBe(source)
+  return next
+}
+
 test('photo-gallery static verifier keeps its current proof surface', async () => {
   const source = await Bun.file(new URL('./photo-gallery/layout-model.ts', import.meta.url)).text()
   const report = runPhotoGalleryStaticVerification(source)
@@ -28,4 +34,43 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
   expect(report.phase).toBe('ready')
   expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes')?.status).toBe('pass')
   expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps')?.checks).toBe(2)
+})
+
+test('photo-gallery verifier catches broken track-fill math', async () => {
+  const source = await Bun.file(new URL('./photo-gallery/layout-model.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'const boxMaxSizeX = (containerSizeX - boxesGapX - cols * boxesGapX) / cols',
+    'const boxMaxSizeX = containerSizeX / cols',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(report.laws.find(law => law.name === 'colsBoxMaxSizeXF exactly fills the horizontal track')?.status).toBe('fail')
+})
+
+test('HN row verifier catches broken comment width math', async () => {
+  const source = await Bun.file(new URL('./nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'width: row.commentLayout.width + params.commentRightGap,',
+    'width: row.commentLayout.width - params.commentRightGap,',
+  )
+  const report = runNicerHackerNewsStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(report.laws.find(law => law.name === 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('fail')
+})
+
+test('HN comment verifier catches a broken minimum width clamp', async () => {
+  const source = await Bun.file(new URL('./nicer-hacker-news/hn-comment-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'const safeWidth = Math.max(1, maxWidth)',
+    'const safeWidth = Math.max(2, maxWidth)',
+  )
+  const report = runHNCommentLayoutStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(report.laws.find(law => law.name === 'layoutPreparedHNCommentDoc clamps width to at least one pixel')?.status).toBe('fail')
 })
