@@ -118,6 +118,24 @@ It should not:
 
 The runner should feel dumb on purpose.
 
+## Temporary Preservation Diffs Are Narrower
+
+For a one-off refactor question like "did any line or box move?", it is fine for the runner to dump rects directly.
+
+Good:
+
+- open the old code, record item, line, or token rects
+- open the new code, record again
+- diff the JSON on the same machine and browser
+- delete the bulky harness afterward
+
+Bad:
+
+- promoting that one-off dump into the permanent browser architecture
+- replacing a better page-owned semantic report with a DOM dump just because it was easy once
+
+This is a temporary preservation oracle, not the default answer to browser automation.
+
 ## One Page Run, One Browser Run
 
 Keep the page alive while the runner waits.
@@ -144,6 +162,32 @@ Bad:
 
 - 61 separate browser navigations for 61 widths
 - a runner loop that keeps refreshing the same page just to collect one more row
+
+## If JS Owns The Clock, Let The Page Expose Frame Sampling
+
+If the animation is stepped from JS time, don't make the runner guess with sleeps.
+
+Good page-owned API:
+
+- `setViewport(width, height)`
+- `scrollToY(y)`
+- `clickItem(id)`
+- `flushTo(ms)`
+- `sample()`
+
+Then the runner can do:
+
+1. set up one scenario
+2. flush to `t=16ms`, `t=64ms`, `settled`
+3. read one compact geometry report
+
+This is great for resize, anchoring, and transition bugs. The runner stays dumb. The page stays the only layout engine.
+
+Bad:
+
+- `await sleep(16)` and hoping you caught the right frame
+- screenshotting a transition and inferring geometry from pixels
+- runner-side math that tries to reconstruct where the item "must have been"
 
 ## Tiny CDP Poller Is Fine
 
@@ -234,6 +278,8 @@ Benchmark runs:
 - should not casually switch browser driver or browser mode without a fresh benchmark baseline
 
 Don't mix those goals by accident.
+
+For correctness runs, it is often enough to drive a manual page-owned clock and read semantic geometry. That is a different job from measuring real frame cadence.
 
 ## Fail Loudly On Drift
 

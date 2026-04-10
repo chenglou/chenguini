@@ -9,8 +9,8 @@ The short version is:
 - `todos/demo_templates/` is the architecture surface
 - extra prompt guidance is optional and mostly affects shape, not correctness
 
-For the exact default packet, see `minimum-viable-demo-spec.md`.
-For older packet variants and overlays, see `spec-writing-for-demos.md`.
+For the exact default packet, see `../../todos/minimum-viable-demo-spec.md`.
+For older packet variants and overlays, see `../../todos/spec-writing-for-demos.md`.
 
 ## Current Split
 
@@ -63,6 +63,25 @@ The last things to remove are still:
 - exact fragile seams like `caption click selects the full text`
 - exact browser-backed scenarios
 
+## Name The Proof Path
+
+When the fragile seam is line breaking, search highlight placement, or row hit testing, say who owns the base geometry.
+
+Good packet language:
+
+- `One pure layout helper owns row tops, comment boxes, block gaps, line rects, and fragment rects.`
+- `Render, hit testing, and search highlight consume those packets.`
+- `Native selection, caret placement, and link opening may stay browser seams.`
+- `Keep base geometry separate from animated visual geometry.`
+
+Bad packet language:
+
+- `replace the browser`
+- `use one layout path for measurement, but let CSS choose the visible line breaks`
+- `everything must share one generic rect type`
+
+This keeps the worker from stopping halfway through the ownership split.
+
 ## Templates
 
 Templates are useful, but the current evidence says they mainly help architecture shape.
@@ -97,6 +116,7 @@ Good examples:
 
 - `Keep scheduleRender, staged st.events, domCache, and end-of-render side effects together.`
 - `Keep pointer history, release velocity, settle, and just-released depth together.`
+- `If a gesture can start on browser chrome such as a scrollbar, store the raw press origin and let render decide whether to suppress content interactions.`
 
 What the experiments say so far:
 
@@ -142,9 +162,9 @@ What still feels narrower:
 
 ## Where The Research Lives
 
-For the current research summary, see `drafts/demos_with_specs/NOTES.md`.
+For the current research summary, see `../../todos/demos_with_specs/NOTES.md`.
 
 For the full chronology, including early misses and dead ends, see:
 
-- `drafts/demos_with_specs/NOTES_ARCHIVE.md`
-- `drafts/demos_with_specs/*/RESULTS.md`
+- `../../todos/demos_with_specs/NOTES_ARCHIVE.md`
+- `../../todos/demos_with_specs/*/RESULTS.md`

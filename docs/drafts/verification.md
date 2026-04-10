@@ -12,7 +12,7 @@ Examples:
 
 - If the bug is "this chip should never split", check fragment topology directly.
 - If the bug is "this card height drifted", compare height directly.
-- If the bug is "this browser flow should end on the same selected item", let the page compute that report itself. See `ai-automating-browsers.md`.
+- If the bug is "this browser flow should end on the same selected item", let the page compute that report itself. See `automating-browsers.md`.
 
 Don't force every demo or helper through one verifier shape.
 
@@ -122,6 +122,29 @@ Bad:
 
 A lot of animation regressions are "the base layout is right, but one child box teleported or overflowed during the handoff." Steady-state snapshots won't see that.
 
+## Resize Bugs Usually Need A Trajectory Report
+
+Resize bugs often start and end in the right place and only go wrong in the middle.
+
+Good:
+
+- sample `t=0`
+- sample `t=16ms`
+- sample `t=64ms`
+- sample `settled`
+- include the anchored item's viewport `y`
+- include same-row items' size and position
+
+Bad:
+
+- only checking the settled column count
+- only checking one screenshot after resize ends
+
+This catches bugs like:
+
+- "the anchored image starts at `40px`, dives offscreen, then comes back to `40px`"
+- "the first row keeps the same items but they pop to final size on frame `1`"
+
 ## Semantic Snapshots
 
 When you snapshot behavior, snapshot the semantics that matter.
@@ -199,6 +222,39 @@ This is often much better than a screenshot diff.
 Screenshots are still great for discovery and debugging. But the durable oracle should usually be a small geometry report the page computes itself.
 
 If the system does "measure first, then shrink/clamp in CSS", assume that is a verification smell until proven otherwise.
+
+## If JS Owns Text Geometry, Let One Proof Path Own It
+
+If JS layout computes line count or comment height, don't stop there. Also check the painted line fragments.
+
+Good proof path:
+
+- one pure layout helper returns `rowRect`, `commentRect`, `blockRects`, `lineRects`, `fragmentRects`
+- render projects those packets
+- hit testing and search highlight consume those same packets
+
+This does _not_ mean every subsystem shares one identical rect. It means there is one base geometry model.
+
+It is still fine to leave explicit browser seams for things like:
+
+- native selection and copy
+- caret placement from live DOM
+- link opening
+
+Good:
+
+- `lineCount`
+- `commentHeight`
+- `commentInnerWidth`
+- `widestRenderedLine`
+- one assertion like `widestRenderedLine <= commentInnerWidth`
+
+Bad:
+
+- only checking the container height
+- assuming the DOM text flow must match the layout helper because "the text is easy"
+
+This is how you catch "the comment height says `1` line but the last word wrapped anyway."
 
 ## Measurement Bug vs Policy Bug
 
@@ -370,8 +426,8 @@ It should not keep re-explaining:
 
 Keep that shared machinery in the docs so every new spec does not fork the repo's verification style.
 
-For how to run this workflow end to end, see `ai-demo-reconstruction.md`.
-For how to shape the demo packet itself, see `minimum-viable-demo-spec.md` and `spec-writing-for-demos.md`.
+For how to run this workflow end to end, see `demo-reconstruction.md`.
+For how to shape the demo packet itself, see `../../todos/minimum-viable-demo-spec.md` and `../../todos/spec-writing-for-demos.md`.
 
 ## What "Done" Means
 
