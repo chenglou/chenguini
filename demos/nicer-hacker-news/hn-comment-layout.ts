@@ -3,14 +3,14 @@ import {
   prepareRichInline,
   walkRichInlineLineRanges,
   type PreparedRichInline,
-} from '../../../pretext/src/rich-inline'
+} from '@chenglou/pretext/rich-inline'
 import {
   layoutNextLine,
   measureNaturalWidth,
   prepareWithSegments,
   type LayoutCursor,
   type PreparedTextWithSegments,
-} from '../../../pretext/src/layout'
+} from '@chenglou/pretext'
 import {type HNCommentDoc, type HNRun} from './hn-comment-parser'
 
 export const COMMENT_LINE_HEIGHT = 14
