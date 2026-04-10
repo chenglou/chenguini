@@ -31,6 +31,8 @@ import {
   symbolicOpaque,
   type Value,
 } from '../layout-static-core'
+import {buildConcreteContractOverrides} from '../layout-static-contracts'
+import {staticLayoutContracts as promptLayoutContracts} from './prompt-layout.static-contracts'
 
 export function runPhotoGalleryStaticVerification(sourceText: string): StaticLayoutVerificationReport {
   const analyzer = new LoweredProgramAnalyzer(sourceText, {
@@ -193,24 +195,7 @@ function verifyGetGridLayoutConcrete(sourceText: string, laws: Map<string, Inter
     prompt2DLineHeight,
     prompt2DMaxLines,
     promptPaddingBottom,
-  }, {
-    measurePromptLayout: {
-      evaluate(args, mode) {
-        if (mode !== 'concrete') throw new Error('measurePromptLayout override only supports concrete mode')
-        const width = expectConcreteNumber(args[1]!)
-        const lineHeight = expectConcreteNumber(args[3]!)
-        const visibleHeight = lineHeight * 2
-        return [{
-          constraints: [],
-          value: concreteObject({
-            width: concreteNumber(width),
-            visibleHeight: concreteNumber(visibleHeight),
-            lines: concreteArray([]),
-          }),
-        }]
-      },
-    },
-  })
+  }, buildConcreteContractOverrides(promptLayoutContracts))
 
   const layoutSources = concreteArray([
     concreteObject({ar: concreteNumber(1), naturalSizeX: concreteNumber(400), preparedPrompt: concreteNull('concrete')}),

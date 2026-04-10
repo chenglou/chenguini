@@ -102,6 +102,35 @@ The useful split is:
 - callback helpers get explicit contracts
 - browser seams stay outside the proved zone
 
+## Ship Opaque Contracts As Data
+
+If a helper is opaque to the analyzer, don't make every verifier hand-write a custom callback for it forever.
+
+Prefer a small contract file the library can ship as data.
+
+For example:
+
+```ts
+export const staticLayoutContracts = {
+  walkVisibleLines: contract.forEachArrayItem(0, ['lineRanges'], 2),
+  layoutNextLine: contract.lookupArrayItem(0, ['lines'], 1, ['segmentIndex'], {defaultNull: true}),
+}
+```
+
+For example, a text library could ship facts like:
+
+- `walkVisibleLines(...)` calls its callback once per visible line range
+- `layoutNextLine(...)` returns `lines[cursor.segmentIndex]` or `null`
+- `measureFragmentTextWidth(fragment, text)` is proportional to `text.length` in a synthetic verifier mode
+
+That keeps the analyzer generic:
+
+- the core understands language semantics
+- the library ships its own opaque contracts
+- app code stays ordinary
+
+This is closer to a semantic `.d.ts` than a hard-coded verifier plugin.
+
 ## Start Narrow, Then Widen
 
 Start with the smallest repro you can trust.

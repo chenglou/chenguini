@@ -10,113 +10,16 @@ import {
   expectArray,
   expectConcreteNumber,
   expectObject,
-  expectString,
   getProp,
   type InternalLawSummary,
-  invokeConcreteFunctionValue,
   LoweredProgramAnalyzer,
   type StaticLayoutVerificationReport,
 } from '../layout-static-core'
+import {buildConcreteContractOverrides} from '../layout-static-contracts'
+import {staticLayoutContracts} from './hn-comment-layout.static-contracts'
 
 export function runHNCommentLayoutStaticVerification(sourceText: string): StaticLayoutVerificationReport {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {}, {
-    walkRichInlineLineRanges: {
-      evaluate(args, mode, context) {
-        if (mode !== 'concrete') throw new Error('walkRichInlineLineRanges override only supports concrete mode')
-        const flow = expectObject(args[0]!)
-        const callback = args[2]!
-        const lineRanges = expectArray(getProp(flow, 'lineRanges'))
-        let activeStates = [context.state]
-        for (let i = 0; i < lineRanges.items.length; i++) {
-          const nextStates = []
-          for (const state of activeStates) {
-            const callbackReturns = invokeConcreteFunctionValue(context.analyzer, state, callback, [lineRanges.items[i]!])
-            if (callbackReturns.length !== 1) throw new Error('walkRichInlineLineRanges callback must resolve to 1 case')
-            nextStates.push(callbackReturns[0]!.state)
-          }
-          activeStates = nextStates
-        }
-        return activeStates.map(state => ({
-          constraints: state.constraints,
-          env: state.env,
-          value: concreteNull('concrete'),
-        }))
-      },
-    },
-    materializeRichInlineLineRange: {
-      evaluate(args, mode, context) {
-        if (mode !== 'concrete') throw new Error('materializeRichInlineLineRange override only supports concrete mode')
-        return [{
-          constraints: context.state.constraints,
-          env: context.state.env,
-          value: args[1]!,
-        }]
-      },
-    },
-    layoutNextLine: {
-      evaluate(args, mode, context) {
-        if (mode !== 'concrete') throw new Error('layoutNextLine override only supports concrete mode')
-        const prepared = expectObject(args[0]!)
-        const cursor = expectObject(args[1]!)
-        const lines = expectArray(getProp(prepared, 'lines'))
-        const segmentIndex = expectConcreteNumber(getProp(cursor, 'segmentIndex'))
-        return [{
-          constraints: context.state.constraints,
-          env: context.state.env,
-          value: segmentIndex >= lines.items.length ? concreteNull('concrete') : lines.items[segmentIndex]!,
-        }]
-      },
-    },
-    measureFragmentTextWidth: {
-      evaluate(args, mode, context) {
-        if (mode !== 'concrete') throw new Error('measureFragmentTextWidth override only supports concrete mode')
-        const text = expectString(args[1]!)
-        return [{
-          constraints: context.state.constraints,
-          env: context.state.env,
-          value: concreteNumber(text.value.length * 10),
-        }]
-      },
-    },
-    pushMergedRect: {
-      evaluate(args, mode, context) {
-        if (mode !== 'concrete') throw new Error('pushMergedRect override only supports concrete mode')
-        const rects = expectArray(args[0]!)
-        const next = expectObject(args[1]!)
-        const previous = rects.items.at(-1)
-        if (previous != null) {
-          const previousRect = expectObject(previous)
-          const previousTop = expectConcreteNumber(getProp(previousRect, 'top'))
-          const previousHeight = expectConcreteNumber(getProp(previousRect, 'height'))
-          const previousLeft = expectConcreteNumber(getProp(previousRect, 'left'))
-          const previousWidth = expectConcreteNumber(getProp(previousRect, 'width'))
-          const nextTop = expectConcreteNumber(getProp(next, 'top'))
-          const nextHeight = expectConcreteNumber(getProp(next, 'height'))
-          const nextLeft = expectConcreteNumber(getProp(next, 'left'))
-          const nextWidth = expectConcreteNumber(getProp(next, 'width'))
-          if (
-            previousTop === nextTop &&
-            previousHeight === nextHeight &&
-            Math.abs(previousLeft + previousWidth - nextLeft) < 0.5
-          ) {
-            previousRect.props['width'] = concreteNumber(nextLeft + nextWidth - previousLeft)
-            return [{
-              constraints: context.state.constraints,
-              env: context.state.env,
-              value: concreteNull('concrete'),
-            }]
-          }
-        }
-
-        rects.items.push(next)
-        return [{
-          constraints: context.state.constraints,
-          env: context.state.env,
-          value: concreteNull('concrete'),
-        }]
-      },
-    },
-  }, {
+  const analyzer = new LoweredProgramAnalyzer(sourceText, {}, buildConcreteContractOverrides(staticLayoutContracts), {
     includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'findHNCommentTextRects', 'findHNCommentTextOffsetInEmptySpace'],
   })
   const laws = new Map<string, InternalLawSummary>()

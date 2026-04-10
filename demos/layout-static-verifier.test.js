@@ -6,6 +6,7 @@ import {
   invokeConcreteFunctionValue,
   LoweredProgramAnalyzer,
 } from './layout-static-core.ts'
+import {buildConcreteContractOverrides, contract, contractValue} from './layout-static-contracts.ts'
 import {runHNCommentLayoutStaticVerification} from './nicer-hacker-news/comment-layout-static-verifier.ts'
 import {runNicerHackerNewsStaticVerification} from './nicer-hacker-news/layout-static-verifier.ts'
 import {runPhotoGalleryStaticVerification} from './photo-gallery/layout-static-verifier.ts'
@@ -145,6 +146,32 @@ function demo() {
   expect(expectConcreteNumber(returns[0].value)).toBe(1)
 })
 
+test('declarative callback contracts thread outer local mutations back to the caller', () => {
+  const source = `
+function walk(flow, cb) {
+  cb(flow.items[0])
+}
+
+function demo() {
+  const flow = {items: [1]}
+  let total = 0
+  walk(flow, n => {
+    total += n
+  })
+  return total
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, buildConcreteContractOverrides({
+    walk: contract.forEachArrayItem(0, ['items'], 1),
+  }), {
+    includeFunctions: ['demo'],
+  })
+
+  const returns = analyzer.evaluateFunction('demo', [], 'concrete')
+  expect(returns).toHaveLength(1)
+  expect(expectConcreteNumber(returns[0].value)).toBe(1)
+})
+
 test('ordinary helper calls stay pure from the caller env point of view', () => {
   const source = `
 function plusOne(n: number) {
@@ -164,4 +191,30 @@ function demo() {
   const returns = analyzer.evaluateFunction('demo', [], 'concrete')
   expect(returns).toHaveLength(1)
   expect(expectConcreteNumber(returns[0].value)).toBe(3)
+})
+
+test('declarative return-value contracts can synthesize structured geometry', () => {
+  const source = `
+function measure(width, lineHeight) {
+  return null
+}
+
+function demo() {
+  const layout = measure(120, 14)
+  return layout.visibleHeight
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, buildConcreteContractOverrides({
+    measure: contract.returnValue(contractValue.object({
+      width: contractValue.arg(0),
+      visibleHeight: contractValue.mul(contractValue.arg(1), contractValue.number(2)),
+      lines: contractValue.array([]),
+    })),
+  }), {
+    includeFunctions: ['demo'],
+  })
+
+  const returns = analyzer.evaluateFunction('demo', [], 'concrete')
+  expect(returns).toHaveLength(1)
+  expect(expectConcreteNumber(returns[0].value)).toBe(28)
 })
