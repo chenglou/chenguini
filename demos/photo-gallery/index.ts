@@ -645,6 +645,12 @@ dummyPlaceholder.style.position = 'absolute'
 dummyPlaceholder.style.width = '1px' // make it tiny in case it affects compositing... sigh lamport.azurewebsites.net/pubs/future-of-computing.pdf
 document.body.append(dummyPlaceholder)
 const domCache = new Map<string, HTMLDivElement>() // cache lifetime: on visibility
+type PromptDOMStructure = {
+  selectionSourceNode: HTMLSpanElement
+  lineNodes: HTMLSpanElement[]
+  bodyFragmentNodes: HTMLElement[]
+}
+const promptDOMStructureByNode = new WeakMap<HTMLElement, PromptDOMStructure>()
 // oxlint-disable-next-line no-unnecessary-condition
 if (debug) {
   document.documentElement.style.background = 'repeating-linear-gradient(#e66465 0px, #9198e5 300px)'
@@ -661,12 +667,13 @@ function promptRenderKey(prompt: PromptGeometry) {
 
 function syncPromptNode(promptNode: HTMLElement, prompt: PromptGeometry, fullPromptText: string) {
   const renderKey = promptRenderKey(prompt)
-  const existingSelectionSource = promptNode.querySelector('.prompt-selection-source')
+  const existingSelectionSource = promptDOMStructureByNode.get(promptNode)?.selectionSourceNode
   if (promptNode.dataset['renderKey'] === renderKey && existingSelectionSource?.textContent === fullPromptText) return
 
   const selectionSourceNode = document.createElement('span')
   selectionSourceNode.className = 'prompt-selection-source'
   selectionSourceNode.textContent = fullPromptText
+  const bodyFragmentNodes: HTMLElement[] = []
   const lineNodes = prompt.lines.map((line, lineIndex) => {
     const lineNode = document.createElement('span')
     lineNode.className = 'prompt-line'
@@ -680,17 +687,25 @@ function syncPromptNode(promptNode: HTMLElement, prompt: PromptGeometry, fullPro
         : 'prompt-fragment prompt-fragment--body'
       if (fragment.gapBefore !== 0) fragmentNode.style.marginLeft = `${fragment.gapBefore}px`
       fragmentNode.textContent = fragment.text
+      if (fragment.itemIndex !== 0) bodyFragmentNodes.push(fragmentNode)
       lineNode.append(fragmentNode)
     }
     return lineNode
   })
 
   promptNode.replaceChildren(selectionSourceNode, ...lineNodes)
+  promptDOMStructureByNode.set(promptNode, {
+    selectionSourceNode,
+    lineNodes,
+    bodyFragmentNodes,
+  })
   promptNode.dataset['renderKey'] = renderKey
 }
 
 function getPromptSelectionTarget(promptTarget: Element): SelectTarget {
-  const selectionSourceNode = promptTarget.querySelector('.prompt-selection-source')?.firstChild
+  if (!(promptTarget instanceof HTMLElement)) return {node: promptTarget}
+  const promptDOMStructure = promptDOMStructureByNode.get(promptTarget)
+  const selectionSourceNode = promptDOMStructure?.selectionSourceNode.firstChild
   if (selectionSourceNode != null) {
     return {
       startNode: selectionSourceNode,
@@ -700,7 +715,7 @@ function getPromptSelectionTarget(promptTarget: Element): SelectTarget {
     }
   }
 
-  const bodyFragments = promptTarget.querySelectorAll('.prompt-fragment--body')
+  const bodyFragments = promptDOMStructure?.bodyFragmentNodes ?? []
   if (bodyFragments.length === 0) return {node: promptTarget}
 
   const firstNode = bodyFragments[0]!.firstChild ?? bodyFragments[0]!
@@ -1103,7 +1118,7 @@ function getResizeSampleItem(id: string, projection: ReturnType<typeof getCurren
   )
   const node = domCache.get(id)
   const promptNode = node == null ? null : node.children[1] as HTMLElement
-  const lineNodes = promptNode == null ? [] : [...promptNode.querySelectorAll<HTMLElement>('.prompt-line')]
+  const lineNodes = promptNode == null ? [] : (promptDOMStructureByNode.get(promptNode)?.lineNodes ?? [])
   const widestRenderedLine =
     lineNodes.length === 0 ? null : Math.max(...lineNodes.map(line => line.getBoundingClientRect().width))
   const promptInnerWidth =
