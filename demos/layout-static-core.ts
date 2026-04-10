@@ -46,6 +46,12 @@ export type NumberValue =
   | {kind: 'number'; mode: 'concrete'; value: number}
   | {kind: 'number'; mode: 'symbolic'; expr: ScalarExpr}
 
+export type StringValue = {
+  kind: 'string'
+  mode: 'concrete'
+  value: string
+}
+
 export type BooleanValue =
   | {kind: 'boolean'; mode: 'concrete'; value: boolean}
   | {kind: 'boolean'; mode: 'symbolic'; expr: BoolExpr}
@@ -86,7 +92,7 @@ export type NullValue = {
   mode: Mode
 }
 
-export type Value = NumberValue | BooleanValue | ObjectValue | ArrayValue | FunctionValue | OpaqueValue | NullValue
+export type Value = NumberValue | StringValue | BooleanValue | ObjectValue | ArrayValue | FunctionValue | OpaqueValue | NullValue
 
 export type RangeTruth = 'always-true' | 'always-false' | 'maybe'
 
@@ -119,8 +125,14 @@ export type RangeNullValue = {
 export type RangeValue = RangeNumberValue | RangeBooleanValue | RangeObjectValue | RangeOpaqueValue | RangeNullValue
 
 export type FunctionOverride = {
-  evaluate?: (args: Value[], mode: Mode) => ReturnCase[]
-  evaluateRange?: (args: RangeValue[]) => RangeReturnCase[]
+  evaluate?: (args: Value[], mode: Mode, context: {
+    analyzer: LoweredProgramAnalyzer
+    state: EvalState
+  }) => ReturnCase[]
+  evaluateRange?: (args: RangeValue[], context: {
+    analyzer: LoweredProgramAnalyzer
+    state: RangeState
+  }) => RangeReturnCase[]
 }
 
 export type RangeState = {
@@ -149,6 +161,7 @@ export type EvalCase = {
 
 export type ReturnCase = {
   constraints: BoolExpr[]
+  env?: Map<string, Value>
   value: Value
 }
 
@@ -189,6 +202,7 @@ type IrTerminator =
 
 type IrExpression =
   | {kind: 'number'; value: number}
+  | {kind: 'string'; value: string}
   | {kind: 'boolean'; value: boolean}
   | {kind: 'null'}
   | {kind: 'identifier'; name: string}
@@ -235,9 +249,14 @@ export class LoweredProgramAnalyzer {
   private readonly program: IrProgram
   private readonly overrides: Record<string, FunctionOverride>
 
-  constructor(sourceText: string, externalGlobals: Record<string, number>, overrides: Record<string, FunctionOverride> = {}) {
+  constructor(
+    sourceText: string,
+    externalGlobals: Record<string, number>,
+    overrides: Record<string, FunctionOverride> = {},
+    options: {includeFunctions?: string[]} = {},
+  ) {
     this.overrides = overrides
-    this.program = lowerSourceProgram(sourceText, externalGlobals)
+    this.program = lowerSourceProgram(sourceText, externalGlobals, options.includeFunctions ?? null)
   }
 
   getGlobalNumber(name: string) {
@@ -248,7 +267,10 @@ export class LoweredProgramAnalyzer {
 
   evaluateFunction(name: string, args: Value[], mode: Mode): ReturnCase[] {
     const override = this.overrides[name]?.evaluate
-    if (override != null) return override(args, mode)
+    if (override != null) return override(args, mode, {
+      analyzer: this,
+      state: {mode, constraints: [], env: new Map()},
+    })
 
     const fn = this.program.functions.get(name)
     if (fn == null) throw new Error(`Function ${name} not found`)
@@ -263,7 +285,10 @@ export class LoweredProgramAnalyzer {
 
   evaluateFunctionRange(name: string, args: RangeValue[]): RangeReturnCase[] {
     const override = this.overrides[name]?.evaluateRange
-    if (override != null) return override(args)
+    if (override != null) return override(args, {
+      analyzer: this,
+      state: {env: new Map()},
+    })
 
     const fn = this.program.functions.get(name)
     if (fn == null) throw new Error(`Function ${name} not found`)
@@ -280,6 +305,8 @@ export class LoweredProgramAnalyzer {
     switch (expression.kind) {
       case 'number':
         return [{state, value: numberValue(state.mode, expression.value)}]
+      case 'string':
+        return [{state, value: concreteString(expression.value)}]
       case 'null':
         return [{state, value: concreteNull(state.mode)}]
       case 'boolean':
@@ -335,6 +362,8 @@ export class LoweredProgramAnalyzer {
           value:
             result.value.kind === 'array'
               ? getArrayProperty(result.value, expression.property)
+              : result.value.kind === 'string'
+                ? getStringProperty(result.value, expression.property)
               : getProp(expectObject(result.value), expression.property),
         }))
       }
@@ -343,11 +372,10 @@ export class LoweredProgramAnalyzer {
         const results: EvalCase[] = []
         for (const targetCase of targetCases) {
           for (const evaluatedIndex of this.evalExpression(targetCase.state, expression.index)) {
-            const array = expectArray(targetCase.value)
             const index = expectConcreteNumber(evaluatedIndex.value)
             results.push({
               state: evaluatedIndex.state,
-              value: getArrayItem(array, index),
+              value: getIndexableItem(targetCase.value, index),
             })
           }
         }
@@ -443,6 +471,8 @@ export class LoweredProgramAnalyzer {
     switch (expression.kind) {
       case 'number':
         return [{state, value: rangeNumber(expression.value, expression.value, Number.isInteger(expression.value))}]
+      case 'string':
+        throw new Error('Range strings are not supported yet')
       case 'null':
         return [{state, value: rangeNull()}]
       case 'boolean':
@@ -548,10 +578,40 @@ export function buildStaticLayoutReport(suite: string, analyzedFile: string, law
   }
 }
 
-function lowerSourceProgram(sourceText: string, externalGlobals: Record<string, number>): IrProgram {
+export function invokeConcreteFunctionValue(
+  analyzer: LoweredProgramAnalyzer,
+  outerState: EvalState,
+  callbackValue: Value,
+  args: Value[],
+): EvalCase[] {
+  const callback = expectFunction(callbackValue)
+  const env = new Map(callback.closure)
+  for (const [name, value] of outerState.env) env.set(name, value)
+  for (let i = 0; i < callback.fn.params.length; i++) {
+    const arg = args[i]
+    if (arg == null) break
+    env.set(callback.fn.params[i]!, arg)
+  }
+  const returns = executeFunctionBlocks(analyzer, callback.fn, [{
+    mode: outerState.mode,
+    constraints: outerState.constraints,
+    env,
+  }])
+  return returns.map(returned => ({
+    state: {
+      ...outerState,
+      constraints: returned.constraints,
+      env: returned.env ?? env,
+    },
+    value: returned.value,
+  }))
+}
+
+function lowerSourceProgram(sourceText: string, externalGlobals: Record<string, number>, includeFunctions: string[] | null): IrProgram {
   const sourceFile = ts.createSourceFile('layout-source.ts', sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const globals = new Map<string, number>()
   const functions = new Map<string, IrFunction>()
+  const allowedFunctions = includeFunctions == null ? null : new Set(includeFunctions)
 
   for (const statement of sourceFile.statements) {
     if (ts.isVariableStatement(statement)) {
@@ -564,6 +624,7 @@ function lowerSourceProgram(sourceText: string, externalGlobals: Record<string, 
     }
 
     if (ts.isFunctionDeclaration(statement) && statement.name != null && statement.body != null) {
+      if (allowedFunctions != null && !allowedFunctions.has(statement.name.text)) continue
       functions.set(statement.name.text, lowerFunction(statement.name.text, statement.parameters, statement.body.statements))
     }
   }
@@ -579,7 +640,7 @@ function lowerFunction(name: string, parameters: ts.NodeArray<ts.ParameterDeclar
     if (!ts.isIdentifier(parameter.name)) throw new Error(`Unsupported parameter pattern in ${name}`)
     return parameter.name.text
   })
-  const finalBlockId = lowerStatementsInto(context, entryBlockId, statements)
+  const finalBlockId = lowerStatementsInto(context, entryBlockId, statements, null)
   if (finalBlockId != null) ensureBlockTerminator(context, finalBlockId, {kind: 'end'})
   return {
     name,
@@ -597,7 +658,7 @@ function lowerInlineFunction(parameters: ts.NodeArray<ts.ParameterDeclaration>, 
     return parameter.name.text
   })
   if (ts.isBlock(body)) {
-    const finalBlockId = lowerStatementsInto(context, entryBlockId, body.statements)
+    const finalBlockId = lowerStatementsInto(context, entryBlockId, body.statements, null)
     if (finalBlockId != null) ensureBlockTerminator(context, finalBlockId, {kind: 'end'})
   } else {
     context.getBlock(entryBlockId).terminator = {kind: 'return', expression: lowerExpression(body)}
@@ -638,16 +699,26 @@ class LoweringContext {
   }
 }
 
-function lowerStatementsInto(context: LoweringContext, initialBlockId: string | null, statements: readonly ts.Statement[]): string | null {
+function lowerStatementsInto(
+  context: LoweringContext,
+  initialBlockId: string | null,
+  statements: readonly ts.Statement[],
+  breakTargetBlockId: string | null,
+): string | null {
   let currentBlockId = initialBlockId
   for (const statement of statements) {
     if (currentBlockId == null) break
-    currentBlockId = lowerStatementInto(context, currentBlockId, statement)
+    currentBlockId = lowerStatementInto(context, currentBlockId, statement, breakTargetBlockId)
   }
   return currentBlockId
 }
 
-function lowerStatementInto(context: LoweringContext, currentBlockId: string, statement: ts.Statement): string | null {
+function lowerStatementInto(
+  context: LoweringContext,
+  currentBlockId: string,
+  statement: ts.Statement,
+  breakTargetBlockId: string | null,
+): string | null {
   const block = context.getBlock(currentBlockId)
 
   if (ts.isVariableStatement(statement)) {
@@ -679,7 +750,7 @@ function lowerStatementInto(context: LoweringContext, currentBlockId: string, st
   }
 
   if (ts.isBlock(statement)) {
-    return lowerStatementsInto(context, currentBlockId, statement.statements)
+    return lowerStatementsInto(context, currentBlockId, statement.statements, breakTargetBlockId)
   }
 
   if (ts.isIfStatement(statement)) {
@@ -694,16 +765,58 @@ function lowerStatementInto(context: LoweringContext, currentBlockId: string, st
       elseBlockId,
     })
 
-    const thenExit = lowerStatementInto(context, thenBlockId, statement.thenStatement)
+    const thenExit = lowerStatementInto(context, thenBlockId, statement.thenStatement, breakTargetBlockId)
     if (thenExit != null) ensureBlockTerminator(context, thenExit, {kind: 'goto', targetBlockId: joinBlockId})
 
     const elseExit =
       statement.elseStatement == null
         ? elseBlockId
-        : lowerStatementInto(context, elseBlockId, statement.elseStatement)
+        : lowerStatementInto(context, elseBlockId, statement.elseStatement, breakTargetBlockId)
     if (elseExit != null) ensureBlockTerminator(context, elseExit, {kind: 'goto', targetBlockId: joinBlockId})
 
     return joinBlockId
+  }
+
+  if (ts.isSwitchStatement(statement)) {
+    const afterSwitchBlockId = context.createBlock('switch_after')
+    const defaultClause = statement.caseBlock.clauses.find(clause => ts.isDefaultClause(clause)) ?? null
+    const caseClauses = statement.caseBlock.clauses.filter(clause => ts.isCaseClause(clause))
+    let currentTestBlockId = currentBlockId
+
+    for (let i = 0; i < caseClauses.length; i++) {
+      const clause = caseClauses[i]!
+      const clauseBlockId = context.createBlock('switch_case')
+      const nextTestBlockId =
+        i === caseClauses.length - 1
+          ? defaultClause == null ? afterSwitchBlockId : context.createBlock('switch_default_test')
+          : context.createBlock('switch_test')
+      ensureBlockTerminator(context, currentTestBlockId, {
+        kind: 'branch',
+        condition: {
+          kind: 'binary',
+          operator: '===',
+          left: lowerExpression(statement.expression),
+          right: lowerExpression(clause.expression),
+        },
+        thenBlockId: clauseBlockId,
+        elseBlockId: nextTestBlockId,
+      })
+
+      const clauseExit = lowerStatementsInto(context, clauseBlockId, stripTrailingCaseBreak(clause.statements), afterSwitchBlockId)
+      if (clauseExit != null) ensureBlockTerminator(context, clauseExit, {kind: 'goto', targetBlockId: afterSwitchBlockId})
+      currentTestBlockId = nextTestBlockId
+    }
+
+    if (defaultClause != null) {
+      const defaultBlockId = context.createBlock('switch_default')
+      ensureBlockTerminator(context, currentTestBlockId, {kind: 'goto', targetBlockId: defaultBlockId})
+      const defaultExit = lowerStatementsInto(context, defaultBlockId, stripTrailingCaseBreak(defaultClause.statements), afterSwitchBlockId)
+      if (defaultExit != null) ensureBlockTerminator(context, defaultExit, {kind: 'goto', targetBlockId: afterSwitchBlockId})
+    } else if (caseClauses.length === 0) {
+      ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: afterSwitchBlockId})
+    }
+
+    return afterSwitchBlockId
   }
 
   if (ts.isForStatement(statement)) {
@@ -745,7 +858,7 @@ function lowerStatementInto(context: LoweringContext, currentBlockId: string, st
             elseBlockId: afterBlockId,
           }
 
-    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement)
+    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId)
     if (bodyExit != null) ensureBlockTerminator(context, bodyExit, {kind: 'goto', targetBlockId: incrementBlockId})
 
     const incrementBlock = context.getBlock(incrementBlockId)
@@ -774,12 +887,24 @@ function lowerStatementInto(context: LoweringContext, currentBlockId: string, st
       elseBlockId: afterBlockId,
     }
 
-    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement)
+    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId)
     if (bodyExit != null) ensureBlockTerminator(context, bodyExit, {kind: 'goto', targetBlockId: conditionBlockId})
     return afterBlockId
   }
 
+  if (ts.isBreakStatement(statement)) {
+    if (breakTargetBlockId == null) throw new Error('Break statement is only supported inside loop/switch lowering')
+    ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: breakTargetBlockId})
+    return null
+  }
+
   throw new Error(`Unsupported statement kind while lowering: ${ts.SyntaxKind[statement.kind]}`)
+}
+
+function stripTrailingCaseBreak(statements: readonly ts.Statement[]) {
+  if (statements.length === 0) return statements
+  const last = statements[statements.length - 1]!
+  return ts.isBreakStatement(last) ? statements.slice(0, -1) : statements
 }
 
 function ensureBlockTerminator(context: LoweringContext, blockId: string, terminator: IrTerminator) {
@@ -812,6 +937,7 @@ function lowerExpression(expression: ts.Expression): IrExpression {
   if (ts.isAsExpression(expression)) return lowerExpression(expression.expression)
   if (ts.isSatisfiesExpression(expression)) return lowerExpression(expression.expression)
   if (ts.isNumericLiteral(expression)) return {kind: 'number', value: Number(expression.text)}
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return {kind: 'string', value: expression.text}
   if (expression.kind === ts.SyntaxKind.NullKeyword) return {kind: 'null'}
   if (expression.kind === ts.SyntaxKind.TrueKeyword) return {kind: 'boolean', value: true}
   if (expression.kind === ts.SyntaxKind.FalseKeyword) return {kind: 'boolean', value: false}
@@ -955,6 +1081,7 @@ function executeFunctionBlocks(analyzer: LoweredProgramAnalyzer, fn: InlineFunct
           for (const evaluated of analyzer.evalExpression(state, block.terminator.expression)) {
             returns.push({
               constraints: evaluated.state.constraints,
+              env: evaluated.state.env,
               value: evaluated.value,
             })
           }
@@ -985,6 +1112,11 @@ function executeFunctionBlocks(analyzer: LoweredProgramAnalyzer, fn: InlineFunct
           break
         }
         case 'end':
+          returns.push({
+            constraints: state.constraints,
+            env: state.env,
+            value: concreteNull(state.mode),
+          })
           break
       }
     }
@@ -1235,7 +1367,10 @@ function evaluateCallExpression(analyzer: LoweredProgramAnalyzer, state: EvalSta
         let currentState = targetCase.state
         const mappedItems: Value[] = []
         for (let i = 0; i < array.items.length; i++) {
-          const callbackReturns = executeInlineConcreteCallback(analyzer, currentState, callback, array.items[i]!, i)
+          const callbackReturns = invokeConcreteFunctionValue(analyzer, currentState, callback, [
+            array.items[i]!,
+            concreteNumber(i),
+          ])
           if (callbackReturns.length !== 1) throw new Error('Concrete array.map callback must resolve to 1 case')
           currentState = callbackReturns[0]!.state
           mappedItems.push(callbackReturns[0]!.value)
@@ -1272,9 +1407,14 @@ function evaluateCallExpression(analyzer: LoweredProgramAnalyzer, state: EvalSta
   }
 
   if (callee.kind === 'identifier') {
+    const override = analyzer['overrides'][callee.name]?.evaluate
     const results: EvalCase[] = []
     for (const argumentCase of argumentCases) {
-      for (const returned of analyzer.evaluateFunction(callee.name, argumentCase.values, argumentCase.state.mode)) {
+      const returnedCases =
+        override != null
+          ? override(argumentCase.values, argumentCase.state.mode, {analyzer, state: argumentCase.state})
+          : analyzer.evaluateFunction(callee.name, argumentCase.values, argumentCase.state.mode)
+      for (const returned of returnedCases) {
         results.push({
           state: {
             ...argumentCase.state,
@@ -1314,9 +1454,14 @@ function evaluateRangeCallExpression(analyzer: LoweredProgramAnalyzer, state: Ra
   }
 
   if (callee.kind === 'identifier') {
+    const override = analyzer['overrides'][callee.name]?.evaluateRange
     const results: RangeEvalCase[] = []
     for (const argumentCase of argumentCases) {
-      for (const returned of analyzer.evaluateFunctionRange(callee.name, argumentCase.values)) {
+      const returnedCases =
+        override != null
+          ? override(argumentCase.values, {analyzer, state: argumentCase.state})
+          : analyzer.evaluateFunctionRange(callee.name, argumentCase.values)
+      for (const returned of returnedCases) {
         results.push({
           state: argumentCase.state,
           value: returned.value,
@@ -1327,17 +1472,6 @@ function evaluateRangeCallExpression(analyzer: LoweredProgramAnalyzer, state: Ra
   }
 
   throw new Error('Unsupported range call expression')
-}
-
-function executeInlineConcreteCallback(analyzer: LoweredProgramAnalyzer, outerState: EvalState, callback: FunctionValue, item: Value, index: number): EvalCase[] {
-  const env = new Map(callback.closure)
-  if (callback.fn.params[0] != null) env.set(callback.fn.params[0], item)
-  if (callback.fn.params[1] != null) env.set(callback.fn.params[1], concreteNumber(index))
-  const returns = executeFunctionBlocks(analyzer, callback.fn, [{mode: 'concrete', constraints: outerState.constraints, env}])
-  return returns.map(returned => ({
-    state: {...outerState, constraints: returned.constraints},
-    value: returned.value,
-  }))
 }
 
 function evaluateMathCall(name: string, args: Value[], mode: Mode): Value {
@@ -1447,12 +1581,42 @@ function applyComparisonOperator(left: Value, right: Value, operator: Comparison
       if (left.mode !== 'concrete' || right.mode !== 'concrete') throw new Error(`Loose ${operator} is only supported in concrete mode`)
       return booleanValue('concrete', operator === '==' ? left.value === right.value : left.value !== right.value)
     }
-    throw new Error(`Loose ${operator} is only supported for numbers, booleans, and null checks`)
+    if (left.kind === 'string' && right.kind === 'string') {
+      return booleanValue('concrete', operator === '==' ? left.value === right.value : left.value !== right.value)
+    }
+    throw new Error(`Loose ${operator} is only supported for numbers, strings, booleans, and null checks`)
   }
 
-  if (left.kind !== 'number' || right.kind !== 'number') {
-    throw new Error(`Operator ${operator} expects numeric operands`)
+  if (operator === '===' || operator === '!==') {
+    if (left.kind === 'number' && right.kind === 'number') {
+      if (left.mode !== right.mode) throw new Error('Mixed concrete and symbolic comparison is not supported')
+      if (left.mode === 'concrete') {
+        const leftValue = expectConcreteNumberValue(left)
+        const rightValue = expectConcreteNumberValue(right)
+        return booleanValue('concrete', operator === '===' ? leftValue === rightValue : leftValue !== rightValue)
+      }
+      return symbolicBoolean({
+        kind: 'compare',
+        op: operator,
+        left: expectSymbolicNumberValue(left),
+        right: expectSymbolicNumberValue(right),
+      })
+    }
+    if (left.kind === 'string' && right.kind === 'string') {
+      return booleanValue('concrete', operator === '===' ? left.value === right.value : left.value !== right.value)
+    }
+    if (left.kind === 'boolean' && right.kind === 'boolean') {
+      if (left.mode !== 'concrete' || right.mode !== 'concrete') throw new Error(`Strict ${operator} is only supported in concrete boolean mode`)
+      return booleanValue('concrete', operator === '===' ? left.value === right.value : left.value !== right.value)
+    }
+    if (left.kind === 'null' || right.kind === 'null') {
+      const equal = left.kind === 'null' && right.kind === 'null'
+      return booleanValue('concrete', operator === '===' ? equal : !equal)
+    }
+    return booleanValue('concrete', operator === '!==')
   }
+
+  if (left.kind !== 'number' || right.kind !== 'number') throw new Error(`Operator ${operator} expects numeric operands`)
   if (left.mode !== right.mode) throw new Error('Mixed concrete and symbolic comparison is not supported')
   if (left.mode === 'concrete') {
     const leftValue = expectConcreteNumberValue(left)
@@ -1466,10 +1630,6 @@ function applyComparisonOperator(left: Value, right: Value, operator: Comparison
         return booleanValue('concrete', leftValue < rightValue)
       case '<=':
         return booleanValue('concrete', leftValue <= rightValue)
-      case '===':
-        return booleanValue('concrete', leftValue === rightValue)
-      case '!==':
-        return booleanValue('concrete', leftValue !== rightValue)
     }
   }
 
@@ -1603,10 +1763,21 @@ function getArrayProperty(array: ArrayValue, key: string) {
   throw new Error(`Unsupported array property: ${key}`)
 }
 
+function getStringProperty(value: StringValue, key: string) {
+  if (key === 'length') return concreteNumber(value.value.length)
+  throw new Error(`Unsupported string property: ${key}`)
+}
+
 function getArrayItem(array: ArrayValue, index: number) {
   const item = array.items[index]
   if (item == null) throw new Error(`Array index ${index} is out of bounds`)
   return item
+}
+
+function getIndexableItem(value: Value, index: number) {
+  if (value.kind === 'array') return getArrayItem(value, index)
+  if (value.kind === 'string') return concreteString(value.value[index] ?? '')
+  throw new Error(`Expected array or string index access, got ${value.kind}`)
 }
 
 function bindValueToName(env: Map<string, Value>, name: IrBindingName, value: Value) {
@@ -1655,6 +1826,10 @@ export function concreteNumber(value: number): NumberValue {
   return {kind: 'number', mode: 'concrete', value}
 }
 
+export function concreteString(value: string): StringValue {
+  return {kind: 'string', mode: 'concrete', value}
+}
+
 export function concreteNull(mode: Mode): NullValue {
   return {kind: 'null', mode}
 }
@@ -1697,6 +1872,11 @@ export function symbolicOpaque(label: string): OpaqueValue {
 
 export function expectNumber(value: Value): NumberValue {
   if (value.kind !== 'number') throw new Error(`Expected number, got ${value.kind}`)
+  return value
+}
+
+export function expectString(value: Value): StringValue {
+  if (value.kind !== 'string') throw new Error(`Expected string, got ${value.kind}`)
   return value
 }
 
