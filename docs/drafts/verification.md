@@ -216,6 +216,46 @@ Bad:
 
 A verifier that only ever sees passing examples is still mostly untested.
 
+## Automatic Mutation Coverage Tells You Where The Verifier Has Teeth
+
+Hand-written canaries prove the verifier can catch specific bugs you thought of. Automatic mutation coverage proves how much of the arithmetic surface the verifier actually guards.
+
+The idea: enumerate every numeric literal and arithmetic operator in the layout source, mutate each one systematically (`+1`, `-1`, `→0`, `+↔-`, `*↔/`), run the verifier on each mutated source, and count how many mutations it catches.
+
+What you learn:
+
+- a coverage number like "83/226 caught (36.7%)" that tells you something concrete about verification strength
+- a blind spot list grouped by cause: "global constants are not pinned", "1D layout is unverified", "clamp boundary mutations survive"
+- a target list for where new laws would have the most impact
+
+What makes this work:
+
+- the verifier already runs fast enough that 251 mutations finish in seconds
+- each mutation is a single text replacement at a known position, so crashes are isolated
+- missed mutations cluster by cause, not by position, so the report tells you what class of law is missing, not just which line
+
+What to watch out for:
+
+- constant mutations (say, gap `24` → `25`) often preserve structural relationships and pass all laws. That is not a verifier weakness -- it means the laws check structure, not magic numbers.
+- mutations that make the code crash before the verifier runs count as "crashed", not "missed". Those are fine.
+- the coverage number is a lower bound on verifier strength. It does not mean "36% of bugs would be caught", because real bugs are not uniformly distributed across arithmetic sites.
+
+Use the blind spot list to prioritize. Add one law, rerun the mutation sweep, and watch the number go up. The concrete anchor pattern works well: pin a known output at a known input so formula-level mutations break the pinned value.
+
+## Invariant Mining From Range Analysis
+
+If the verifier already runs an interval evaluator, the output bounds are free candidate laws.
+
+Run a layout function with wide input intervals (say, viewport width `320..1600`), read off the output, and report every fact the range evaluator can see: bounds, integrality, monotonicity, exact values.
+
+For `colsBoxMaxSizeXF([320, 1600])` the miner automatically discovers:
+
+- `cols` is always an integer in `[1, 6]`
+- `boxMaxSizeX` is non-negative (min: `25.3`)
+- `boxMaxSizeX ∈ [25.3, 1552]`
+
+These are facts the hand-written verifier already checks, but the miner finds them without any specs. The gap between what the miner discovers and what the hand-written laws assert is a map for where to invest next.
+
 ## Callback Helpers Are Effect Boundaries
 
 Keep ordinary helper calls pure from the caller's point of view.
