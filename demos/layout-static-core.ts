@@ -1432,7 +1432,17 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
   const leftCases = analyzer.evalRangeExpression(state, expression.left)
   const results: RangeEvalCase[] = []
   for (const leftCase of leftCases) {
-    if (expression.operator === '??') throw new Error('Range nullish coalescing is not supported yet')
+    if (expression.operator === '??') {
+      if (leftCase.value.kind !== 'range-null') {
+        results.push({
+          state: leftCase.state,
+          value: leftCase.value,
+        })
+        continue
+      }
+      results.push(...analyzer.evalRangeExpression(leftCase.state, expression.right))
+      continue
+    }
     if (expression.operator === '||' || expression.operator === '&&') {
       const left = expectRangeBoolean(leftCase.value)
       if ((expression.operator === '||' && left.truth === 'always-true') || (expression.operator === '&&' && left.truth === 'always-false')) {

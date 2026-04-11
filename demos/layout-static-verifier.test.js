@@ -76,6 +76,8 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')?.status).toBe('pass')
   expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')?.kind).toBe('range')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns exact offsets on seam intervals')?.status).toBe('pass')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns null inside line interiors over intervals')?.status).toBe('pass')
   expect(getLaw(report, 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes')?.status).toBe('pass')
   expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
   expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('pass')
@@ -252,6 +254,23 @@ test('HN comment verifier catches a broken midpoint decision in empty-space offs
 
   expect(report.phase).toBe('error')
   expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('fail')
+})
+
+test('HN comment verifier catches broken left-edge routing over intervals', async () => {
+  const sourceFilePath = new URL('./nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'if (x < 0) return line.textStart',
+    'if (x < 0) return line.textEnd',
+  )
+  const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns exact offsets on seam intervals')
+
+  expect(report.phase).toBe('error')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.scenario).toBe('inside_line_left')
 })
 
 test('callback overrides thread outer local mutations back to the caller', () => {

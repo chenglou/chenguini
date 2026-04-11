@@ -66,6 +66,33 @@ This matters for piecewise layout helpers because they often collapse back to th
 
 Without narrowing, those helpers look much fuzzier than the code really is.
 
+## Partition Interval Inputs By Seams
+
+For branchy geometry helpers, don't throw one giant interval at the whole function and hope for a sharp answer.
+
+Cut the input space at the geometric seams the code actually cares about.
+
+For example, a text-offset helper might care about four regions:
+
+- above the first line
+- inside a line but left of it
+- inside a line interior
+- below the last line
+
+Those are much better interval cases than one giant `x in -50..200`, `y in -20..80`.
+
+Good:
+
+- `x in -50..-1`, `y in 0..13` should route to the line start
+- `x in 111..200`, `y in 0..13` should route to the line end
+- `x in 0..100`, `y in 0..13` should return `null`
+
+Bad:
+
+- one wide interval that crosses left edge, interior, and right edge all at once
+
+This is still a real proof, not just fixture testing. The interval cases are chosen from the helper's geometry, not from arbitrary example points.
+
 ## What This Verifier Currently Proves
 
 Right now this prototype proves four kinds of things:

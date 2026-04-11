@@ -16,7 +16,9 @@ import {
   type InternalLawSummary,
   joinRangeCases,
   LoweredProgramAnalyzer,
+  rangeArray,
   rangeNumber,
+  rangeObject,
   rangeString,
   type StaticLayoutVerificationReport,
 } from '../layout-static-core'
@@ -34,6 +36,7 @@ export function runHNCommentLayoutStaticVerification(
   const laws = new Map<string, InternalLawSummary>()
 
   verifyLineBreakCharCountAtRange(analyzer, laws)
+  verifyFindHNCommentTextOffsetInEmptySpaceRange(analyzer, laws)
   verifyLayoutPreparedHNCommentDocConcrete(analyzer, laws)
   verifyFindHNCommentTextRectsConcrete(analyzer, laws)
   verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer, laws)
@@ -72,6 +75,42 @@ function verifyLineBreakCharCountAtRange(analyzer: LoweredProgramAnalyzer, laws:
       expected: scenario.expected,
     }), 'range')
   }
+}
+
+function verifyFindHNCommentTextOffsetInEmptySpaceRange(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const layout = makeRangeCommentLayoutFixture()
+  const seamScenarios = [
+    {label: 'before_first_line', x: rangeNumber(0, 200, true), y: rangeNumber(-20, -1, true), expected: 0},
+    {label: 'inside_line_left', x: rangeNumber(-50, -1, true), y: rangeNumber(0, 13, true), expected: 0},
+    {label: 'inside_line_right', x: rangeNumber(111, 200, true), y: rangeNumber(0, 13, true), expected: 11},
+    {label: 'between_lines_upper_half', x: rangeNumber(0, 200, true), y: rangeNumber(14, 16, true), expected: 11},
+    {label: 'between_lines_lower_half', x: rangeNumber(0, 200, true), y: rangeNumber(17, 19, true), expected: 12},
+    {label: 'below_last_line', x: rangeNumber(0, 200, true), y: rangeNumber(35, 80, true), expected: 16},
+  ]
+
+  for (const scenario of seamScenarios) {
+    const result = joinRangeCases(analyzer.evaluateFunctionRange('findHNCommentTextOffsetInEmptySpace', [
+      layout,
+      scenario.x,
+      scenario.y,
+    ]))
+    const offset = expectRangeNumber(result)
+    check(laws, 'findHNCommentTextOffsetInEmptySpace returns exact offsets on seam intervals', offset.min === scenario.expected && offset.max === scenario.expected, () => ({
+      scenario: scenario.label,
+      offsetMin: offset.min,
+      offsetMax: offset.max,
+      expected: scenario.expected,
+    }), 'range')
+  }
+
+  const interior = joinRangeCases(analyzer.evaluateFunctionRange('findHNCommentTextOffsetInEmptySpace', [
+    layout,
+    rangeNumber(0, 100, true),
+    rangeNumber(0, 13, true),
+  ]))
+  check(laws, 'findHNCommentTextOffsetInEmptySpace returns null inside line interiors over intervals', interior.kind === 'range-null', () => ({
+    resultKind: interior.kind,
+  }), 'range')
 }
 
 function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
@@ -470,6 +509,35 @@ function makeConcreteCommentLayoutFixture() {
                 textEnd: concreteNumber(16),
               }),
             ]),
+          }),
+        ]),
+      }),
+    ]),
+  })
+}
+
+function makeRangeCommentLayoutFixture() {
+  return rangeObject({
+    width: rangeNumber(200, 200, true),
+    height: rangeNumber(34, 34, true),
+    blocks: rangeArray([
+      rangeObject({
+        kind: rangeString('paragraph'),
+        height: rangeNumber(34, 34, true),
+        lines: rangeArray([
+          rangeObject({
+            top: rangeNumber(0, 0, true),
+            width: rangeNumber(110, 110, true),
+            height: rangeNumber(14, 14, true),
+            textStart: rangeNumber(0, 0, true),
+            textEnd: rangeNumber(11, 11, true),
+          }),
+          rangeObject({
+            top: rangeNumber(20, 20, true),
+            width: rangeNumber(40, 40, true),
+            height: rangeNumber(14, 14, true),
+            textStart: rangeNumber(12, 12, true),
+            textEnd: rangeNumber(16, 16, true),
           }),
         ]),
       }),
