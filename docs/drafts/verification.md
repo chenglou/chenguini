@@ -39,6 +39,14 @@ This matters because demos often want a mix:
 
 Keep those under one semantic model when you can.
 
+Think of each precision mechanism as a fact domain over the same lowered program:
+
+- concrete values for exact fixture cases
+- intervals for width and height ranges
+- affine symbols for equalities such as `right = left + width`
+
+Don't make each domain rediscover calls, branches, and object access on its own. If a contract can honestly summarize a helper in more than one domain, let it. For example, `measureText(text)` can return `text.length * 10` for an exact string and `minLength * 10 .. maxLength * 10` for a range string. If a callback walker only makes sense concretely for now, keep that boundary narrow instead of pretending all callbacks have a range story.
+
 ## Split Branches, Then Narrow Them
 
 Splitting on `if` or `?:` is only half the job.
@@ -93,6 +101,67 @@ Bad:
 
 This is still a real proof, not just fixture testing. The interval cases are chosen from the helper's geometry, not from arbitrary example points.
 
+## Prefer Nearby Leaf Helpers Before Smarter Domains
+
+When a bigger proof path gets fuzzy, don't jump straight to a richer abstract domain.
+
+First look for a nearby leaf helper that is already:
+
+- pure
+- exact
+- reused by the path you care about
+
+For example:
+
+- `lineBreakCharCountAt(text, index)`
+- `commentTextLength(layout)`
+- `visibleRowCount(rowsTop, viewportTop, viewportBottom)`
+
+Those helpers are often cheap to prove from source, and each one shrinks the opaque boundary a little more.
+
+Good:
+
+- prove `commentTextLength(layout)` returns the last line's `textEnd`
+- prove `lineBreakCharCountAt(text, index)` handles `\r\n` exactly
+- then let bigger selection or layout checks trust less summarized behavior
+
+Bad:
+
+- immediately adding a much smarter numeric domain because one bigger helper got fuzzy
+- carving the app into verifier-shaped micro-functions just to create leaf helpers
+
+Prefer existing leaf helpers. Grow the verifier around the code that already wants to exist.
+
+## Range Numbers Can Want A Symbolic Shadow
+
+Intervals are good at bounds. They are bad at remembering that two values came from the same source.
+
+For example:
+
+- `x = slotLeft + (slotWidth - imageWidth) / 2`
+- `centerX = x + imageWidth / 2`
+
+Plain intervals often widen `x` and `imageWidth` so much that `centerX` stops looking equal to `slotLeft + slotWidth / 2`, even when the identity is exact.
+
+A small symbolic shadow can help:
+
+- keep the interval for bounds
+- also keep a lightweight scalar expression for "this is still the same `imageWidth`"
+- use that shadow only for exact equality checks such as centering identities
+- keep that shadow through exact sign changes too. `-imageWidth + imageWidth` should still collapse even if the interval gets wider.
+
+Good:
+
+- interval bounds say `centerX` might be wide
+- symbolic shadow still proves `centerX = slotCenter`
+
+Bad:
+
+- treating the shadow as a full solver
+- replacing bounds with symbolic math
+
+The point is not "make intervals smarter". The point is to preserve one exact relation when the bounds alone would forget it.
+
 ## Discover Cheap Seams From The Helper Itself
 
 If a seam is already computed by a small helper, use that helper to discover the partitions.
@@ -120,7 +189,9 @@ Bad:
 
 This keeps the verifier tied to the source's own branch structure. The concrete sweep finds the seams; the interval proof checks the geometry inside each seam.
 
-## What The Current Static Verifier Proves
+If a band fails, shrink the band before reporting it. "Column centering fails at width `672`" is much more useful than "somewhere in `640..781`".
+
+## What This Verifier Currently Proves
 
 The current `layout-verifier/` prototype proves four kinds of things:
 
@@ -140,6 +211,23 @@ So the right mental model is:
 - prove the userland geometry you own
 - trust explicit contracts at helper boundaries
 - verify the browser seam separately
+
+## Unknown Is A Real Result
+
+Don't make an unproved fact look failed or passed.
+
+Good:
+
+- `right = left + width` is proven by affine symbolic equality
+- `cols in 1..7` is proven by a range fact
+- `x * y = y * x` reports `unknown` until the verifier has a stronger symbolic domain or solver
+
+Bad:
+
+- treating "the current simplifier can't prove it" as a regression
+- treating "the current simplifier can't prove it" as a green check
+
+A ready static report should have no `fail` and no `unknown`.
 
 ## Quotient / Remainder Checks Should Mention Geometry
 
@@ -251,7 +339,7 @@ The idea: enumerate every numeric literal and arithmetic operator in the layout 
 
 What you learn:
 
-- a coverage number like "80/223 caught (35.9%)" that tells you something concrete about verification strength
+- a coverage number like "83/223 caught (37.2%), 28 crashed" that tells you something concrete about verification strength
 - a blind spot list grouped by cause: "global constants are not pinned", "1D layout is unverified", "clamp boundary mutations survive"
 - a target list for where new laws would have the most impact
 
@@ -265,7 +353,7 @@ What to watch out for:
 
 - constant mutations (say, gap `24` → `25`) often preserve structural relationships and pass all laws. That is not a verifier weakness -- it means the laws check structure, not magic numbers.
 - mutations that make the code crash before the verifier runs count as "crashed", not "missed". Those are fine.
-- the coverage number is a lower bound on verifier strength. It does not mean "35.9% of bugs would be caught", because real bugs are not uniformly distributed across arithmetic sites.
+- the coverage number is a lower bound on verifier strength. It does not mean "37.2% of bugs would be caught", because real bugs are not uniformly distributed across arithmetic sites.
 
 Use the blind spot list to prioritize. Add one law, rerun the mutation sweep, and watch the number go up. The concrete anchor pattern works well: pin a known output at a known input so formula-level mutations break the pinned value.
 
@@ -282,6 +370,28 @@ For `colsBoxMaxSizeXF([320, 1600])` the miner automatically discovers:
 - `boxMaxSizeX ∈ [25.3, 1552]`
 
 These are facts the hand-written verifier already checks, but the miner finds them without any specs. The gap between what the miner discovers and what the hand-written laws assert is a map for where to invest next.
+
+## Triangulate New Proof Tricks With A Cheaper Oracle
+
+When a new proof mechanism starts carrying real weight, check it against a cheaper oracle before you fully trust it.
+
+For example, if a range proof now depends on:
+
+- discovered breakpoint bands
+- a symbolic shadow on intervals
+
+then sample a few concrete representatives from each discovered band and check the same geometry law there too.
+
+Good:
+
+- prove a card stays centered over a whole width band
+- then also check the concrete layout at the band's left edge, midpoint, and right edge
+
+Bad:
+
+- only adding the stronger proof and never checking whether the new abstraction lines up with concrete behavior
+
+This is not the main proof. It is a triangulation pass. Use it when a new abstraction might be right for the wrong reason.
 
 ## Callback Helpers Are Effect Boundaries
 
@@ -339,6 +449,10 @@ This is closer to a semantic `.d.ts` than a hard-coded verifier plugin.
 
 If the verifier can discover sibling `*.static-contracts.ts` files from the analyzed source and its relative imports, then "bring in the lib and it works" starts becoming realistic.
 
+Make contracts domain summaries when the fact is real. A `lookupArrayItem(...)` contract can return an exact line for concrete inputs and a joined item shape for a small in-bounds interval. A callback walker can stay concrete-only until a real range proof needs it.
+
+Show the trusted boundary in the verifier output. Good: `measureText: concrete + range`, `walkVisibleLines: concrete-only`. Bad: making someone read the sidecar to understand which helpers were proved from source and which helpers were summarized.
+
 For the current sidecar format, see `../../layout-verifier/contracts.md`.
 
 ## Name Contracts By The Boundary They Describe
@@ -390,6 +504,8 @@ Then flip that view around into coverage:
 - `getGridLayout.return.contentHeight` was checked by these laws
 - `colsBoxMaxSizeXF.return.cols` was checked by these range facts
 
+This turns the report into a small heatmap. If `contentHeight` has three laws and `prompt.box.sizeX` has one fixture, you can see where the verifier is strong and where it is only sampling.
+
 Keep "unknown" separate from "fail". A failed fact means the code violated the law. An unknown fact means the verifier's current precision did not prove it.
 
 ## Name Repeated Proof Shapes As Facts
@@ -435,6 +551,7 @@ When a geometry law fails, include the computed edges and a tiny visual packet i
 
 Good:
 
+- the geometry address: `itemIndex`, `row`, `column`, or `scenario`
 - the expected span and actual rect
 - the overflowing edge and `overflowBy`
 - a small SVG showing the two intervals or rectangles
@@ -442,6 +559,7 @@ Good:
 Bad:
 
 - only saying `row geometry failed`
+- only saying `centered: false`
 - making the human recompute `left + width` from scattered fields
 - treating the SVG as the oracle
 

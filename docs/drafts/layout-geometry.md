@@ -84,7 +84,7 @@ Bad:
 
 The outer layout should trust one contract. It should not maintain a second approximate geometry algorithm for the same thing.
 
-For the current static verifier sidecar shape, see `../../layout-verifier/contracts.md`.
+If you're using this repo's static verifier, the current sidecar API is in `../../layout-verifier/contracts.md`.
 
 ## Hit Testing Should Read The Same Geometry
 

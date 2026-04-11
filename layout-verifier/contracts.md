@@ -2,7 +2,7 @@
 
 Most layout math should not need a contract.
 
-A contract is a trusted boundary for one helper the analyzer should not, or cannot yet, read from source.
+The analyzer should read ordinary source first. Only use a contract when one helper is genuinely opaque to the current verifier subset.
 
 Examples:
 
@@ -48,18 +48,16 @@ export const staticLayoutContracts = {
 
 The contract names must match the imported helper names the analyzer sees.
 
-Name the type for the boundary, not one proof mode. `StaticContractSpec` is right because the same contract can serve concrete fixtures and range proofs. `ConcreteContractSpec` would be misleading once the contract grows past concrete evaluation.
-
 ## Current Contract Shapes
 
 The current DSL is intentionally small:
 
-- `contract.returnValue(...)`
-- `contract.returnArg(argIndex)`
-- `contract.forEachArrayItem(arrayArgIndex, arrayPath, callbackArgIndex)`
-- `contract.lookupArrayItem(sourceArgIndex, arrayPath, indexArgIndex, indexPath, {defaultNull})`
-- `contract.stringUnitWidth(textArgIndex, unitWidth)`
-- `contract.pushOrMergeRect(rectsArgIndex, nextArgIndex, {tolerance})`
+- value contract: `contract.returnValue(...)`
+- value contract: `contract.returnArg(argIndex)`
+- value contract: `contract.lookupArrayItem(sourceArgIndex, arrayPath, indexArgIndex, indexPath, {defaultNull})`
+- value contract: `contract.stringUnitWidth(textArgIndex, unitWidth)`
+- concrete effect contract: `contract.forEachArrayItem(arrayArgIndex, arrayPath, callbackArgIndex)`
+- concrete effect contract: `contract.pushOrMergeRect(rectsArgIndex, nextArgIndex, {tolerance})`
 
 And the value expression builder currently supports:
 
@@ -106,20 +104,29 @@ export const staticLayoutContracts = {
 
 ## Range Mode Support
 
-Contracts advertise which proof domains they can serve. Current range support is:
+Contracts advertise which proof domains they can serve.
+
+Range mode currently supports the value contracts:
 
 - `return-value`
 - `return-arg`
-- `lookup-array-item`, when the array items and index are exact
-- `string-unit-width`, through string length ranges
+- `lookup-array-item`
+- `string-unit-width`
 
-Callback and rect-merge contracts are concrete-only for now. That is a real limitation, not a missing doc detail, and reports should show it in `functionSummaries`.
+The concrete effect contracts are still concrete-only:
+
+- `for-each-array-item`
+- `push-or-merge-rect`
+
+That is a real limitation, not a missing doc detail. Reports should show it in `functionSummaries`.
 
 So if a range proof hits a callback helper or a merge helper, the next move is usually one of:
 
 - prove a nearby leaf helper from source instead
 - add a narrower concrete law
 - widen the contract DSL only if the real target earns it
+
+A `return-value` helper trusted in `range` is different evidence from a `for-each-array-item` helper only trusted concretely. The report should say which helpers were trusted, and in which domains.
 
 ## Sketches
 
