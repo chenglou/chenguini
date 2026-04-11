@@ -17,5 +17,7 @@ The demo source being analyzed still lives in:
 
 - `demos/photo-gallery/`
 - `demos/nicer-hacker-news/`
+- `demos/layout-kernels/`
 
-Tiny shim files stay in those demo folders so source-relative contract autodiscovery still works and old paths do not break.
+Tiny shim files stay in the larger demo folders so source-relative contract autodiscovery still works and old paths do not break.
+The extracted kernels live directly under `demos/layout-kernels/` because they are already reduced to pure source files with no app wrapper around them.
