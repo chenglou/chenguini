@@ -120,9 +120,9 @@ Bad:
 
 This keeps the verifier tied to the source's own branch structure. The concrete sweep finds the seams; the interval proof checks the geometry inside each seam.
 
-## What This Verifier Currently Proves
+## What The Current Static Verifier Proves
 
-Right now this prototype proves four kinds of things:
+The current `layout-verifier/` prototype proves four kinds of things:
 
 - `symbolic`: exact equalities for small helpers such as `layoutHeight = imageHeight + promptHeight + bottomGap`
 - `range`: interval facts for ordinary code over bounded numeric inputs, such as row tops staying contiguous or `cols` staying in `1..7`
@@ -257,7 +257,7 @@ What you learn:
 
 What makes this work:
 
-- the verifier already runs fast enough that a few hundred mutations finish in seconds
+- the verifier is cheap enough to run before committing when its proof surface changes
 - each mutation is a single text replacement at a known position, so crashes are isolated
 - missed mutations cluster by cause, not by position, so the report tells you what class of law is missing, not just which line
 
@@ -265,7 +265,7 @@ What to watch out for:
 
 - constant mutations (say, gap `24` → `25`) often preserve structural relationships and pass all laws. That is not a verifier weakness -- it means the laws check structure, not magic numbers.
 - mutations that make the code crash before the verifier runs count as "crashed", not "missed". Those are fine.
-- the coverage number is a lower bound on verifier strength. It does not mean "36% of bugs would be caught", because real bugs are not uniformly distributed across arithmetic sites.
+- the coverage number is a lower bound on verifier strength. It does not mean "35.9% of bugs would be caught", because real bugs are not uniformly distributed across arithmetic sites.
 
 Use the blind spot list to prioritize. Add one law, rerun the mutation sweep, and watch the number go up. The concrete anchor pattern works well: pin a known output at a known input so formula-level mutations break the pinned value.
 
@@ -338,6 +338,26 @@ That keeps the analyzer generic:
 This is closer to a semantic `.d.ts` than a hard-coded verifier plugin.
 
 If the verifier can discover sibling `*.static-contracts.ts` files from the analyzed source and its relative imports, then "bring in the lib and it works" starts becoming realistic.
+
+For the current sidecar format, see `../../layout-verifier/contracts.md`.
+
+## Name Contracts By The Boundary They Describe
+
+A contract should be named for the static boundary it describes, not for one evaluator's current implementation detail.
+
+Good:
+
+- `StaticContractSpec`
+- `contract.returnValue(...)`
+- a report that says the contract worked in `concrete` and `range` domains
+
+Bad:
+
+- `ConcreteContractSpec` that later grows range support
+- a single "trusted helper" bucket that hides which proof domain used it
+- naming the sidecar after the current checker instead of the helper boundary
+
+This keeps the type honest as the verifier grows. `measurePromptLayout` is still the same static contract when a concrete fixture uses it and when a range proof uses it.
 
 Contracts should say which domains they cover.
 
@@ -863,7 +883,7 @@ It should not keep re-explaining:
 
 Keep that shared machinery in the docs so every new spec does not fork the repo's verification style.
 
-For how to run this workflow end to end, see `demo-reconstruction.md`.
+For how to run this workflow end to end, see `../../todos/demo-reconstruction.md`.
 For how to shape the demo packet itself, see `../../todos/minimum-viable-demo-spec.md` and `../../todos/spec-writing-for-demos.md`.
 
 ## What "Done" Means

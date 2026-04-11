@@ -2,7 +2,7 @@
 
 Most layout math should not need a contract.
 
-The analyzer should read ordinary source first. Only use a contract when one helper is genuinely opaque to the current verifier subset.
+A contract is a trusted boundary for one helper the analyzer should not, or cannot yet, read from source.
 
 Examples:
 
@@ -14,6 +14,7 @@ Bad uses:
 
 - normal arithmetic the verifier could already read
 - forcing app code to adopt special runtime helpers just for the checker
+- recreating the inner layout algorithm downstream
 
 ## Where Contracts Live
 
@@ -31,6 +32,8 @@ The auto-loader currently discovers contracts for:
 
 So the intended shape is: bring in a helper, and its contract sidecar comes along with it.
 
+Sidecars are data about helper semantics. They are not verifier plugins.
+
 ## What A Contract Looks Like
 
 Each file exports `staticLayoutContracts`:
@@ -44,6 +47,8 @@ export const staticLayoutContracts = {
 ```
 
 The contract names must match the imported helper names the analyzer sees.
+
+Name the type for the boundary, not one proof mode. `StaticContractSpec` is right because the same contract can serve concrete fixtures and range proofs. `ConcreteContractSpec` would be misleading once the contract grows past concrete evaluation.
 
 ## Current Contract Shapes
 
@@ -101,14 +106,14 @@ export const staticLayoutContracts = {
 
 ## Range Mode Support
 
-Range mode currently supports:
+Contracts advertise which proof domains they can serve. Current range support is:
 
 - `return-value`
 - `return-arg`
 - `lookup-array-item`, when the array items and index are exact
 - `string-unit-width`, through string length ranges
 
-Callback and rect-merge contracts are concrete-only for now. That is a real limitation, not a missing doc detail.
+Callback and rect-merge contracts are concrete-only for now. That is a real limitation, not a missing doc detail, and reports should show it in `functionSummaries`.
 
 So if a range proof hits a callback helper or a merge helper, the next move is usually one of:
 
@@ -121,6 +126,17 @@ So if a range proof hits a callback helper or a merge helper, the next move is u
 Contract sketches are drafts from samples.
 
 If concrete samples show `visibleHeight = lineHeight * 2`, the sketcher can format a candidate `contract.returnValue(...)`. Treat that as review material. Do not auto-install it into a sidecar.
+
+Good sketch workflow:
+
+- generate the sketch from a few boring samples
+- compare it against the helper's intended semantics
+- either promote it by hand or delete it
+
+Bad sketch workflow:
+
+- treating a sample fit as proof
+- installing the sketch without reading the helper
 
 ## How To Choose Between Source And Contract
 

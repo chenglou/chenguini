@@ -19,7 +19,7 @@ Bad:
 - rewriting the same math as `add(...)`, `sub(...)`, `mul(...)`, `when(...)` only because a verifier exists
 - forcing every layout helper through a special expression builder just to make proofs possible
 
-If the verifier cannot understand some natural arithmetic yet, grow the verifier or add one local contract. Don't contort the app first.
+If the verifier cannot understand some natural arithmetic yet, grow the verifier. Add a local contract only when the helper is genuinely opaque. Don't contort the app first.
 
 ## Base Geometry First, Animated Geometry Second
 
@@ -73,7 +73,7 @@ When that happens, ask for small earned postconditions instead of recreating the
 Good contracts:
 
 - visible line width is `<= offeredWidth`
-- visible height comes from line count and line height
+- visible height is `lineCount * lineHeight`
 - fragment boxes stay ordered inside the line box
 - reported aggregate width really means `max(line.width)`
 
@@ -83,6 +83,8 @@ Bad:
 - measuring against one width, then letting CSS margins or wrapping silently change the same geometry later
 
 The outer layout should trust one contract. It should not maintain a second approximate geometry algorithm for the same thing.
+
+For the current static verifier sidecar shape, see `../../layout-verifier/contracts.md`.
 
 ## Hit Testing Should Read The Same Geometry
 
