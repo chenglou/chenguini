@@ -450,6 +450,8 @@ function verifyMakeItemLayoutGeometry(analyzer: LoweredProgramAnalyzer, laws: Ma
 
 function verifyColsBoxMaxSizeXF(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
   const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
+  let previousCols = 0
+  let previousBoxMaxSizeX = Infinity
   for (let containerSizeX = 320; containerSizeX <= 1600; containerSizeX++) {
     const cases = analyzer.evaluateFunction('colsBoxMaxSizeXF', [concreteNumber(containerSizeX)], 'concrete')
     check(laws, 'colsBoxMaxSizeXF stays branch-free per concrete width', cases.length === 1, () => ({
@@ -482,6 +484,32 @@ function verifyColsBoxMaxSizeXF(analyzer: LoweredProgramAnalyzer, laws: Map<stri
       boxMaxSizeX,
       filledWidth,
     }), 'concrete-sweep')
+    check(laws, 'colsBoxMaxSizeXF keeps cols monotonically non-decreasing over widths', cols >= previousCols, () => ({
+      containerSizeX,
+      cols,
+      previousCols,
+    }), 'concrete-sweep')
+    check(laws, 'colsBoxMaxSizeXF grows boxMaxSizeX within a column band', cols === previousCols ? boxMaxSizeX >= previousBoxMaxSizeX - epsilon : true, () => ({
+      containerSizeX,
+      cols,
+      boxMaxSizeX,
+      previousBoxMaxSizeX,
+    }), 'concrete-sweep')
+    // Pin concrete values at known widths to catch clamp bound and boxMinSizeX mutations.
+    if (containerSizeX === 320) {
+      check(laws, 'colsBoxMaxSizeXF produces 1 column at the narrowest viewport', cols === 1, () => ({
+        containerSizeX,
+        cols,
+      }), 'concrete-sweep')
+    }
+    if (containerSizeX === 1600) {
+      check(laws, 'colsBoxMaxSizeXF produces the expected column count at the widest viewport', cols === 6, () => ({
+        containerSizeX,
+        cols,
+      }), 'concrete-sweep')
+    }
+    previousCols = cols
+    previousBoxMaxSizeX = boxMaxSizeX
   }
 }
 
