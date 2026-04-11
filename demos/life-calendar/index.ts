@@ -82,13 +82,7 @@ window.addEventListener("mouseup", (e) => {st.events.mouseup = e; scheduleRender
 window.addEventListener('mousemove', (e) => {st.events.mousemove = e; scheduleRender()})
 window.addEventListener('pointerdown', (e) => {st.events.pointerdown = e; scheduleRender()})
 
-// === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either). Use the dynamic area here for once
-function hitTest(blockSize: number, countX: number, _countY: number, gridLeft: number, gridTop: number, gridFinalSizeX: number, gridFinalSizeY: number, pointer: {x: number; y: number}) {
-  const px = pointer.x-/*toLocal*/gridLeft
-  const py = pointer.y-/*toLocal*/gridTop
-  if (px < 0 || px > gridFinalSizeX || py < 0 || py > gridFinalSizeY) return null
-  return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
-}
+import {gridSizing, hitTest} from './grid-sizing'
 
 function render() {
   // === step 0: process events
@@ -123,12 +117,7 @@ function render() {
   const gridSizeX = windowSizeX - gridGap
   const gridSizeY = windowSizeY - gridGap
 
-  const blockSize_ = (life * Math.sqrt((4*life*gridSizeX*gridSizeY + (7*gridSizeY)**2) / (life**2)) + 7 * gridSizeY) / 2 / life
-  const countX = Math.floor((gridSizeX / blockSize_) / 7) * 7
-  const countY = Math.ceil(life / countX)
-  const blockSize = gridSizeY / countY
-  const gridFinalSizeX = countX * blockSize
-  const gridFinalSizeY = countY * blockSize
+  const {blockSize, countX, countY, gridFinalSizeX, gridFinalSizeY} = gridSizing(life, gridSizeX, gridSizeY)
   const gridLeft = (windowSizeX - gridFinalSizeX) / 2 // center
   const gridTop = (windowSizeY - gridFinalSizeY) / 2 // center
 

@@ -1,5 +1,5 @@
-// Pure grid sizing extracted from the life-calendar demo.
-// The verifier checks this; the demo renders it.
+// Pure grid sizing and hit testing extracted from the life-calendar demo.
+// The demo imports these; the verifier checks them.
 
 export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
   const blockSize_ = (life * Math.sqrt((4 * life * gridSizeX * gridSizeY + (7 * gridSizeY) ** 2) / (life ** 2)) + 7 * gridSizeY) / 2 / life
@@ -11,18 +11,9 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
   return {blockSize, countX, countY, gridFinalSizeX, gridFinalSizeY}
 }
 
-export function hitTest(
-  blockSize: number,
-  countX: number,
-  gridLeft: number,
-  gridTop: number,
-  gridFinalSizeX: number,
-  gridFinalSizeY: number,
-  pointerX: number,
-  pointerY: number,
-) {
-  const px = pointerX - gridLeft
-  const py = pointerY - gridTop
+export function hitTest(blockSize: number, countX: number, _countY: number, gridLeft: number, gridTop: number, gridFinalSizeX: number, gridFinalSizeY: number, pointer: {x: number; y: number}) {
+  const px = pointer.x - gridLeft
+  const py = pointer.y - gridTop
   if (px < 0 || px > gridFinalSizeX || py < 0 || py > gridFinalSizeY) return null
   return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
 }

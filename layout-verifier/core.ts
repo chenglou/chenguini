@@ -1,3 +1,7 @@
+// Evaluator: LoweredProgramAnalyzer, CFG execution, expression evaluation,
+// and law reporting. Imports the IR from ir.ts and the value domain from
+// values.ts. Re-exports both so consumers can import everything from './core'.
+
 import type {InlineFunction, IrExpression, IrInstruction, IrProgram} from './ir'
 import {lowerSourceProgram} from './ir'
 import {

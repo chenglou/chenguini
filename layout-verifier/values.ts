@@ -1,6 +1,8 @@
-import type {IrBindingName, InlineFunction} from './ir'
+// Value domain: concrete, symbolic, and range types with their arithmetic,
+// comparisons, range narrowing, and symbolic algebra. No dependency on the
+// evaluator — this is the pure math layer the evaluator in core.ts builds on.
 
-// Value types
+import type {IrBindingName, InlineFunction} from './ir'
 
 export type Mode = 'concrete' | 'symbolic'
 export type ComparisonOp = '>' | '>=' | '<' | '<=' | '===' | '!=='

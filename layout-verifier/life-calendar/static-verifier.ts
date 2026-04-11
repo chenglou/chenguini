@@ -2,6 +2,7 @@ import {
   buildStaticLayoutReport,
   check,
   concreteNumber,
+  concreteObject,
   epsilon,
   expectConcreteNumber,
   expectObject,
@@ -129,9 +130,10 @@ function verifyGridSizingRange(analyzer: LoweredProgramAnalyzer, laws: Map<strin
 }
 
 function verifyHitTestConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
-  // Grid: 10x10 blockSize, 70 countX, at position (100, 50), final size 700x500
+  // Grid: 10x10 blockSize, 70 countX, 50 countY, at position (100, 50), final size 700x500
   const blockSize = 10
   const countX = 70
+  const countY = 50
   const gridLeft = 100
   const gridTop = 50
   const gridFinalSizeX = 700
@@ -151,12 +153,12 @@ function verifyHitTestConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<strin
     const returns = analyzer.evaluateFunction('hitTest', [
       concreteNumber(blockSize),
       concreteNumber(countX),
+      concreteNumber(countY),
       concreteNumber(gridLeft),
       concreteNumber(gridTop),
       concreteNumber(gridFinalSizeX),
       concreteNumber(gridFinalSizeY),
-      concreteNumber(scenario.px),
-      concreteNumber(scenario.py),
+      concreteObject({x: concreteNumber(scenario.px), y: concreteNumber(scenario.py)}),
     ], 'concrete')
 
     check(laws, 'hitTest stays branch-free per concrete scenario', returns.length === 1, () => ({

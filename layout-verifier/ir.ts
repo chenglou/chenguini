@@ -1,6 +1,8 @@
-import * as ts from 'typescript'
+// IR types and TS-to-IR lowering.
+// Parses ordinary TS/JS and lowers a subset (locals, loops, arrays, objects,
+// small helpers) into a block-based IR that the evaluators in core.ts walk.
 
-// IR types
+import * as ts from 'typescript'
 
 export type IrBindingName =
   | {kind: 'identifier'; name: string}
