@@ -93,6 +93,33 @@ Bad:
 
 This is still a real proof, not just fixture testing. The interval cases are chosen from the helper's geometry, not from arbitrary example points.
 
+## Discover Cheap Seams From The Helper Itself
+
+If a seam is already computed by a small helper, use that helper to discover the partitions.
+
+For example, a grid might first compute:
+
+```ts
+const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(containerSizeX)
+```
+
+Instead of hand-writing "mobile / tablet / desktop" bands, sweep the small integer input range and group adjacent widths that produce the same `cols`.
+
+Good:
+
+- discover `320..439:1`, `440..659:2`, `660..879:3`
+- run the range evaluator once per band
+- prove `cols` is fixed and item centers match `i % cols` inside each band
+- shrink a failing band to the smallest witness interval before reporting it
+
+Bad:
+
+- duplicate `boxMinSizeX = 220` in the verifier just to guess the same bands
+- prove one `320..1600` interval and accept vague bounds
+- report "some width failed" without narrowing the witness
+
+This keeps the verifier tied to the source's own branch structure. The concrete sweep finds the seams; the interval proof checks the geometry inside each seam.
+
 ## What This Verifier Currently Proves
 
 Right now this prototype proves four kinds of things:
@@ -224,13 +251,13 @@ The idea: enumerate every numeric literal and arithmetic operator in the layout 
 
 What you learn:
 
-- a coverage number like "83/226 caught (36.7%)" that tells you something concrete about verification strength
+- a coverage number like "80/223 caught (35.9%)" that tells you something concrete about verification strength
 - a blind spot list grouped by cause: "global constants are not pinned", "1D layout is unverified", "clamp boundary mutations survive"
 - a target list for where new laws would have the most impact
 
 What makes this work:
 
-- the verifier already runs fast enough that 251 mutations finish in seconds
+- the verifier already runs fast enough that a few hundred mutations finish in seconds
 - each mutation is a single text replacement at a known position, so crashes are isolated
 - missed mutations cluster by cause, not by position, so the report tells you what class of law is missing, not just which line
 
@@ -311,6 +338,70 @@ That keeps the analyzer generic:
 This is closer to a semantic `.d.ts` than a hard-coded verifier plugin.
 
 If the verifier can discover sibling `*.static-contracts.ts` files from the analyzed source and its relative imports, then "bring in the lib and it works" starts becoming realistic.
+
+Contracts should say which domains they cover.
+
+Good:
+
+- `returnValue(...)` works in concrete and range mode
+- `lookupArrayItem(...)` works in concrete and range mode when the array items and index are exact
+- `forEachArrayItem(...)` is concrete-only until callback effects in range mode are actually modeled
+
+Bad:
+
+- a contract silently being used for range proofs when it only knows how to build concrete values
+- a report that says "ready" without showing which opaque helpers were trusted
+
+Treat this like a trust ledger. If a report used `measurePromptLayout` by contract, the report should say so.
+
+## Reports Should Say What Proved What
+
+A static verifier report should not just be a list of green law names.
+
+For each law, keep:
+
+- the kind: symbolic, range, concrete fixture, or concrete sweep
+- the proof mechanism: manual check, range non-negative, range integer, symbolic equality, etc.
+- the output target, such as `getGridLayout.return.contentHeight`
+- the first failure, or the first unknown when the verifier could not prove it
+
+Then flip that view around into coverage:
+
+- `getGridLayout.return.contentHeight` was checked by these laws
+- `colsBoxMaxSizeXF.return.cols` was checked by these range facts
+
+Keep "unknown" separate from "fail". A failed fact means the code violated the law. An unknown fact means the verifier's current precision did not prove it.
+
+## Mined Laws Stay Suggestions
+
+Range outputs and concrete sweeps are good at finding candidate laws.
+
+For example, after sweeping `colsBoxMaxSizeXF`, the verifier can notice:
+
+- `cols` was always an integer
+- `filledWidth = containerSizeX`
+- `boxMaxSizeX` stayed in a particular numeric range
+
+Those are suggestions, not specs. Promote them only after reading them and deciding they describe the desired behavior.
+
+The same goes for contract sketches. If samples show:
+
+```ts
+visibleHeight = lineHeight * 2
+width = arg(1)
+```
+
+then a sketcher may print:
+
+```ts
+measure: contract.returnValue(contractValue.object({
+  width: contractValue.arg(1),
+  visibleHeight: contractValue.mul(contractValue.arg(3), contractValue.number(2)),
+  lines: contractValue.array([]),
+})),
+```
+
+That is a draft for a human to review, not something to install silently.
 
 ## Give The Verifier One Canonical Home
 

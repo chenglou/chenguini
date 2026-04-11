@@ -1,4 +1,4 @@
-import {contract, type ConcreteContractSpec} from '../contracts'
+import {contract, type StaticContractSpec} from '../contracts'
 
 export const staticLayoutContracts = {
   walkRichInlineLineRanges: contract.forEachArrayItem(0, ['lineRanges'], 2),
@@ -6,4 +6,4 @@ export const staticLayoutContracts = {
   layoutNextLine: contract.lookupArrayItem(0, ['lines'], 1, ['segmentIndex'], {defaultNull: true}),
   measureFragmentTextWidth: contract.stringUnitWidth(1, 10),
   pushMergedRect: contract.pushOrMergeRect(0, 1),
-} satisfies Record<string, ConcreteContractSpec>
+} satisfies Record<string, StaticContractSpec>

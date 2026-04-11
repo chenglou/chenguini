@@ -12,8 +12,12 @@ What worked:
   Making an intentional mistake whenever we widened the proof surface caught core bugs and false confidence quickly.
 - Geometry-shaped interval partitions matter.
   Splitting by real seams, e.g. left edge / interior / right edge, gave much sharper results than one giant interval.
+- Discovered responsive bands beat duplicated constants.
+  Sweeping a small helper to find adjacent widths with the same `cols`, then proving range laws inside each band, kept the verifier tied to the source instead of re-encoding layout thresholds.
 - Contracts worked best as a boundary tool.
   The analyzer should read normal source by default, then use contracts only where the code is genuinely opaque or out of subset.
+- Reports got more useful once they became ledgers.
+  Proof mechanisms, target coverage, trusted helper summaries, and candidate laws made it clearer what was proved, what was assumed, and what was merely suggested.
 
 What didn't work, or didn't earn itself:
 
@@ -32,10 +36,12 @@ What didn't work, or didn't earn itself:
 
 What the mutation coverage analysis revealed:
 
-- Automatic mutation testing (251 mutations across 123 sites in photo-gallery) showed 32% coverage, which tells you exactly where the verifier has teeth.
+- Automatic mutation testing (223 runnable mutations across 123 sites in photo-gallery) caught 80 mutations (35.9%), with 28 more crashing before a verifier result. That tells you exactly where the verifier has teeth.
   The caught mutations cluster on the verified functions: `colsBoxMaxSizeXF` track-fill math, `getGridLayout` overlap/centering, `makeItemLayoutGeometry` structural alignment.
   The blind spots fall into clear categories:
   - Global constants (gaps, padding): mutating them preserves structural relationships, so no existing law fires.
   - Functions outside the verified surface (`rectContainsPoint`, `get1DItemSize`, `clamp`): the verifier doesn't analyze these yet.
   - Aspect-ratio scaling factors (`0.85`, `1.05`): no law constrains these specific values.
-- Invariant mining from range analysis automatically rediscovered the hand-written bounds (`cols ∈ [1, 6]`, `boxMaxSizeX ≥ 25`) without any specs, just by running the range evaluator with wide inputs and reading off the output bounds. The gap between what the miner finds and what laws assert is a map for where to invest next.
+- Invariant mining from range analysis automatically rediscovered the hand-written bounds (`cols in [1, 6]`, `boxMaxSizeX >= 25`) without any specs, just by running the range evaluator with wide inputs and reading off the output bounds. The gap between what the miner finds and what laws assert is a map for where to invest next.
+- Contract sketches were useful as drafts, not automation.
+  Sample-derived output like `visibleHeight = lineHeight * 2` can save typing, but it should be reviewed before becoming a contract.

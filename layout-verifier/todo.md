@@ -7,7 +7,10 @@ Current prototype:
 - symbolic execution with path splitting
 - affine / linear expression simplification
 - refinement-style contracts for opaque boundaries, e.g. Pretext outputs
-- automatic mutation coverage analysis (251 mutations, 32% caught on photo-gallery)
+- discovered integer seam bands for responsive helpers
+- proof reports with target coverage, trusted helper summaries, unknowns, and candidate laws
+- review-only contract sketches from concrete samples
+- automatic mutation coverage analysis (80/223 runnable mutations caught on photo-gallery)
 - invariant mining from range analysis
 
 Try next (informed by mutation coverage blind spots):
@@ -16,6 +19,8 @@ Try next (informed by mutation coverage blind spots):
 - laws for aspect-ratio scaling factors (the `0.85` / `1.05` geometry)
 - 1D/line layout verification surface (currently unverified: `get1DItemSize`, `getLineLayout` positioning)
 - richer range contracts in the sidecar DSL, but only if a real opaque helper needs them
+- promote or reject mined candidate laws after reading them; do not auto-install them
+- make contract sketches easier to compare against existing sidecars
 - better quotient / remainder reasoning for grid placement
 - more sequence facts for append-only arrays, e.g. prefix-sum-ish growth and "one output per input"
 - better counterexamples, e.g. `row 2 item 7 overflowed by 12`

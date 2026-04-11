@@ -1,4 +1,4 @@
-import {contract, contractValue, type ConcreteContractSpec} from '../contracts'
+import {contract, contractValue, type StaticContractSpec} from '../contracts'
 
 export const staticLayoutContracts = {
   measurePromptLayout: contract.returnValue(contractValue.object({
@@ -6,4 +6,4 @@ export const staticLayoutContracts = {
     visibleHeight: contractValue.mul(contractValue.arg(3), contractValue.number(2)),
     lines: contractValue.array([]),
   })),
-} satisfies Record<string, ConcreteContractSpec>
+} satisfies Record<string, StaticContractSpec>

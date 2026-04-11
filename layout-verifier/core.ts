@@ -22,6 +22,7 @@ import {
   concreteNull,
   concreteNumber,
   concreteString,
+  epsilon,
   expectArray,
   expectBoolean,
   expectConcreteNumber,
@@ -31,6 +32,7 @@ import {
   expectObject,
   expectRangeArray,
   expectRangeBoolean,
+  expectRangeFunction,
   expectRangeNumber,
   expectRangeObject,
   expectString,
@@ -57,6 +59,8 @@ import {
   negateRangeNumber,
   numberValue,
   objectValue,
+  type RangeArrayValue,
+  type RangeNumberValue,
   rangeArray,
   rangeBoolean,
   rangeNull,
@@ -64,10 +68,12 @@ import {
   rangeObject,
   rangeString,
   type RangeAccessPath,
+  type ScalarExpr,
   type RangeValue,
   setRangeValueAtPath,
   type StaticLayoutLawKind,
   type StaticLayoutLawWitness,
+  symbolicExprEquals,
   type Value,
 } from './values'
 
@@ -83,6 +89,7 @@ export type {
   NullValue,
   RangeArrayValue,
   RangeBooleanValue,
+  RangeFunctionValue,
   RangeNumberValue,
   RangeObjectValue,
   RangeOpaqueValue,
@@ -91,6 +98,8 @@ export type {
   RangeTruth,
   RangeValue,
   ScalarExpr,
+  StaticLayoutLawKind,
+  StaticLayoutLawWitness,
   StringValue,
   Value,
   WitnessValue,
@@ -116,6 +125,7 @@ export {
   expectNumber,
   expectObject,
   expectRangeArray,
+  expectRangeFunction,
   expectRangeNumber,
   expectRangeObject,
   expectRangeString,
@@ -126,6 +136,7 @@ export {
   getRangeProp,
   mulExpr,
   rangeArray,
+  rangeNull,
   rangeNumber,
   rangeObject,
   rangeString,
@@ -138,31 +149,120 @@ export {
 
 // Report types
 
+export type StaticLayoutLawStatus = 'pass' | 'fail' | 'unknown'
+
+export type StaticLayoutLawUnknown = {
+  reason: string
+  witness?: StaticLayoutLawWitness
+}
+
+export type StaticLayoutLawResult =
+  | {status: 'pass'}
+  | {status: 'fail'; witness: StaticLayoutLawWitness}
+  | {status: 'unknown'; reason: string; witness?: StaticLayoutLawWitness}
+
+export type StaticLayoutFactDomain = 'concrete' | 'range' | 'symbolic'
+
+export type StaticLayoutProofResult =
+  | {status: 'pass'}
+  | {status: 'fail'}
+  | {status: 'unknown'; reason: string}
+
+export type StaticLayoutFact =
+  | {kind: 'symbolic-equality'; left: ScalarExpr; right: ScalarExpr}
+  | {kind: 'range-equality'; left: RangeNumberValue; right: RangeNumberValue}
+  | {kind: 'range-within'; value: RangeNumberValue; min?: number; max?: number}
+  | {kind: 'range-non-negative'; value: RangeNumberValue}
+  | {kind: 'range-integer'; value: RangeNumberValue}
+  | {kind: 'range-array-length'; value: RangeArrayValue; exact: number}
+  | {kind: 'concrete-close'; actual: number; expected: number; tolerance: number}
+
+export type StaticLayoutLawProofMechanism = 'manual-check' | StaticLayoutFact['kind']
+
+export type StaticLayoutLawProofSummary = {
+  mechanism: StaticLayoutLawProofMechanism
+  checks: number
+}
+
+export type StaticLayoutTargetPath = string
+
+export type StaticLayoutLawTargetSummary = {
+  target: StaticLayoutTargetPath
+  checks: number
+  proofs: StaticLayoutLawProofSummary[]
+}
+
 export type StaticLayoutLawSummary = {
   name: string
   kind: StaticLayoutLawKind
   checks: number
-  status: 'pass' | 'fail'
+  status: StaticLayoutLawStatus
+  proofs: StaticLayoutLawProofSummary[]
+  targets?: StaticLayoutLawTargetSummary[]
   firstFailure?: StaticLayoutLawWitness
+  firstUnknown?: StaticLayoutLawUnknown
+}
+
+export type StaticLayoutTargetCoverageSummary = {
+  target: StaticLayoutTargetPath
+  checks: number
+  status: StaticLayoutLawStatus
+  laws: string[]
+  proofs: StaticLayoutLawProofSummary[]
+}
+
+export type FunctionOverrideSummary = {
+  kind: string
+  domains: StaticLayoutFactDomain[]
+}
+
+export type StaticLayoutFunctionSummary = FunctionOverrideSummary & {
+  name: string
+}
+
+export type StaticLayoutCandidateLawKind = 'mined-from-concrete-sweep'
+
+export type StaticLayoutCandidateLaw = {
+  name: string
+  kind: StaticLayoutCandidateLawKind
+  evidence: number
+  details?: StaticLayoutLawWitness
 }
 
 export type StaticLayoutVerificationReport = {
   phase: 'ready' | 'error'
   suite: string
   analyzedFile: string
+  coverage: StaticLayoutTargetCoverageSummary[]
   laws: StaticLayoutLawSummary[]
+  functionSummaries?: StaticLayoutFunctionSummary[]
+  candidateLaws?: StaticLayoutCandidateLaw[]
 }
 
 export type InternalLawSummary = {
   name: string
   kind: StaticLayoutLawKind
   checks: number
+  proofs: Map<StaticLayoutLawProofMechanism, number>
+  targets: Map<StaticLayoutTargetPath, InternalLawTargetSummary>
   firstFailure: StaticLayoutLawWitness | null
+  firstUnknown: StaticLayoutLawUnknown | null
+}
+
+export type InternalLawTargetSummary = {
+  checks: number
+  proofs: Map<StaticLayoutLawProofMechanism, number>
+}
+
+export type StaticLayoutLawCheckOptions = {
+  kind?: StaticLayoutLawKind
+  targets?: StaticLayoutTargetPath[]
 }
 
 // Evaluation state types
 
 export type FunctionOverride = {
+  summary?: FunctionOverrideSummary
   evaluate?: (args: Value[], mode: Mode, context: {
     analyzer: LoweredProgramAnalyzer
     state: EvalState
@@ -562,6 +662,15 @@ export class LoweredProgramAnalyzer {
       }
       case 'call':
         return evaluateRangeCallExpression(this, state, expression)
+      case 'arrow':
+        return [{
+          state,
+          value: {
+            kind: 'range-function',
+            fn: expression.fn,
+            closure: new Map(state.env),
+          },
+        }]
       case 'assign': {
         return this.evalRangeExpression(state, expression.value).map(evaluated => {
           const env = new Map(evaluated.state.env)
@@ -581,7 +690,7 @@ export class LoweredProgramAnalyzer {
         })
       }
       default:
-        throw new Error(`Unsupported range expression kind: ${expression.kind}`)
+        throw new Error(`Unsupported range expression kind: ${(expression as {kind: string}).kind}`)
     }
   }
 }
@@ -593,37 +702,397 @@ export function check(
   name: string,
   passed: boolean,
   witness: () => StaticLayoutLawWitness,
-  kind: StaticLayoutLawKind = 'concrete-fixture',
+  options: StaticLayoutLawKind | StaticLayoutLawCheckOptions = 'concrete-fixture',
+) {
+  const {kind, targets} = normalizeStaticLayoutLawCheckOptions('concrete-fixture', options)
+  checkLaw(laws, name, passed ? {status: 'pass'} : {status: 'fail', witness: witness()}, kind, 'manual-check', targets)
+}
+
+export function checkFact(
+  laws: Map<string, InternalLawSummary>,
+  name: string,
+  fact: StaticLayoutFact,
+  witness: () => StaticLayoutLawWitness,
+  options: StaticLayoutLawKind | StaticLayoutLawCheckOptions = {},
+) {
+  const {kind, targets} = normalizeStaticLayoutLawCheckOptions(staticLayoutFactKind(fact), options)
+  const result = proveStaticLayoutFact(fact)
+  switch (result.status) {
+    case 'pass':
+      checkLaw(laws, name, result, kind, fact.kind, targets)
+      return
+    case 'fail':
+      checkLaw(laws, name, {
+        status: 'fail',
+        witness: {
+          ...describeStaticLayoutFactFailure(fact),
+          ...witness(),
+        },
+      }, kind, fact.kind, targets)
+      return
+    case 'unknown':
+      checkLaw(laws, name, {
+        status: 'unknown',
+        reason: result.reason,
+        witness: {
+          ...describeStaticLayoutFactFailure(fact),
+          ...witness(),
+        },
+      }, kind, fact.kind, targets)
+      return
+  }
+}
+
+export function checkFacts(
+  laws: Map<string, InternalLawSummary>,
+  name: string,
+  facts: StaticLayoutFact[],
+  witness: () => StaticLayoutLawWitness,
+  options: StaticLayoutLawKind | StaticLayoutLawCheckOptions = {},
+) {
+  const {kind, targets} = normalizeStaticLayoutLawCheckOptions(inferStaticLayoutFactsKind(facts), options)
+  for (const fact of facts) checkFact(laws, name, fact, witness, {kind, targets})
+}
+
+export function checkLaw(
+  laws: Map<string, InternalLawSummary>,
+  name: string,
+  result: StaticLayoutLawResult,
+  kind: StaticLayoutLawKind,
+  proofMechanism: StaticLayoutLawProofMechanism = 'manual-check',
+  targets: StaticLayoutTargetPath[] = [],
 ) {
   let law = laws.get(name)
   if (law == null) {
-    law = {name, kind, checks: 0, firstFailure: null}
+    law = {
+      name,
+      kind,
+      checks: 0,
+      proofs: new Map(),
+      targets: new Map(),
+      firstFailure: null,
+      firstUnknown: null,
+    }
     laws.set(name, law)
   } else if (law.kind !== kind) {
     throw new Error(`Law ${name} mixed proof kinds: ${law.kind} vs ${kind}`)
   }
   law.checks++
-  if (!passed && law.firstFailure == null) law.firstFailure = witness()
+  law.proofs.set(proofMechanism, (law.proofs.get(proofMechanism) ?? 0) + 1)
+  recordLawTargets(law, proofMechanism, targets)
+  if (result.status === 'fail' && law.firstFailure == null) law.firstFailure = result.witness
+  if (result.status === 'unknown' && law.firstUnknown == null) {
+    law.firstUnknown = result.witness == null
+      ? {reason: result.reason}
+      : {reason: result.reason, witness: result.witness}
+  }
 }
 
 export function summarizeLaws(laws: Map<string, InternalLawSummary>): StaticLayoutLawSummary[] {
-  return [...laws.values()].map(law => ({
-    name: law.name,
-    kind: law.kind,
-    checks: law.checks,
-    status: law.firstFailure == null ? 'pass' : 'fail',
-    ...(law.firstFailure == null ? {} : {firstFailure: law.firstFailure}),
-  }))
+  return [...laws.values()].map(law => {
+    const status =
+      law.firstFailure != null ? 'fail'
+      : law.firstUnknown != null ? 'unknown'
+      : 'pass'
+    const targets = summarizeLawTargets(law.targets)
+    return {
+      name: law.name,
+      kind: law.kind,
+      checks: law.checks,
+      status,
+      proofs: summarizeLawProofs(law.proofs),
+      ...(targets.length === 0 ? {} : {targets}),
+      ...(law.firstFailure == null ? {} : {firstFailure: law.firstFailure}),
+      ...(law.firstUnknown == null ? {} : {firstUnknown: law.firstUnknown}),
+    }
+  })
 }
 
-export function buildStaticLayoutReport(suite: string, analyzedFile: string, laws: Map<string, InternalLawSummary>): StaticLayoutVerificationReport {
-  const lawSummaries = summarizeLaws(laws)
+function normalizeStaticLayoutLawCheckOptions(
+  defaultKind: StaticLayoutLawKind,
+  options: StaticLayoutLawKind | StaticLayoutLawCheckOptions,
+): {kind: StaticLayoutLawKind; targets: StaticLayoutTargetPath[]} {
+  if (typeof options === 'string') return {kind: options, targets: []}
   return {
-    phase: lawSummaries.some(law => law.status === 'fail') ? 'error' : 'ready',
+    kind: options.kind ?? defaultKind,
+    targets: options.targets ?? [],
+  }
+}
+
+function recordLawTargets(
+  law: InternalLawSummary,
+  proofMechanism: StaticLayoutLawProofMechanism,
+  targets: StaticLayoutTargetPath[],
+) {
+  for (const target of new Set(targets)) {
+    const summary = law.targets.get(target) ?? {checks: 0, proofs: new Map()}
+    summary.checks++
+    summary.proofs.set(proofMechanism, (summary.proofs.get(proofMechanism) ?? 0) + 1)
+    law.targets.set(target, summary)
+  }
+}
+
+function summarizeLawTargets(targets: Map<StaticLayoutTargetPath, InternalLawTargetSummary>): StaticLayoutLawTargetSummary[] {
+  return [...targets]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([target, summary]) => ({
+      target,
+      checks: summary.checks,
+      proofs: summarizeLawProofs(summary.proofs),
+    }))
+}
+
+function summarizeLawProofs(proofs: Map<StaticLayoutLawProofMechanism, number>): StaticLayoutLawProofSummary[] {
+  return [...proofs].map(([mechanism, checks]) => ({mechanism, checks}))
+}
+
+function summarizeStaticLayoutCoverage(laws: StaticLayoutLawSummary[]): StaticLayoutTargetCoverageSummary[] {
+  const coverage = new Map<StaticLayoutTargetPath, {
+    checks: number
+    status: StaticLayoutLawStatus
+    laws: Set<string>
+    proofs: Map<StaticLayoutLawProofMechanism, number>
+  }>()
+
+  for (const law of laws) {
+    for (const target of law.targets ?? []) {
+      const summary = coverage.get(target.target) ?? {
+        checks: 0,
+        status: 'pass' as StaticLayoutLawStatus,
+        laws: new Set<string>(),
+        proofs: new Map<StaticLayoutLawProofMechanism, number>(),
+      }
+      summary.checks += target.checks
+      summary.status = combineStaticLayoutLawStatus(summary.status, law.status)
+      summary.laws.add(law.name)
+      for (const proof of target.proofs) {
+        summary.proofs.set(proof.mechanism, (summary.proofs.get(proof.mechanism) ?? 0) + proof.checks)
+      }
+      coverage.set(target.target, summary)
+    }
+  }
+
+  return [...coverage]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([target, summary]) => ({
+      target,
+      checks: summary.checks,
+      status: summary.status,
+      laws: [...summary.laws],
+      proofs: summarizeLawProofs(summary.proofs),
+    }))
+}
+
+function combineStaticLayoutLawStatus(left: StaticLayoutLawStatus, right: StaticLayoutLawStatus): StaticLayoutLawStatus {
+  if (left === 'fail' || right === 'fail') return 'fail'
+  if (left === 'unknown' || right === 'unknown') return 'unknown'
+  return 'pass'
+}
+
+export function summarizeFunctionOverrides(overrides: Record<string, FunctionOverride>): StaticLayoutFunctionSummary[] {
+  const summaries: StaticLayoutFunctionSummary[] = []
+  for (const [name, override] of Object.entries(overrides)) {
+    if (override.summary == null) continue
+    summaries.push({name, ...override.summary})
+  }
+  summaries.sort((left, right) => left.name.localeCompare(right.name))
+  return summaries
+}
+
+export function mineNumericSweepCandidateLaws(
+  subject: string,
+  samples: StaticLayoutLawWitness[],
+  options: {
+    inputKeys?: string[]
+    outputKeys?: string[]
+    epsilon?: number
+  } = {},
+): StaticLayoutCandidateLaw[] {
+  if (samples.length < 2) return []
+
+  const epsilonValue = options.epsilon ?? epsilon
+  const inputKeys = new Set(options.inputKeys ?? [])
+  const allKeys = Object.keys(samples[0] ?? {})
+  const numberKeys = allKeys.filter(key => samples.every(sample => typeof sample[key] === 'number'))
+  const outputKeys = options.outputKeys ?? numberKeys.filter(key => !inputKeys.has(key))
+  const outputKeySet = new Set(outputKeys)
+  const laws: StaticLayoutCandidateLaw[] = []
+
+  for (const key of outputKeys) {
+    const values = samples.map(sample => sample[key] as number)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    if (values.every(Number.isInteger)) {
+      laws.push(candidateLaw(`${subject} sweep observed ${key} as integer`, samples.length, {field: key}))
+    }
+    laws.push(candidateLaw(
+      min === max
+        ? `${subject} sweep observed ${key} fixed at ${formatCandidateNumber(min)}`
+        : `${subject} sweep observed ${key} in ${formatCandidateNumber(min)}..${formatCandidateNumber(max)}`,
+      samples.length,
+      {field: key, min, max},
+    ))
+  }
+
+  for (let leftIndex = 0; leftIndex < numberKeys.length; leftIndex++) {
+    for (let rightIndex = leftIndex + 1; rightIndex < numberKeys.length; rightIndex++) {
+      const leftKey = numberKeys[leftIndex]!
+      const rightKey = numberKeys[rightIndex]!
+      if (!outputKeySet.has(leftKey) && !outputKeySet.has(rightKey)) continue
+
+      const deltas = samples.map(sample => (sample[leftKey] as number) - (sample[rightKey] as number))
+      const firstDelta = deltas[0]!
+      if (!deltas.every(delta => Math.abs(delta - firstDelta) <= epsilonValue)) continue
+      let displayLeft = leftKey
+      let displayRight = rightKey
+      let displayDelta = firstDelta
+      if (inputKeys.has(leftKey) && outputKeySet.has(rightKey)) {
+        displayLeft = rightKey
+        displayRight = leftKey
+        displayDelta = -firstDelta
+      }
+
+      laws.push(candidateLaw(
+        Math.abs(displayDelta) <= epsilonValue
+          ? `${subject} sweep suggests ${displayLeft} = ${displayRight}`
+          : `${subject} sweep suggests ${displayLeft} = ${displayRight} + ${formatCandidateNumber(displayDelta)}`,
+        samples.length,
+        {left: displayLeft, right: displayRight, delta: displayDelta},
+      ))
+    }
+  }
+
+  return laws
+}
+
+export function buildStaticLayoutReport(
+  suite: string,
+  analyzedFile: string,
+  laws: Map<string, InternalLawSummary>,
+  options: {
+    functionSummaries?: StaticLayoutFunctionSummary[]
+    candidateLaws?: StaticLayoutCandidateLaw[]
+  } = {},
+): StaticLayoutVerificationReport {
+  const lawSummaries = summarizeLaws(laws)
+  const functionSummaries = options.functionSummaries ?? []
+  const candidateLaws = options.candidateLaws ?? []
+  return {
+    phase: lawSummaries.some(law => law.status !== 'pass') ? 'error' : 'ready',
     suite,
     analyzedFile,
+    coverage: summarizeStaticLayoutCoverage(lawSummaries),
     laws: lawSummaries,
+    ...(functionSummaries.length === 0 ? {} : {functionSummaries}),
+    ...(candidateLaws.length === 0 ? {} : {candidateLaws}),
   }
+}
+
+function candidateLaw(name: string, evidence: number, details?: StaticLayoutLawWitness): StaticLayoutCandidateLaw {
+  return {
+    name,
+    kind: 'mined-from-concrete-sweep',
+    evidence,
+    ...(details == null ? {} : {details}),
+  }
+}
+
+function formatCandidateNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)))
+}
+
+export function proveStaticLayoutFact(fact: StaticLayoutFact): StaticLayoutProofResult {
+  switch (fact.kind) {
+    case 'symbolic-equality':
+      return symbolicExprEquals(fact.left, fact.right)
+        ? {status: 'pass'}
+        : {status: 'unknown', reason: 'symbolic equality is not proven by the linear expression checker'}
+    case 'range-equality':
+      return rangeNumbersEqual(fact.left, fact.right) ? {status: 'pass'} : {status: 'fail'}
+    case 'range-within':
+      if (fact.min != null && fact.value.min < fact.min - epsilon) return {status: 'fail'}
+      if (fact.max != null && fact.value.max > fact.max + epsilon) return {status: 'fail'}
+      return {status: 'pass'}
+    case 'range-non-negative':
+      return fact.value.min >= -epsilon ? {status: 'pass'} : {status: 'fail'}
+    case 'range-integer':
+      return fact.value.isInteger ? {status: 'pass'} : {status: 'fail'}
+    case 'range-array-length':
+      return fact.value.lengthMin === fact.exact && fact.value.lengthMax === fact.exact ? {status: 'pass'} : {status: 'fail'}
+    case 'concrete-close':
+      return Math.abs(fact.actual - fact.expected) <= fact.tolerance ? {status: 'pass'} : {status: 'fail'}
+  }
+}
+
+function describeStaticLayoutFactFailure(fact: StaticLayoutFact): StaticLayoutLawWitness {
+  switch (fact.kind) {
+    case 'symbolic-equality':
+      return {}
+    case 'range-equality':
+      return {
+        actualMin: fact.left.min,
+        actualMax: fact.left.max,
+        expectedMin: fact.right.min,
+        expectedMax: fact.right.max,
+      }
+    case 'range-within':
+      return {
+        actualMin: fact.value.min,
+        actualMax: fact.value.max,
+        min: fact.min ?? null,
+        max: fact.max ?? null,
+      }
+    case 'range-non-negative':
+    case 'range-integer':
+      return {
+        actualMin: fact.value.min,
+        actualMax: fact.value.max,
+      }
+    case 'range-array-length':
+      return {
+        lengthMin: fact.value.lengthMin,
+        lengthMax: fact.value.lengthMax,
+        expectedLength: fact.exact,
+      }
+    case 'concrete-close':
+      return {
+        actual: fact.actual,
+        expected: fact.expected,
+      }
+  }
+}
+
+function rangeNumbersEqual(left: RangeNumberValue, right: RangeNumberValue) {
+  return (
+    Math.abs(left.min - right.min) <= epsilon &&
+    Math.abs(left.max - right.max) <= epsilon
+  ) || (
+    left.expr != null &&
+    right.expr != null &&
+    symbolicExprEquals(left.expr, right.expr)
+  )
+}
+
+function staticLayoutFactKind(fact: StaticLayoutFact): StaticLayoutLawKind {
+  switch (fact.kind) {
+    case 'symbolic-equality':
+      return 'symbolic'
+    case 'range-equality':
+    case 'range-within':
+    case 'range-non-negative':
+    case 'range-integer':
+    case 'range-array-length':
+      return 'range'
+    case 'concrete-close':
+      return 'concrete-fixture'
+  }
+}
+
+function inferStaticLayoutFactsKind(facts: StaticLayoutFact[]) {
+  if (facts.length === 0) throw new Error('Expected at least one static layout fact')
+  const kinds = new Set(facts.map(staticLayoutFactKind))
+  if (kinds.size !== 1) throw new Error('Mixed static layout fact kinds need an explicit law kind')
+  return staticLayoutFactKind(facts[0]!)
 }
 
 // Callback invocation
@@ -653,6 +1122,27 @@ export function invokeConcreteFunctionValue(
       constraints: returned.constraints,
       env: returned.env ?? env,
     },
+    value: returned.value,
+  }))
+}
+
+function invokeRangeFunctionValue(
+  analyzer: LoweredProgramAnalyzer,
+  outerState: RangeState,
+  callbackValue: RangeValue,
+  args: RangeValue[],
+): RangeEvalCase[] {
+  const callback = expectRangeFunction(callbackValue)
+  const env = new Map(callback.closure)
+  for (const [name, value] of outerState.env) env.set(name, value)
+  for (let i = 0; i < callback.fn.params.length; i++) {
+    const arg = args[i]
+    if (arg == null) break
+    env.set(callback.fn.params[i]!, arg)
+  }
+  const returns = executeRangeFunctionBlocks(analyzer, callback.fn, [{env}])
+  return returns.map(returned => ({
+    state: outerState,
     value: returned.value,
   }))
 }
@@ -1345,6 +1835,33 @@ function evaluateRangeCallExpression(analyzer: LoweredProgramAnalyzer, state: Ra
         true,
       ),
     }))
+  }
+
+  if (expression.callee.kind === 'property' && expression.callee.property === 'map') {
+    if (expression.args.length < 1) throw new Error('Array.map expects a callback')
+    const callbackCases = analyzer.evalRangeExpression(state, expression.args[0]!)
+    const targetCases = analyzer.evalRangeExpression(state, expression.callee.object)
+    const results: RangeEvalCase[] = []
+    for (const targetCase of targetCases) {
+      const array = expectRangeArray(targetCase.value)
+      if (array.items == null) throw new Error('Range array.map expects exact array items')
+      for (const callbackCase of callbackCases) {
+        const mappedItems: RangeValue[] = []
+        for (let i = 0; i < array.items.length; i++) {
+          const callbackReturns = invokeRangeFunctionValue(analyzer, targetCase.state, callbackCase.value, [
+            array.items[i]!,
+            rangeNumber(i, i, true),
+          ])
+          if (callbackReturns.length !== 1) throw new Error('Range array.map callback must resolve to 1 case')
+          mappedItems.push(callbackReturns[0]!.value)
+        }
+        results.push({
+          state: targetCase.state,
+          value: rangeArray(mappedItems),
+        })
+      }
+    }
+    return results
   }
 
   let argumentCases: Array<{state: RangeState; values: RangeValue[]}> = [{state, values: []}]

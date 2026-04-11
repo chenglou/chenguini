@@ -82,6 +82,7 @@ export type RangeNumberValue = {
   min: number
   max: number
   isInteger: boolean
+  expr: ScalarExpr | null
 }
 
 export type RangeBooleanValue = {
@@ -111,6 +112,12 @@ export type RangeArrayValue = {
   isStrictlyIncreasingNumeric: boolean
 }
 
+export type RangeFunctionValue = {
+  kind: 'range-function'
+  fn: InlineFunction
+  closure: Map<string, RangeValue>
+}
+
 export type RangeOpaqueValue = {
   kind: 'range-opaque'
   label: string
@@ -120,7 +127,15 @@ export type RangeNullValue = {
   kind: 'range-null'
 }
 
-export type RangeValue = RangeNumberValue | RangeBooleanValue | RangeStringValue | RangeObjectValue | RangeArrayValue | RangeOpaqueValue | RangeNullValue
+export type RangeValue =
+  | RangeNumberValue
+  | RangeBooleanValue
+  | RangeStringValue
+  | RangeObjectValue
+  | RangeArrayValue
+  | RangeFunctionValue
+  | RangeOpaqueValue
+  | RangeNullValue
 
 export type RangeAccessPath = {
   root: string
@@ -199,7 +214,17 @@ export function symbolicOpaque(label: string): OpaqueValue {
 // Range constructors
 
 export function rangeNumber(min: number, max: number, isInteger: boolean): RangeNumberValue {
-  return {kind: 'range-number', min, max, isInteger}
+  return rangeNumberWithExpr(min, max, isInteger, null)
+}
+
+function rangeNumberWithExpr(min: number, max: number, isInteger: boolean, expr: ScalarExpr | null): RangeNumberValue {
+  return {
+    kind: 'range-number',
+    min,
+    max,
+    isInteger,
+    expr: expr ?? (Math.abs(min - max) <= epsilon ? constExpr(min) : null),
+  }
 }
 
 export function rangeBoolean(truth: RangeTruth): RangeBooleanValue {
@@ -296,6 +321,11 @@ export function expectSymbolicNumberValue(value: NumberValue) {
 
 export function expectRangeNumber(value: RangeValue): RangeNumberValue {
   if (value.kind !== 'range-number') throw new Error(`Expected range number, got ${value.kind}`)
+  return value
+}
+
+export function expectRangeFunction(value: RangeValue): RangeFunctionValue {
+  if (value.kind !== 'range-function') throw new Error(`Expected range function, got ${value.kind}`)
   return value
 }
 
@@ -433,12 +463,17 @@ export function bindValueToName(env: Map<string, Value>, name: IrBindingName, va
 
 export function bindRangeValueToName(env: Map<string, RangeValue>, name: IrBindingName, value: RangeValue) {
   if (name.kind === 'identifier') {
-    env.set(name.name, value)
+    env.set(name.name, maybeAttachRangeBindingExpr(value, name.name))
     return
   }
 
   const object = expectRangeObject(value)
   for (const element of name.elements) bindRangeValueToName(env, element.name, getRangeProp(object, element.key))
+}
+
+function maybeAttachRangeBindingExpr(value: RangeValue, name: string): RangeValue {
+  if (value.kind !== 'range-number' || value.expr != null) return value
+  return rangeNumberWithExpr(value.min, value.max, value.isInteger, varExpr(name))
 }
 
 // Concrete numeric operators
@@ -573,23 +608,48 @@ export function applyAssignmentOperator(current: NumberValue, next: NumberValue,
 // Range numeric operators
 
 export function negateRangeNumber(value: RangeNumberValue) {
-  return rangeNumber(-value.max, -value.min, value.isInteger)
+  return rangeNumberWithExpr(
+    -value.max,
+    -value.min,
+    value.isInteger,
+    value.expr == null ? null : mulExpr(constExpr(-1), value.expr),
+  )
 }
 
 export function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNumberValue, operator: '+' | '-' | '*' | '/' | '%' | '**') {
   switch (operator) {
     case '+':
-      return rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger)
+      return rangeNumberWithExpr(
+        left.min + right.min,
+        left.max + right.max,
+        left.isInteger && right.isInteger,
+        left.expr != null && right.expr != null ? addExpr(left.expr, right.expr) : null,
+      )
     case '-':
-      return rangeNumber(left.min - right.max, left.max - right.min, left.isInteger && right.isInteger)
+      return rangeNumberWithExpr(
+        left.min - right.max,
+        left.max - right.min,
+        left.isInteger && right.isInteger,
+        left.expr != null && right.expr != null ? subExpr(left.expr, right.expr) : null,
+      )
     case '*': {
       const products = [left.min * right.min, left.min * right.max, left.max * right.min, left.max * right.max]
-      return rangeNumber(Math.min(...products), Math.max(...products), left.isInteger && right.isInteger)
+      return rangeNumberWithExpr(
+        Math.min(...products),
+        Math.max(...products),
+        left.isInteger && right.isInteger,
+        left.expr != null && right.expr != null ? mulExpr(left.expr, right.expr) : null,
+      )
     }
     case '/': {
       if (right.min <= 0 && right.max >= 0) throw new Error('Division by an interval spanning zero is not supported')
       const quotients = [left.min / right.min, left.min / right.max, left.max / right.min, left.max / right.max]
-      return rangeNumber(Math.min(...quotients), Math.max(...quotients), false)
+      return rangeNumberWithExpr(
+        Math.min(...quotients),
+        Math.max(...quotients),
+        false,
+        left.expr != null && right.expr != null ? divExpr(left.expr, right.expr) : null,
+      )
     }
     case '%': {
       if (!left.isInteger || !right.isInteger) throw new Error('Range remainder expects integer operands')
@@ -609,13 +669,17 @@ export function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNu
     case '**': {
       if (!right.isInteger || right.min !== right.max) throw new Error('Range exponentiation only supports constant integer exponents')
       const exp = right.min
+      const expr =
+        exp === 0 ? constExpr(1)
+        : exp === 1 ? left.expr
+        : null
       if (exp === 2) {
-        if (left.min >= 0) return rangeNumber(left.min ** 2, left.max ** 2, left.isInteger)
-        if (left.max <= 0) return rangeNumber(left.max ** 2, left.min ** 2, left.isInteger)
-        return rangeNumber(0, Math.max(left.min ** 2, left.max ** 2), left.isInteger)
+        if (left.min >= 0) return rangeNumberWithExpr(left.min ** 2, left.max ** 2, left.isInteger, expr)
+        if (left.max <= 0) return rangeNumberWithExpr(left.max ** 2, left.min ** 2, left.isInteger, expr)
+        return rangeNumberWithExpr(0, Math.max(left.min ** 2, left.max ** 2), left.isInteger, expr)
       }
       const results = [left.min ** exp, left.max ** exp]
-      return rangeNumber(Math.min(...results), Math.max(...results), left.isInteger && exp >= 0)
+      return rangeNumberWithExpr(Math.min(...results), Math.max(...results), left.isInteger && exp >= 0, expr)
     }
   }
 }
@@ -707,7 +771,11 @@ export function isRangeComparisonOperator(operator: string): operator is Compari
 export function joinRangeValues(left: RangeValue, right: RangeValue): RangeValue {
   if (left.kind !== right.kind) throw new Error(`Cannot join ${left.kind} with ${right.kind}`)
   if (left.kind === 'range-number' && right.kind === 'range-number') {
-    return rangeNumber(Math.min(left.min, right.min), Math.max(left.max, right.max), left.isInteger && right.isInteger)
+    const joined = rangeNumber(Math.min(left.min, right.min), Math.max(left.max, right.max), left.isInteger && right.isInteger)
+    if (left.expr != null && right.expr != null && symbolicExprEquals(left.expr, right.expr)) {
+      return rangeNumberWithExpr(joined.min, joined.max, joined.isInteger, left.expr)
+    }
+    return joined
   }
   if (left.kind === 'range-boolean' && right.kind === 'range-boolean') {
     return left.truth === right.truth ? left : rangeBoolean('maybe')
@@ -746,6 +814,10 @@ export function joinRangeValues(left: RangeValue, right: RangeValue): RangeValue
         : joinRangeValues(left.last, right.last),
       isStrictlyIncreasingNumeric: items == null ? false : rangeItemsAreStrictlyIncreasing(items),
     }
+  }
+  if (left.kind === 'range-function' && right.kind === 'range-function') {
+    if (left.fn !== right.fn) throw new Error('Cannot join different range functions')
+    return left
   }
   if (left.kind === 'range-opaque' && right.kind === 'range-opaque') {
     if (left.label !== right.label) throw new Error(`Cannot join opaque values ${left.label} and ${right.label}`)
@@ -834,8 +906,8 @@ export function narrowRangeNumberPair(
       const max = Math.min(left.max, right.max)
       if (min > max + epsilon) return null
       return {
-        left: rangeNumber(min, max, left.isInteger),
-        right: rangeNumber(min, max, right.isInteger),
+        left: rangeNumberWithExpr(min, max, left.isInteger, left.expr),
+        right: rangeNumberWithExpr(min, max, right.isInteger, right.expr),
       }
     }
     case '!=':
@@ -849,8 +921,8 @@ function narrowOrderedRangeNumberPair(
   strict: boolean,
 ): {left: RangeNumberValue; right: RangeNumberValue} | null {
   const step = strict && left.isInteger && right.isInteger ? 1 : 0
-  const nextLeft = rangeNumber(left.min, Math.min(left.max, right.max - step), left.isInteger)
-  const nextRight = rangeNumber(Math.max(right.min, left.min + step), right.max, right.isInteger)
+  const nextLeft = rangeNumberWithExpr(left.min, Math.min(left.max, right.max - step), left.isInteger, left.expr)
+  const nextRight = rangeNumberWithExpr(Math.max(right.min, left.min + step), right.max, right.isInteger, right.expr)
   if (nextLeft.min > nextLeft.max + epsilon || nextRight.min > nextRight.max + epsilon) return null
   return {
     left: nextLeft,

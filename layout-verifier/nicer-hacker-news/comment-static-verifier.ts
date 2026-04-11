@@ -20,6 +20,7 @@ import {
   rangeNumber,
   rangeObject,
   rangeString,
+  summarizeFunctionOverrides,
   type StaticLayoutVerificationReport,
 } from '../core'
 import {loadStaticContractOverridesForSourceFile} from '../contracts'
@@ -31,17 +32,20 @@ export function runHNCommentLayoutStaticVerification(
   // These laws prove the comment geometry kernel from source, but still trust
   // the auto-loaded text helper contracts at the Pretext-ish boundaries.
   const analyzer = new LoweredProgramAnalyzer(sourceText, {}, autoContractOverrides, {
-    includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'findHNCommentTextRects', 'findHNCommentTextOffsetInEmptySpace'],
+    includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'commentTextLength', 'findHNCommentTextRects', 'findHNCommentTextOffsetInEmptySpace'],
   })
   const laws = new Map<string, InternalLawSummary>()
 
   verifyLineBreakCharCountAtRange(analyzer, laws)
+  verifyCommentTextLength(analyzer, laws)
   verifyFindHNCommentTextOffsetInEmptySpaceRange(analyzer, laws)
   verifyLayoutPreparedHNCommentDocConcrete(analyzer, laws)
   verifyFindHNCommentTextRectsConcrete(analyzer, laws)
   verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer, laws)
 
-  return buildStaticLayoutReport('nicer-hacker-news-comment-static-layout', 'demos/nicer-hacker-news/hn-comment-layout.ts', laws)
+  return buildStaticLayoutReport('nicer-hacker-news-comment-static-layout', 'demos/nicer-hacker-news/hn-comment-layout.ts', laws, {
+    functionSummaries: summarizeFunctionOverrides(autoContractOverrides),
+  })
 }
 
 export async function runHNCommentLayoutStaticVerificationForSourceFile(sourceFilePath: string): Promise<StaticLayoutVerificationReport> {
@@ -72,6 +76,69 @@ function verifyLineBreakCharCountAtRange(analyzer: LoweredProgramAnalyzer, laws:
       scenario: scenario.label,
       countMin: count.min,
       countMax: count.max,
+      expected: scenario.expected,
+    }), 'range')
+  }
+}
+
+function verifyCommentTextLength(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const concreteScenarios = [
+    {
+      label: 'non_empty_layout',
+      layout: makeConcreteCommentLayoutFixture(),
+      expected: 16,
+    },
+    {
+      label: 'empty_layout',
+      layout: concreteObject({
+        width: concreteNumber(200),
+        height: concreteNumber(0),
+        blocks: concreteArray([]),
+      }),
+      expected: 0,
+    },
+  ]
+
+  for (const scenario of concreteScenarios) {
+    const returns = analyzer.evaluateFunction('commentTextLength', [scenario.layout], 'concrete')
+    check(laws, 'commentTextLength stays branch-free per concrete scenario', returns.length === 1, () => ({
+      scenario: scenario.label,
+      cases: returns.length,
+    }), 'concrete-fixture')
+    if (returns.length !== 1) continue
+
+    const actual = expectConcreteNumber(returns[0]!.value)
+    check(laws, 'commentTextLength returns the last line textEnd', Math.abs(actual - scenario.expected) <= epsilon, () => ({
+      scenario: scenario.label,
+      actual,
+      expected: scenario.expected,
+    }), 'concrete-fixture')
+  }
+
+  const rangeScenarios = [
+    {
+      label: 'range_layout',
+      layout: makeRangeCommentLayoutFixture(),
+      expected: 16,
+    },
+    {
+      label: 'range_empty_layout',
+      layout: rangeObject({
+        width: rangeNumber(200, 200, true),
+        height: rangeNumber(0, 0, true),
+        blocks: rangeArray([]),
+      }),
+      expected: 0,
+    },
+  ]
+
+  for (const scenario of rangeScenarios) {
+    const result = joinRangeCases(analyzer.evaluateFunctionRange('commentTextLength', [scenario.layout]))
+    const actual = expectRangeNumber(result)
+    check(laws, 'commentTextLength returns the last line textEnd over exact layouts', actual.min === scenario.expected && actual.max === scenario.expected, () => ({
+      scenario: scenario.label,
+      actualMin: actual.min,
+      actualMax: actual.max,
       expected: scenario.expected,
     }), 'range')
   }
