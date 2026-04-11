@@ -57,7 +57,7 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
   check(laws, 'layoutHNThreadVisualGeometry preserves row count over width and height intervals', rows.lengthMin === 3 && rows.lengthMax === 3, () => ({
     rowCountMin: rows.lengthMin,
     rowCountMax: rows.lengthMax,
-  }))
+  }), 'range')
   if (rows.items == null || rows.items.length !== 3) return
 
   const firstRow = expectRangeObject(rows.items[0]!)
@@ -66,6 +66,9 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
   const firstRowRect = getRangeObjectProp(firstRow, 'rowRect')
   const secondRowRect = getRangeObjectProp(secondRow, 'rowRect')
   const thirdRowRect = getRangeObjectProp(thirdRow, 'rowRect')
+  const firstUserRect = getRangeObjectProp(firstRow, 'userRect')
+  const secondUserRect = getRangeObjectProp(secondRow, 'userRect')
+  const thirdUserRect = getRangeObjectProp(thirdRow, 'userRect')
   const firstCommentRect = getRangeObjectProp(firstRow, 'commentRect')
   const secondCommentRect = getRangeObjectProp(secondRow, 'commentRect')
   const thirdCommentRect = getRangeObjectProp(thirdRow, 'commentRect')
@@ -75,6 +78,9 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
   const secondHeight = getRangeNumberProp(secondRowRect, 'height')
   const thirdTop = getRangeNumberProp(thirdRowRect, 'top')
   const thirdHeight = getRangeNumberProp(thirdRowRect, 'height')
+  const firstUserTop = getRangeNumberProp(firstUserRect, 'top')
+  const secondUserTop = getRangeNumberProp(secondUserRect, 'top')
+  const thirdUserTop = getRangeNumberProp(thirdUserRect, 'top')
   const firstBottom = getRangeNumberProp(firstRow, 'rowBottom')
   const secondBottom = getRangeNumberProp(secondRow, 'rowBottom')
   const thirdBottom = getRangeNumberProp(thirdRow, 'rowBottom')
@@ -103,7 +109,7 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
     expectedSecondTop: describeRange(firstBottom),
     thirdTop: describeRange(thirdTop),
     expectedThirdTop: describeRange(secondBottom),
-  }))
+  }), 'range')
   check(laws, 'layoutHNThreadVisualGeometry keeps comment x tied to indent math over intervals', rangesEqual(
     getRangeNumberProp(firstCommentRect, 'left'),
     rangeNumber(24, 24, true),
@@ -117,7 +123,24 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
     firstLeft: describeRange(getRangeNumberProp(firstCommentRect, 'left')),
     secondLeft: describeRange(getRangeNumberProp(secondCommentRect, 'left')),
     thirdLeft: describeRange(getRangeNumberProp(thirdCommentRect, 'left')),
-  }))
+  }), 'range')
+  check(laws, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals', rangesEqual(
+    firstUserTop,
+    firstTop,
+  ) && rangesEqual(
+    secondUserTop,
+    secondTop,
+  ) && rangesEqual(
+    thirdUserTop,
+    thirdTop,
+  ), () => ({
+    firstUserTop: describeRange(firstUserTop),
+    expectedFirstUserTop: describeRange(firstTop),
+    secondUserTop: describeRange(secondUserTop),
+    expectedSecondUserTop: describeRange(secondTop),
+    thirdUserTop: describeRange(thirdUserTop),
+    expectedThirdUserTop: describeRange(thirdTop),
+  }), 'range')
   check(laws, 'layoutHNThreadVisualGeometry keeps comment width tied to comment layout width over intervals', rangesEqual(
     getRangeNumberProp(firstCommentRect, 'width'),
     rangeNumber(260, 340, true),
@@ -131,7 +154,7 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
     firstWidth: describeRange(getRangeNumberProp(firstCommentRect, 'width')),
     secondWidth: describeRange(getRangeNumberProp(secondCommentRect, 'width')),
     thirdWidth: describeRange(getRangeNumberProp(thirdCommentRect, 'width')),
-  }))
+  }), 'range')
   check(laws, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible', rangesEqual(
     firstVisibleRowIndex,
     rangeNumber(0, 0, true),
@@ -145,14 +168,14 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
     firstVisibleRowIndex: describeRange(firstVisibleRowIndex),
     lastVisibleRowIndex: describeRange(lastVisibleRowIndex),
     firstVisibleRowTop: describeRange(firstVisibleRowTop),
-  }))
+  }), 'range')
   check(laws, 'layoutHNThreadVisualGeometry derives content height from the last row bottom plus scrollTopCap over intervals', rangesEqual(
     contentHeight,
     addRanges(thirdBottom, rangeNumber(40, 40, true)),
   ), () => ({
     contentHeight: describeRange(contentHeight),
     expectedContentHeight: describeRange(addRanges(thirdBottom, rangeNumber(40, 40, true))),
-  }))
+  }), 'range')
 }
 
 function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
@@ -170,7 +193,7 @@ function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<s
   check(laws, 'layoutHNRowHitGeometry preserves row count over height intervals', result.lengthMin === 3 && result.lengthMax === 3, () => ({
     rowCountMin: result.lengthMin,
     rowCountMax: result.lengthMax,
-  }))
+  }), 'range')
   if (result.items == null || result.items.length !== 3) return
   const rows = result.items
 
@@ -206,19 +229,19 @@ function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<s
     expectedSecondTop: describeRange(addRanges(firstTop, firstHeight)),
     thirdTop: describeRange(thirdTop),
     expectedThirdTop: describeRange(addRanges(secondTop, secondHeight)),
-  }))
+  }), 'range')
   check(laws, 'layoutHNRowHitGeometry keeps each row full-width over width intervals', widthMatches && leftIsZero, () => ({
     leftIsZero: leftIsZero ? 'true' : 'false',
     width: rows.map(item => {
       const rowRect = getRangeObjectProp(expectRangeObject(item), 'rowRect')
       return describeRange(getRangeNumberProp(rowRect, 'width'))
     }).join('|'),
-  }))
+  }), 'range')
   check(laws, 'layoutHNRowHitGeometry keeps row heights non-negative over height intervals', firstHeight.min >= 0 && secondHeight.min >= 0 && thirdHeight.min >= 0, () => ({
     firstHeight: describeRange(firstHeight),
     secondHeight: describeRange(secondHeight),
     thirdHeight: describeRange(thirdHeight),
-  }))
+  }), 'range')
 }
 
 function addRanges(left: ReturnType<typeof expectRangeNumber>, right: ReturnType<typeof expectRangeNumber>) {
@@ -289,7 +312,7 @@ function verifyRowHitGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string
     check(laws, 'layoutHNRowHitGeometry stays branch-free per concrete scenario', returns.length === 1, () => ({
       scenario: scenario.label,
       cases: returns.length,
-    }))
+    }), 'concrete-fixture')
     if (returns.length !== 1) continue
 
     const rows = expectArray(returns[0]!.value)
@@ -297,7 +320,7 @@ function verifyRowHitGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string
       scenario: scenario.label,
       rowCount: rows.items.length,
       expectedRowCount: scenario.rows.items.length,
-    }))
+    }), 'concrete-fixture')
 
     let expectedTop = scenario.submissionHeight - scenario.scrollTopCap
     let monotone = true
@@ -317,11 +340,11 @@ function verifyRowHitGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string
     check(laws, 'layoutHNRowHitGeometry stacks row tops contiguously', monotone, () => ({
       scenario: scenario.label,
       firstExpectedTop: scenario.submissionHeight - scenario.scrollTopCap,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutHNRowHitGeometry keeps each row full-width and non-negative', widthsMatch, () => ({
       scenario: scenario.label,
       containerWidth: scenario.containerWidth,
-    }))
+    }), 'concrete-fixture')
   }
 }
 
@@ -383,7 +406,7 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
     check(laws, 'layoutHNThreadVisualGeometry stays branch-free per concrete scenario', returns.length === 1, () => ({
       scenario: scenario.label,
       cases: returns.length,
-    }))
+    }), 'concrete-fixture')
     if (returns.length !== 1) continue
 
     const layout = expectObject(returns[0]!.value)
@@ -397,7 +420,7 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
       scenario: scenario.label,
       rowCount: rows.items.length,
       expectedRowCount: scenario.rows.items.length,
-    }))
+    }), 'concrete-fixture')
 
     let monotone = true
     let commentMathMatches = true
@@ -439,21 +462,21 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
     check(laws, 'layoutHNThreadVisualGeometry keeps row bottoms monotone and full-width', monotone, () => ({
       scenario: scenario.label,
       rowCount: rows.items.length,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math', commentMathMatches, () => ({
       scenario: scenario.label,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutHNThreadVisualGeometry keeps the user rect inside the row', userRectStaysInsideRow, () => ({
       scenario: scenario.label,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutHNThreadVisualGeometry keeps gutter segments ordered', gutterStaysOrdered, () => ({
       scenario: scenario.label,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutHNThreadVisualGeometry derives content height from the last row bottom plus scrollTopCap', Math.abs(contentHeight - (maxRowBottom + scenario.scrollTopCap)) <= epsilon, () => ({
       scenario: scenario.label,
       contentHeight,
       expectedContentHeight: maxRowBottom + scenario.scrollTopCap,
-    }))
+    }), 'concrete-fixture')
 
     const visibleStateConsistent =
       firstVisibleRowIndex.kind === 'null'
@@ -471,6 +494,6 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
       scenario: scenario.label,
       firstVisibleRowIndex: firstVisibleRowIndex.kind === 'null' ? null : expectConcreteNumber(firstVisibleRowIndex),
       lastVisibleRowIndex: lastVisibleRowIndex.kind === 'null' ? null : expectConcreteNumber(lastVisibleRowIndex),
-    }))
+    }), 'concrete-fixture')
   }
 }

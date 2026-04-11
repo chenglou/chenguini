@@ -26,6 +26,8 @@ export function runHNCommentLayoutStaticVerification(
   sourceText: string,
   autoContractOverrides: Record<string, FunctionOverride> = {},
 ): StaticLayoutVerificationReport {
+  // These laws prove the comment geometry kernel from source, but still trust
+  // the auto-loaded text helper contracts at the Pretext-ish boundaries.
   const analyzer = new LoweredProgramAnalyzer(sourceText, {}, autoContractOverrides, {
     includeFunctions: ['layoutPreparedHNCommentDoc', 'lineBreakCharCountAt', 'findHNCommentTextRects', 'findHNCommentTextOffsetInEmptySpace'],
   })
@@ -68,7 +70,7 @@ function verifyLineBreakCharCountAtRange(analyzer: LoweredProgramAnalyzer, laws:
       countMin: count.min,
       countMax: count.max,
       expected: scenario.expected,
-    }))
+    }), 'range')
   }
 }
 
@@ -144,7 +146,7 @@ function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyz
     check(laws, 'layoutPreparedHNCommentDoc stays branch-free per concrete scenario', returns.length === 1, () => ({
       scenario: scenario.label,
       cases: returns.length,
-    }))
+    }), 'concrete-fixture')
     if (returns.length !== 1) continue
 
     const layout = expectObject(returns[0]!.value)
@@ -156,12 +158,12 @@ function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyz
       scenario: scenario.label,
       width,
       expectedWidth: Math.max(1, scenario.maxWidth),
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutPreparedHNCommentDoc preserves block count', blocks.items.length === expectArray(getProp(scenario.doc, 'blocks')).items.length, () => ({
       scenario: scenario.label,
       blockCount: blocks.items.length,
       expectedBlockCount: expectArray(getProp(scenario.doc, 'blocks')).items.length,
-    }))
+    }), 'concrete-fixture')
 
     let expectedTop = 0
     let totalHeight = 0
@@ -229,26 +231,26 @@ function verifyLayoutPreparedHNCommentDocConcrete(analyzer: LoweredProgramAnalyz
     check(laws, 'layoutPreparedHNCommentDoc keeps line tops monotone and aligned to block tops', lineTopsMonotone, () => ({
       scenario: scenario.label,
       width,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutPreparedHNCommentDoc keeps line widths inside the offered width', lineWidthsFit, () => ({
       scenario: scenario.label,
       width,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutPreparedHNCommentDoc derives block height from line count', blockHeightsMatchLineCount, () => ({
       scenario: scenario.label,
       lineHeight,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes', fragmentsStayInsideTheirLine, () => ({
       scenario: scenario.label,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutPreparedHNCommentDoc keeps text offsets monotone', textOffsetsMonotone, () => ({
       scenario: scenario.label,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps', Math.abs(height - totalHeight) <= epsilon, () => ({
       scenario: scenario.label,
       height,
       expectedHeight: totalHeight,
-    }))
+    }), 'concrete-fixture')
   }
 }
 
@@ -294,7 +296,7 @@ function verifyFindHNCommentTextRectsConcrete(analyzer: LoweredProgramAnalyzer, 
     check(laws, 'findHNCommentTextRects stays branch-free per concrete scenario', returns.length === 1, () => ({
       scenario: scenario.label,
       cases: returns.length,
-    }))
+    }), 'concrete-fixture')
     if (returns.length !== 1) continue
 
     const rects = expectArray(returns[0]!.value)
@@ -347,11 +349,11 @@ function verifyFindHNCommentTextRectsConcrete(analyzer: LoweredProgramAnalyzer, 
       scenario: scenario.label,
       rectCount: actualRects.length,
       expectedRectCount: scenario.expectedRects.length,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'findHNCommentTextRects keeps returned rects ordered and inside their line boxes', orderedAndInsideLines, () => ({
       scenario: scenario.label,
       rectCount: actualRects.length,
-    }))
+    }), 'concrete-fixture')
   }
 }
 
@@ -382,7 +384,7 @@ function verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer: LoweredProg
     check(laws, 'findHNCommentTextOffsetInEmptySpace stays branch-free per concrete scenario', returns.length === 1, () => ({
       scenario: scenario.label,
       cases: returns.length,
-    }))
+    }), 'concrete-fixture')
     if (returns.length !== 1) continue
 
     const offset = returns[0]!.value.kind === 'null' ? null : expectConcreteNumber(returns[0]!.value)
@@ -390,7 +392,7 @@ function verifyFindHNCommentTextOffsetInEmptySpaceConcrete(analyzer: LoweredProg
       scenario: scenario.label,
       offset,
       expectedOffset: scenario.expectedOffset,
-    }))
+    }), 'concrete-fixture')
   }
 }
 

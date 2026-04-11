@@ -4,8 +4,11 @@ export type WitnessValue = boolean | number | string | null
 
 export type StaticLayoutLawWitness = Record<string, WitnessValue>
 
+export type StaticLayoutLawKind = 'symbolic' | 'range' | 'concrete-fixture' | 'concrete-sweep'
+
 export type StaticLayoutLawSummary = {
   name: string
+  kind: StaticLayoutLawKind
   checks: number
   status: 'pass' | 'fail'
   firstFailure?: StaticLayoutLawWitness
@@ -20,12 +23,14 @@ export type StaticLayoutVerificationReport = {
 
 export type InternalLawSummary = {
   name: string
+  kind: StaticLayoutLawKind
   checks: number
   firstFailure: StaticLayoutLawWitness | null
 }
 
 export type Mode = 'concrete' | 'symbolic'
 export type ComparisonOp = '>' | '>=' | '<' | '<=' | '===' | '!=='
+type NarrowedComparisonOp = '>' | '>=' | '<' | '<=' | '==' | '!='
 
 export type ScalarExpr =
   | {kind: 'const'; value: number}
@@ -261,8 +266,17 @@ type IrCallee =
   | {kind: 'identifier'; name: string}
   | {kind: 'property'; object: IrExpression; property: string}
 
+type RangeAccessPath = {
+  root: string
+  props: string[]
+}
+
 export const epsilon = 0.0001
 
+// LoweredProgramAnalyzer deliberately handles a partial TS/JS subset:
+// locals, loops, arrays, records, small helpers, and a few intrinsics.
+// Unsupported language features are the proof boundary, not accidental gaps.
+// includeFunctions lets each verifier keep that lowered surface narrow.
 export class LoweredProgramAnalyzer {
   private readonly program: IrProgram
   private readonly overrides: Record<string, FunctionOverride>
@@ -571,10 +585,14 @@ export class LoweredProgramAnalyzer {
         for (const conditionCase of conditionCases) {
           const condition = expectRangeBoolean(conditionCase.value)
           if (condition.truth !== 'always-false') {
-            results.push(...this.evalRangeExpression(conditionCase.state, expression.whenTrue))
+            for (const narrowedState of narrowRangeStatesForCondition(this, conditionCase.state, expression.condition, true)) {
+              results.push(...this.evalRangeExpression(narrowedState, expression.whenTrue))
+            }
           }
           if (condition.truth !== 'always-true') {
-            results.push(...this.evalRangeExpression(conditionCase.state, expression.whenFalse))
+            for (const narrowedState of narrowRangeStatesForCondition(this, conditionCase.state, expression.condition, false)) {
+              results.push(...this.evalRangeExpression(narrowedState, expression.whenFalse))
+            }
           }
         }
         return results
@@ -643,11 +661,14 @@ export function check(
   name: string,
   passed: boolean,
   witness: () => StaticLayoutLawWitness,
+  kind: StaticLayoutLawKind = 'concrete-fixture',
 ) {
   let law = laws.get(name)
   if (law == null) {
-    law = {name, checks: 0, firstFailure: null}
+    law = {name, kind, checks: 0, firstFailure: null}
     laws.set(name, law)
+  } else if (law.kind !== kind) {
+    throw new Error(`Law ${name} mixed proof kinds: ${law.kind} vs ${kind}`)
   }
   law.checks++
   if (!passed && law.firstFailure == null) law.firstFailure = witness()
@@ -656,6 +677,7 @@ export function check(
 export function summarizeLaws(laws: Map<string, InternalLawSummary>): StaticLayoutLawSummary[] {
   return [...laws.values()].map(law => ({
     name: law.name,
+    kind: law.kind,
     checks: law.checks,
     status: law.firstFailure == null ? 'pass' : 'fail',
     ...(law.firstFailure == null ? {} : {firstFailure: law.firstFailure}),
@@ -1278,10 +1300,14 @@ function executeRangeFunctionBlocks(analyzer: LoweredProgramAnalyzer, fn: Inline
           for (const conditionCase of conditionCases) {
             const condition = expectRangeBoolean(conditionCase.value)
             if (condition.truth !== 'always-false') {
-              worklist.push({blockId: block.terminator.thenBlockId, state: conditionCase.state})
+              for (const narrowedState of narrowRangeStatesForCondition(analyzer, conditionCase.state, block.terminator.condition, true)) {
+                worklist.push({blockId: block.terminator.thenBlockId, state: narrowedState})
+              }
             }
             if (condition.truth !== 'always-true') {
-              worklist.push({blockId: block.terminator.elseBlockId, state: conditionCase.state})
+              for (const narrowedState of narrowRangeStatesForCondition(analyzer, conditionCase.state, block.terminator.condition, false)) {
+                worklist.push({blockId: block.terminator.elseBlockId, state: narrowedState})
+              }
             }
           }
           break
@@ -1417,21 +1443,44 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
         continue
       }
       if ((expression.operator === '||' && left.truth === 'always-false') || (expression.operator === '&&' && left.truth === 'always-true')) {
-        const rightCases = analyzer.evalRangeExpression(leftCase.state, expression.right)
-        for (const rightCase of rightCases) {
-          results.push({
-            state: rightCase.state,
-            value: expectRangeBoolean(rightCase.value),
-          })
+        const narrowedStates = narrowRangeStatesForCondition(
+          analyzer,
+          leftCase.state,
+          expression.left,
+          expression.operator === '&&',
+        )
+        for (const narrowedState of narrowedStates) {
+          const rightCases = analyzer.evalRangeExpression(narrowedState, expression.right)
+          for (const rightCase of rightCases) {
+            results.push({
+              state: rightCase.state,
+              value: expectRangeBoolean(rightCase.value),
+            })
+          }
         }
         continue
       }
-      const rightCases = analyzer.evalRangeExpression(leftCase.state, expression.right)
-      for (const rightCase of rightCases) {
-        results.push({
-          state: rightCase.state,
-          value: rangeBoolean('maybe'),
-        })
+      const shortCircuitTruth = expression.operator === '||'
+        ? rangeBoolean('always-true')
+        : rangeBoolean('always-false')
+      results.push({
+        state: leftCase.state,
+        value: shortCircuitTruth,
+      })
+      const narrowedStates = narrowRangeStatesForCondition(
+        analyzer,
+        leftCase.state,
+        expression.left,
+        expression.operator === '&&',
+      )
+      for (const narrowedState of narrowedStates) {
+        const rightCases = analyzer.evalRangeExpression(narrowedState, expression.right)
+        for (const rightCase of rightCases) {
+          results.push({
+            state: rightCase.state,
+            value: rangeBoolean('maybe'),
+          })
+        }
       }
       continue
     }
@@ -1487,6 +1536,82 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
     }
   }
   return results
+}
+
+function narrowRangeStatesForCondition(
+  analyzer: LoweredProgramAnalyzer,
+  state: RangeState,
+  expression: IrExpression,
+  assumeTrue: boolean,
+): RangeState[] {
+  if (expression.kind === 'binary') {
+    if (expression.operator === '&&') {
+      if (assumeTrue) {
+        let states = narrowRangeStatesForCondition(analyzer, state, expression.left, true)
+        states = states.flatMap(nextState => narrowRangeStatesForCondition(analyzer, nextState, expression.right, true))
+        return states
+      }
+      return [
+        ...narrowRangeStatesForCondition(analyzer, state, expression.left, false),
+        ...narrowRangeStatesForCondition(analyzer, state, expression.left, true)
+          .flatMap(nextState => narrowRangeStatesForCondition(analyzer, nextState, expression.right, false)),
+      ]
+    }
+
+    if (expression.operator === '||') {
+      if (assumeTrue) {
+        return [
+          ...narrowRangeStatesForCondition(analyzer, state, expression.left, true),
+          ...narrowRangeStatesForCondition(analyzer, state, expression.left, false)
+            .flatMap(nextState => narrowRangeStatesForCondition(analyzer, nextState, expression.right, true)),
+        ]
+      }
+      let states = narrowRangeStatesForCondition(analyzer, state, expression.left, false)
+      states = states.flatMap(nextState => narrowRangeStatesForCondition(analyzer, nextState, expression.right, false))
+      return states
+    }
+
+    const narrowedStates = narrowRangeStatesForSimpleComparison(analyzer, state, expression, assumeTrue)
+    if (narrowedStates != null) return narrowedStates
+  }
+
+  return [state]
+}
+
+function narrowRangeStatesForSimpleComparison(
+  analyzer: LoweredProgramAnalyzer,
+  state: RangeState,
+  expression: Extract<IrExpression, {kind: 'binary'}>,
+  assumeTrue: boolean,
+): RangeState[] | null {
+  if (!isRangeComparisonOperator(expression.operator)) {
+    return null
+  }
+  const operator = narrowableComparisonOperator(expression.operator, assumeTrue)
+  if (operator == null) return null
+
+  const leftValue = readSimpleRangeValue(analyzer, state, expression.left)
+  const rightValue = readSimpleRangeValue(analyzer, state, expression.right)
+  if (leftValue?.kind !== 'range-number' || rightValue?.kind !== 'range-number') return null
+
+  const narrowedPair = narrowRangeNumberPair(leftValue, rightValue, operator)
+  if (narrowedPair == null) return []
+
+  let nextEnv = state.env
+  const leftPath = getRangeAccessPath(expression.left)
+  const rightPath = getRangeAccessPath(expression.right)
+
+  if (leftPath != null) {
+    const updatedEnv = setRangeValueAtPath(nextEnv, leftPath, narrowedPair.left)
+    if (updatedEnv != null) nextEnv = updatedEnv
+  }
+
+  if (rightPath != null) {
+    const updatedEnv = setRangeValueAtPath(nextEnv, rightPath, narrowedPair.right)
+    if (updatedEnv != null) nextEnv = updatedEnv
+  }
+
+  return [{env: nextEnv}]
 }
 
 function evaluateCallExpression(analyzer: LoweredProgramAnalyzer, state: EvalState, expression: Extract<IrExpression, {kind: 'call'}>): EvalCase[] {
@@ -2488,6 +2613,168 @@ function compareRangeStringValues(left: RangeValue, right: RangeValue, operator:
     return operator === '==' || operator === '===' ? 'always-false' : 'always-true'
   }
   return 'maybe'
+}
+
+function readSimpleRangeValue(analyzer: LoweredProgramAnalyzer, state: RangeState, expression: IrExpression): RangeValue | null {
+  switch (expression.kind) {
+    case 'number':
+      return rangeNumber(expression.value, expression.value, Number.isInteger(expression.value))
+    case 'string':
+      return rangeString(expression.value)
+    case 'null':
+      return rangeNull()
+    case 'boolean':
+      return rangeBoolean(expression.value ? 'always-true' : 'always-false')
+    case 'identifier': {
+      const local = state.env.get(expression.name)
+      if (local != null) return local
+      try {
+        const global = analyzer.getGlobalNumber(expression.name)
+        return rangeNumber(global, global, Number.isInteger(global))
+      } catch {
+        return null
+      }
+    }
+    case 'prefix': {
+      const operand = readSimpleRangeValue(analyzer, state, expression.operand)
+      if (operand?.kind !== 'range-number') return null
+      return expression.operator === '-' ? negateRangeNumber(operand) : operand
+    }
+    case 'property': {
+      const target = readSimpleRangeValue(analyzer, state, expression.object)
+      if (target == null) return null
+      if (target.kind === 'range-object') return target.props[expression.property] ?? null
+      if (target.kind === 'range-array') return getRangeArrayProperty(target, expression.property)
+      if (target.kind === 'range-string') return getRangeStringProperty(target, expression.property)
+      return null
+    }
+    default:
+      return null
+  }
+}
+
+function getRangeAccessPath(expression: IrExpression): RangeAccessPath | null {
+  if (expression.kind === 'identifier') return {root: expression.name, props: []}
+  if (expression.kind === 'property') {
+    const base = getRangeAccessPath(expression.object)
+    if (base == null) return null
+    return {
+      root: base.root,
+      props: [...base.props, expression.property],
+    }
+  }
+  return null
+}
+
+function setRangeValueAtPath(env: Map<string, RangeValue>, path: RangeAccessPath, nextValue: RangeValue): Map<string, RangeValue> | null {
+  if (path.props.length === 0) {
+    const nextEnv = new Map(env)
+    nextEnv.set(path.root, nextValue)
+    return nextEnv
+  }
+
+  const rootValue = env.get(path.root)
+  if (rootValue == null) return null
+  const nextRootValue = setNestedRangeValue(rootValue, path.props, nextValue)
+  if (nextRootValue == null) return null
+  const nextEnv = new Map(env)
+  nextEnv.set(path.root, nextRootValue)
+  return nextEnv
+}
+
+function setNestedRangeValue(current: RangeValue, props: string[], nextValue: RangeValue): RangeValue | null {
+  if (props.length === 0) return nextValue
+  if (current.kind !== 'range-object') return null
+  const [head, ...tail] = props
+  const child = current.props[head!]
+  if (child == null) return null
+  const nextChild = setNestedRangeValue(child, tail, nextValue)
+  if (nextChild == null) return null
+  return rangeObject({
+    ...current.props,
+    [head!]: nextChild,
+  })
+}
+
+function narrowableComparisonOperator(
+  operator: ComparisonOp | '==' | '!=',
+  assumeTrue: boolean,
+): NarrowedComparisonOp | null {
+  if (assumeTrue) {
+    if (operator === '===') return '=='
+    if (operator === '!==') return '!='
+    return operator
+  }
+  switch (operator) {
+    case '<':
+      return '>='
+    case '<=':
+      return '>'
+    case '>':
+      return '<='
+    case '>=':
+      return '<'
+    case '==':
+      return '!='
+    case '!=':
+      return '=='
+    case '===':
+      return '!='
+    case '!==':
+      return '=='
+  }
+  return null
+}
+
+function narrowRangeNumberPair(
+  left: RangeNumberValue,
+  right: RangeNumberValue,
+  operator: NarrowedComparisonOp,
+): {left: RangeNumberValue; right: RangeNumberValue} | null {
+  const truth = compareRangeNumbers(left, right, operator)
+  if (truth === 'always-false') return null
+  if (truth === 'always-true' && operator !== '==' && operator !== '!=') return {left, right}
+
+  switch (operator) {
+    case '<':
+      return narrowOrderedRangeNumberPair(left, right, true)
+    case '<=':
+      return narrowOrderedRangeNumberPair(left, right, false)
+    case '>': {
+      const narrowed = narrowOrderedRangeNumberPair(right, left, true)
+      return narrowed == null ? null : {left: narrowed.right, right: narrowed.left}
+    }
+    case '>=': {
+      const narrowed = narrowOrderedRangeNumberPair(right, left, false)
+      return narrowed == null ? null : {left: narrowed.right, right: narrowed.left}
+    }
+    case '==': {
+      const min = Math.max(left.min, right.min)
+      const max = Math.min(left.max, right.max)
+      if (min > max + epsilon) return null
+      return {
+        left: rangeNumber(min, max, left.isInteger),
+        right: rangeNumber(min, max, right.isInteger),
+      }
+    }
+    case '!=':
+      return {left, right}
+  }
+}
+
+function narrowOrderedRangeNumberPair(
+  left: RangeNumberValue,
+  right: RangeNumberValue,
+  strict: boolean,
+): {left: RangeNumberValue; right: RangeNumberValue} | null {
+  const step = strict && left.isInteger && right.isInteger ? 1 : 0
+  const nextLeft = rangeNumber(left.min, Math.min(left.max, right.max - step), left.isInteger)
+  const nextRight = rangeNumber(Math.max(right.min, left.min + step), right.max, right.isInteger)
+  if (nextLeft.min > nextLeft.max + epsilon || nextRight.min > nextRight.max + epsilon) return null
+  return {
+    left: nextLeft,
+    right: nextRight,
+  }
 }
 
 function minRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeNumberValue {

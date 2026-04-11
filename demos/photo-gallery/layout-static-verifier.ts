@@ -75,6 +75,8 @@ function verifyGetLineLayoutConcrete(
     promptPaddingBottom,
   }, {
     ...autoContractOverrides,
+    // This proof path trusts the 1D prompt measurement contract here instead of
+    // proving the iterative get1DItemSize prompt solver from source.
     get1DItemSize: {
       evaluate(args, mode) {
         if (mode !== 'concrete') throw new Error('get1DItemSize override only supports concrete mode')
@@ -132,7 +134,7 @@ function verifyGetLineLayoutConcrete(
     check(laws, 'getLineLayout stays branch-free per concrete scenario', returns.length === 1, () => ({
       scenario: lineCase.label,
       cases: returns.length,
-    }))
+    }), 'concrete-fixture')
     if (returns.length !== 1) continue
 
     const layout = expectObject(returns[0]!.value)
@@ -144,7 +146,7 @@ function verifyGetLineLayoutConcrete(
       scenario: lineCase.label,
       itemCount: items.items.length,
       expectedItemCount: layoutSources.items.length,
-    }))
+    }), 'concrete-fixture')
 
     const focusedItem = expectObject(items.items[lineCase.focused]!)
     const focusedImageBox = expectObject(getProp(focusedItem, 'imageBox'))
@@ -154,7 +156,7 @@ function verifyGetLineLayoutConcrete(
       focused: lineCase.focused,
       focusedCenterX,
       expectedCenterX: windowSizeX / 2,
-    }))
+    }), 'concrete-fixture')
 
     check(laws, 'getLineLayout left hit area matches the focused index at the edges', hitAreaMatches(
       leftHitArea,
@@ -170,7 +172,7 @@ function verifyGetLineLayoutConcrete(
       side: 'left',
       focused: lineCase.focused,
       actual: describeHitArea(leftHitArea),
-    }))
+    }), 'concrete-fixture')
     check(laws, 'getLineLayout right hit area matches the focused index at the edges', hitAreaMatches(
       rightHitArea,
       lineCase.focused === layoutSources.items.length - 1 ? null : {
@@ -185,7 +187,7 @@ function verifyGetLineLayoutConcrete(
       side: 'right',
       focused: lineCase.focused,
       actual: describeHitArea(rightHitArea),
-    }))
+    }), 'concrete-fixture')
 
     let monotone = true
     for (let i = 0; i < items.items.length - 1; i++) {
@@ -201,7 +203,7 @@ function verifyGetLineLayoutConcrete(
     check(laws, 'getLineLayout keeps item x order monotone', monotone, () => ({
       scenario: lineCase.label,
       focused: lineCase.focused,
-    }))
+    }), 'concrete-fixture')
   }
 }
 
@@ -238,7 +240,7 @@ function verifyGetGridLayoutConcrete(
     check(laws, 'getGridLayout stays branch-free per concrete width', returns.length === 1, () => ({
       windowWidth,
       cases: returns.length,
-    }))
+    }), 'concrete-fixture')
     if (returns.length !== 1) continue
 
     const layout = expectObject(returns[0]!.value)
@@ -252,11 +254,11 @@ function verifyGetGridLayoutConcrete(
       windowWidth,
       itemCount: items.items.length,
       expectedItemCount: layoutSources.items.length,
-    }))
+    }), 'concrete-fixture')
     check(laws, 'getGridLayout rowsTop stays monotone', concreteNumberArrayIsStrictlyIncreasing(rowsTop), () => ({
       windowWidth,
       rowsTop: describeNumericArray(rowsTop),
-    }))
+    }), 'concrete-fixture')
 
     const rowCount = Math.ceil(items.items.length / cols)
     check(laws, 'getGridLayout rowsTop count matches the row count plus trailing bottom', rowsTop.items.length === rowCount + 1, () => ({
@@ -264,7 +266,7 @@ function verifyGetGridLayoutConcrete(
       cols,
       rowsTopCount: rowsTop.items.length,
       expectedRowsTopCount: rowCount + 1,
-    }))
+    }), 'concrete-fixture')
 
     let maxBottom = 0
     let withinViewport = true
@@ -341,22 +343,22 @@ function verifyGetGridLayoutConcrete(
       windowWidth,
       cols,
       ...(viewportFailure ?? {}),
-    }))
+    }), 'concrete-fixture')
     check(laws, 'getGridLayout row items do not overlap horizontally', horizontalNonOverlap, () => ({
       windowWidth,
       cols,
       ...(overlapFailure ?? {}),
-    }))
+    }), 'concrete-fixture')
     check(laws, 'getGridLayout keeps each item centered in its column slot', columnCentering, () => ({
       windowWidth,
       cols,
       ...(columnCenterFailure ?? {}),
-    }))
+    }), 'concrete-fixture')
     check(laws, 'getGridLayout content height matches the last row bottom plus bottom gap', Math.abs(contentHeight - (maxBottom + boxesGapY)) <= epsilon, () => ({
       windowWidth,
       contentHeight,
       expectedContentHeight: maxBottom + boxesGapY,
-    }))
+    }), 'concrete-fixture')
   }
 }
 
@@ -376,16 +378,16 @@ function verifyColsBoxMaxSizeXFRange(analyzer: LoweredProgramAnalyzer, laws: Map
   check(laws, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals', cols.min >= 1 && cols.max <= 7, () => ({
     colsMin: cols.min,
     colsMax: cols.max,
-  }))
+  }), 'range')
   check(laws, 'colsBoxMaxSizeXF keeps cols integral over width intervals', cols.isInteger, () => ({
     colsMin: cols.min,
     colsMax: cols.max,
     colsIsInteger: cols.isInteger ? 'true' : 'false',
-  }))
+  }), 'range')
   check(laws, 'colsBoxMaxSizeXF keeps boxMaxSizeX non-negative over width intervals', boxMaxSizeX.min >= -epsilon, () => ({
     boxMaxSizeXMin: boxMaxSizeX.min,
     boxMaxSizeXMax: boxMaxSizeX.max,
-  }))
+  }), 'range')
 }
 
 function verifyMakeItemLayoutGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
@@ -404,7 +406,7 @@ function verifyMakeItemLayoutGeometry(analyzer: LoweredProgramAnalyzer, laws: Ma
 
   check(laws, 'makeItemLayoutGeometry stays branch-free', cases.length === 1, () => ({
     cases: cases.length,
-  }))
+  }), 'symbolic')
   if (cases.length !== 1) return
 
   const geometry = expectObject(cases[0]!.value)
@@ -425,25 +427,25 @@ function verifyMakeItemLayoutGeometry(analyzer: LoweredProgramAnalyzer, laws: Ma
   check(laws, 'makeItemLayoutGeometry keeps image and layout x aligned', symbolicExprEquals(imageX, layoutX), () => ({
     imageX: formatScalarExpr(imageX),
     layoutX: formatScalarExpr(layoutX),
-  }))
+  }), 'symbolic')
   check(laws, 'makeItemLayoutGeometry keeps prompt x aligned with the image', symbolicExprEquals(promptX, imageX), () => ({
     imageX: formatScalarExpr(imageX),
     promptX: formatScalarExpr(promptX),
-  }))
+  }), 'symbolic')
   check(laws, 'makeItemLayoutGeometry puts the prompt directly below the image', symbolicExprEquals(
     promptY,
     addExpr(imageY, imageSizeY),
   ), () => ({
     promptY: formatScalarExpr(promptY),
     expectedPromptY: formatScalarExpr(addExpr(imageY, imageSizeY)),
-  }))
+  }), 'symbolic')
   check(laws, 'makeItemLayoutGeometry derives layout height from image height + prompt height + bottom padding', symbolicExprEquals(
     layoutSizeY,
     addExpr(addExpr(imageSizeY, promptSizeY), constExpr(promptPaddingBottom)),
   ), () => ({
     layoutSizeY: formatScalarExpr(layoutSizeY),
     expectedLayoutSizeY: formatScalarExpr(addExpr(addExpr(imageSizeY, promptSizeY), constExpr(promptPaddingBottom))),
-  }))
+  }), 'symbolic')
 }
 
 function verifyColsBoxMaxSizeXF(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
@@ -453,7 +455,7 @@ function verifyColsBoxMaxSizeXF(analyzer: LoweredProgramAnalyzer, laws: Map<stri
     check(laws, 'colsBoxMaxSizeXF stays branch-free per concrete width', cases.length === 1, () => ({
       containerSizeX,
       cases: cases.length,
-    }))
+    }), 'concrete-sweep')
     if (cases.length !== 1) continue
 
     const result = expectObject(cases[0]!.value)
@@ -464,22 +466,22 @@ function verifyColsBoxMaxSizeXF(analyzer: LoweredProgramAnalyzer, laws: Map<stri
     check(laws, 'colsBoxMaxSizeXF keeps cols in the supported range', 1 <= cols && cols <= 7, () => ({
       containerSizeX,
       cols,
-    }))
+    }), 'concrete-sweep')
     check(laws, 'colsBoxMaxSizeXF keeps cols integral', Math.abs(cols - Math.round(cols)) <= epsilon, () => ({
       containerSizeX,
       cols,
-    }))
+    }), 'concrete-sweep')
     check(laws, 'colsBoxMaxSizeXF keeps boxMaxSizeX non-negative', boxMaxSizeX >= -epsilon, () => ({
       containerSizeX,
       cols,
       boxMaxSizeX,
-    }))
+    }), 'concrete-sweep')
     check(laws, 'colsBoxMaxSizeXF exactly fills the horizontal track', Math.abs(filledWidth - containerSizeX) <= epsilon, () => ({
       containerSizeX,
       cols,
       boxMaxSizeX,
       filledWidth,
-    }))
+    }), 'concrete-sweep')
   }
 }
 

@@ -9,6 +9,7 @@ import {
   joinRangeCases,
   LoweredProgramAnalyzer,
   rangeNumber,
+  rangeObject,
 } from './layout-static-core.ts'
 import {
   buildConcreteContractOverrides,
@@ -38,6 +39,7 @@ function getLaw(report, name) {
   return law
 }
 
+// Proof surface stays ready.
 test('photo-gallery static verifier keeps its current proof surface', async () => {
   const sourceFilePath = new URL('./photo-gallery/layout-model.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
@@ -47,6 +49,9 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
   expect(getLaw(report, 'getGridLayout keeps each item centered in its column slot')?.status).toBe('pass')
+  expect(getLaw(report, 'makeItemLayoutGeometry keeps prompt x aligned with the image')?.kind).toBe('symbolic')
+  expect(getLaw(report, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals')?.kind).toBe('range')
+  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.kind).toBe('concrete-sweep')
   expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.checks).toBe(1281)
 })
 
@@ -57,6 +62,7 @@ test('nicer-hacker-news static verifier keeps the row geometry slice ready', asy
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('pass')
   expect(getLaw(report, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals')?.status).toBe('pass')
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals')?.status).toBe('pass')
   expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible')?.status).toBe('pass')
   expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping internally consistent')?.checks).toBe(2)
 })
@@ -69,12 +75,14 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
 
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')?.status).toBe('pass')
+  expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')?.kind).toBe('range')
   expect(getLaw(report, 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes')?.status).toBe('pass')
   expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
   expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('pass')
   expect(getLaw(report, 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps')?.checks).toBe(2)
 })
 
+// Contract loading.
 test('photo-gallery verifier can auto-load imported sidecar contracts from the source file', async () => {
   const sourceFilePath = new URL('./photo-gallery/layout-model.ts', import.meta.url).pathname
   const report = await runPhotoGalleryStaticVerificationForSourceFile(sourceFilePath)
@@ -91,6 +99,7 @@ test('HN comment verifier can auto-load same-file sidecar contracts', async () =
   expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
 })
 
+// Mutation canaries.
 test('photo-gallery verifier catches broken track-fill math', async () => {
   const sourceFilePath = new URL('./photo-gallery/layout-model.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
@@ -166,6 +175,21 @@ test('HN thread verifier catches broken visible-row interval bookkeeping', async
   expect(report.phase).toBe('error')
   expect(law?.status).toBe('fail')
   expect(law?.firstFailure?.firstVisibleRowTop).toBeDefined()
+})
+
+test('HN thread verifier catches broken user-top clamp math', async () => {
+  const source = await Bun.file(new URL('./nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'const userTop = clamp(rowTop, 0, rowBottom - userHeight)',
+    'const userTop = clamp(rowTop + 4, 0, rowBottom - userHeight)',
+  )
+  const report = runNicerHackerNewsStaticVerification(buggySource)
+  const law = getLaw(report, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals')
+
+  expect(report.phase).toBe('error')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.firstUserTop).toBeDefined()
 })
 
 test('HN comment verifier catches a broken minimum width clamp', async () => {
@@ -440,4 +464,58 @@ function demo() {
   })
 
   expect(expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [])))).toEqual(rangeNumber(1, 1, true))
+})
+
+test('range mode narrows piecewise helpers over identifier comparisons', () => {
+  const source = `
+function clamp(min: number, v: number, max: number) {
+  return v > max ? max : v < min ? min : v
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['clamp'],
+  })
+
+  const value = expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('clamp', [
+    rangeNumber(10, 10, true),
+    rangeNumber(0, 30, true),
+    rangeNumber(20, 20, true),
+  ])))
+
+  expect(value).toEqual(rangeNumber(10, 20, true))
+})
+
+test('range mode narrows nested object properties through simple branches', () => {
+  const source = `
+function pick(params) {
+  return params.value > params.max ? params.max : params.value
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['pick'],
+  })
+
+  const value = expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('pick', [rangeObject({
+    value: rangeNumber(0, 30, true),
+    max: rangeNumber(20, 20, true),
+  })])))
+
+  expect(value).toEqual(rangeNumber(0, 20, true))
+})
+
+test('range mode narrows logical branches before reading the taken path', () => {
+  const source = `
+function demo(value: number) {
+  return value > 10 && value < 20 ? value : 0
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  const value = expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [
+    rangeNumber(0, 30, true),
+  ])))
+
+  expect(value).toEqual(rangeNumber(0, 19, true))
 })

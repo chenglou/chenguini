@@ -39,6 +39,54 @@ This matters because demos often want a mix:
 
 Keep those under one semantic model when you can.
 
+## Split Branches, Then Narrow Them
+
+Splitting on `if` or `?:` is only half the job.
+
+If the true branch came from `value > max`, the verifier should not keep treating `value` as if it still ranged across the whole original interval.
+
+For example:
+
+```ts
+function clamp(min: number, value: number, max: number) {
+  return value > max ? max : value < min ? min : value
+}
+```
+
+If `value` starts in `0..30` and `min = 10`, `max = 20`:
+
+- branch splitting alone only tells you the result is somewhere in `10..30`
+- path-sensitive narrowing tells you the taken `value` branch is really `10..20`
+
+This matters for piecewise layout helpers because they often collapse back to the identity on one branch:
+
+- `clamp(...)`
+- `Math.min(...)` / `Math.max(...)`-shaped positioning
+- "if this row is visible, keep its top; otherwise pin it to the edge"
+
+Without narrowing, those helpers look much fuzzier than the code really is.
+
+## What This Verifier Currently Proves
+
+Right now this prototype proves four kinds of things:
+
+- `symbolic`: exact equalities for small helpers such as `layoutHeight = imageHeight + promptHeight + bottomGap`
+- `range`: interval facts for ordinary code over bounded numeric inputs, such as row tops staying contiguous or `cols` staying in `1..7`
+- `concrete fixture`: exact behavior on a few hand-picked scenarios, such as merged text rects or empty-space selection offsets
+- `concrete sweep`: exhaustive checks over a small real domain, such as every viewport width from `320..1600`
+
+It does not prove:
+
+- browser behavior such as DOM selection APIs, actual scrolling, or compositor details
+- opaque helpers with no source support and no contract
+- arbitrary JS outside the lowered subset
+
+So the right mental model is:
+
+- prove the userland geometry you own
+- trust explicit contracts at helper boundaries
+- verify the browser seam separately
+
 ## Quotient / Remainder Checks Should Mention Geometry
 
 If a grid uses `Math.floor(i / cols)` and `i % cols`, don't stop at "the remainder stays in `0..cols-1`".
