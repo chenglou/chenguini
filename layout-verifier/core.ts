@@ -874,7 +874,8 @@ function combineBinaryCases(analyzer: LoweredProgramAnalyzer, state: EvalState, 
         expression.operator === '-' ||
         expression.operator === '*' ||
         expression.operator === '/' ||
-        expression.operator === '%'
+        expression.operator === '%' ||
+        expression.operator === '**'
       ) {
         results.push({
           state: rightCase.state,
@@ -994,7 +995,8 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
         expression.operator === '-' ||
         expression.operator === '*' ||
         expression.operator === '/' ||
-        expression.operator === '%'
+        expression.operator === '%' ||
+        expression.operator === '**'
       ) {
         results.push({
           state: rightCase.state,
@@ -1394,6 +1396,12 @@ function evaluateMathCall(name: string, args: Value[], mode: Mode): Value {
     case 'floor':
       if (values.length !== 1) throw new Error('Math.floor expects 1 argument')
       return concreteNumber(Math.floor(values[0]!))
+    case 'ceil':
+      if (values.length !== 1) throw new Error('Math.ceil expects 1 argument')
+      return concreteNumber(Math.ceil(values[0]!))
+    case 'sqrt':
+      if (values.length !== 1) throw new Error('Math.sqrt expects 1 argument')
+      return concreteNumber(Math.sqrt(values[0]!))
     case 'min':
       return concreteNumber(Math.min(...values))
     case 'max':
@@ -1410,6 +1418,17 @@ function evaluateRangeMathCall(name: string, args: RangeValue[]): RangeValue {
       if (numbers.length !== 1) throw new Error('Math.floor expects 1 argument')
       const value = numbers[0]!
       return rangeNumber(Math.floor(value.min), Math.floor(value.max), true)
+    }
+    case 'ceil': {
+      if (numbers.length !== 1) throw new Error('Math.ceil expects 1 argument')
+      const value = numbers[0]!
+      return rangeNumber(Math.ceil(value.min), Math.ceil(value.max), true)
+    }
+    case 'sqrt': {
+      if (numbers.length !== 1) throw new Error('Math.sqrt expects 1 argument')
+      const value = numbers[0]!
+      if (value.min < 0) throw new Error('Math.sqrt of a possibly-negative range')
+      return rangeNumber(Math.sqrt(value.min), Math.sqrt(value.max), false)
     }
     case 'min': {
       if (numbers.length === 0) throw new Error('Math.min expects at least 1 argument')

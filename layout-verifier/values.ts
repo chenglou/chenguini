@@ -447,7 +447,7 @@ export function negateNumber(value: NumberValue): NumberValue {
     : symbolicNumberFromExpr(mulExpr(constExpr(-1), expectSymbolicNumberValue(value)))
 }
 
-export function applyNumericOperator(left: NumberValue, right: NumberValue, operator: '+' | '-' | '*' | '/' | '%') {
+export function applyNumericOperator(left: NumberValue, right: NumberValue, operator: '+' | '-' | '*' | '/' | '%' | '**') {
   if (left.mode !== right.mode) throw new Error('Mixed concrete and symbolic numeric values are not supported')
   if (left.mode === 'concrete') {
     const leftValue = expectConcreteNumberValue(left)
@@ -463,6 +463,8 @@ export function applyNumericOperator(left: NumberValue, right: NumberValue, oper
         return concreteNumber(leftValue * rightValue)
       case '/':
         return concreteNumber(leftValue / rightValue)
+      case '**':
+        return concreteNumber(leftValue ** rightValue)
     }
   }
 
@@ -572,7 +574,7 @@ export function negateRangeNumber(value: RangeNumberValue) {
   return rangeNumber(-value.max, -value.min, value.isInteger)
 }
 
-export function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNumberValue, operator: '+' | '-' | '*' | '/' | '%') {
+export function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNumberValue, operator: '+' | '-' | '*' | '/' | '%' | '**') {
   switch (operator) {
     case '+':
       return rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger)
@@ -601,6 +603,17 @@ export function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNu
       }
       const maxAbsDivisor = Math.max(Math.abs(right.min), Math.abs(right.max))
       return rangeNumber(-(maxAbsDivisor - 1), maxAbsDivisor - 1, true)
+    }
+    case '**': {
+      if (!right.isInteger || right.min !== right.max) throw new Error('Range exponentiation only supports constant integer exponents')
+      const exp = right.min
+      if (exp === 2) {
+        if (left.min >= 0) return rangeNumber(left.min ** 2, left.max ** 2, left.isInteger)
+        if (left.max <= 0) return rangeNumber(left.max ** 2, left.min ** 2, left.isInteger)
+        return rangeNumber(0, Math.max(left.min ** 2, left.max ** 2), left.isInteger)
+      }
+      const results = [left.min ** exp, left.max ** exp]
+      return rangeNumber(Math.min(...results), Math.max(...results), left.isInteger && exp >= 0)
     }
   }
 }

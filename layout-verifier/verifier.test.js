@@ -26,6 +26,7 @@ import {
   runPhotoGalleryStaticVerification,
   runPhotoGalleryStaticVerificationForSourceFile,
 } from './photo-gallery/static-verifier.ts'
+import {runLifeCalendarStaticVerification} from './life-calendar/static-verifier.ts'
 
 function replaceOnce(source, from, to) {
   const next = source.replace(from, to)
@@ -82,6 +83,37 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
   expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
   expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('pass')
   expect(getLaw(report, 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps')?.checks).toBe(2)
+})
+
+test('life-calendar static verifier keeps the grid sizing kernel ready', async () => {
+  const source = await Bun.file(new URL('../demos/life-calendar/grid-sizing.ts', import.meta.url)).text()
+  const report = runLifeCalendarStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'gridSizing keeps countX a multiple of 7')?.status).toBe('pass')
+  expect(getLaw(report, 'gridSizing fills gridSizeY exactly')?.status).toBe('pass')
+  expect(getLaw(report, 'gridSizing covers all cells')?.status).toBe('pass')
+  expect(getLaw(report, 'gridSizing keeps blockSize positive over viewport intervals')?.status).toBe('pass')
+  expect(getLaw(report, 'hitTest returns the expected cell index at known positions')?.status).toBe('pass')
+  expect(getLaw(report, 'hitTest returns the expected cell index at known positions')?.checks).toBe(7)
+})
+
+test('life-calendar verifier catches broken countX divisibility', async () => {
+  const source = await Bun.file(new URL('../demos/life-calendar/grid-sizing.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(source, '/ 7) * 7', '/ 7) * 6')
+  const report = runLifeCalendarStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'gridSizing keeps countX a multiple of 7')?.status).toBe('fail')
+})
+
+test('life-calendar verifier catches broken grid height derivation', async () => {
+  const source = await Bun.file(new URL('../demos/life-calendar/grid-sizing.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(source, 'const blockSize = gridSizeY / countY', 'const blockSize = gridSizeY / (countY + 1)')
+  const report = runLifeCalendarStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'gridSizing fills gridSizeY exactly')?.status).toBe('fail')
 })
 
 // Contract loading.

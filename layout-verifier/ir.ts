@@ -67,6 +67,7 @@ export type IrBinaryOperator =
   | '*'
   | '/'
   | '%'
+  | '**'
   | '??'
   | '>'
   | '>='
@@ -596,6 +597,8 @@ function binaryTokenToOperator(token: ts.SyntaxKind): IrBinaryOperator {
       return '/'
     case ts.SyntaxKind.PercentToken:
       return '%'
+    case ts.SyntaxKind.AsteriskAsteriskToken:
+      return '**'
     case ts.SyntaxKind.QuestionQuestionToken:
       return '??'
     case ts.SyntaxKind.GreaterThanToken:
