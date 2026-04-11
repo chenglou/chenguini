@@ -272,6 +272,31 @@ This is closer to a semantic `.d.ts` than a hard-coded verifier plugin.
 
 If the verifier can discover sibling `*.static-contracts.ts` files from the analyzed source and its relative imports, then "bring in the lib and it works" starts becoming realistic.
 
+## Give The Verifier One Canonical Home
+
+If a verifier starts spreading across demos, stop letting its implementation live wherever it first happened to grow.
+
+Give it one canonical folder, then leave tiny shims at the old paths when needed.
+
+Good:
+
+- `demos/layout-verifier/core.ts`
+- `demos/layout-verifier/contracts.ts`
+- `demos/layout-verifier/photo-gallery/...`
+- `demos/layout-verifier/nicer-hacker-news/...`
+- tiny re-export or import-only shims where source-relative autodiscovery still expects the old path
+
+Bad:
+
+- core logic in one demo
+- tests in another folder
+- scripts and sidecars scattered across three places with no obvious extraction boundary
+
+This keeps two things true at once:
+
+- today's repo does not break
+- tomorrow's extraction target is already visible
+
 ## Start Narrow, Then Widen
 
 Start with the smallest repro you can trust.
