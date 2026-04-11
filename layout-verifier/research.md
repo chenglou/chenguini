@@ -29,3 +29,13 @@ What didn't work, or didn't earn itself:
   They were too fuzzy to prove the branchy geometry helpers we cared about.
 - Heavy machinery up front.
   We never needed SMT, octagons, or polyhedra to get real wins, so they stayed theoretical.
+
+What the mutation coverage analysis revealed:
+
+- Automatic mutation testing (251 mutations across 123 sites in photo-gallery) showed 32% coverage, which tells you exactly where the verifier has teeth.
+  The caught mutations cluster on the verified functions: `colsBoxMaxSizeXF` track-fill math, `getGridLayout` overlap/centering, `makeItemLayoutGeometry` structural alignment.
+  The blind spots fall into clear categories:
+  - Global constants (gaps, padding): mutating them preserves structural relationships, so no existing law fires.
+  - Functions outside the verified surface (`rectContainsPoint`, `get1DItemSize`, `clamp`): the verifier doesn't analyze these yet.
+  - Aspect-ratio scaling factors (`0.85`, `1.05`): no law constrains these specific values.
+- Invariant mining from range analysis automatically rediscovered the hand-written bounds (`cols ∈ [1, 6]`, `boxMaxSizeX ≥ 25`) without any specs, just by running the range evaluator with wide inputs and reading off the output bounds. The gap between what the miner finds and what laws assert is a map for where to invest next.

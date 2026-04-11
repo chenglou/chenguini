@@ -7,8 +7,14 @@ Current prototype:
 - symbolic execution with path splitting
 - affine / linear expression simplification
 - refinement-style contracts for opaque boundaries, e.g. Pretext outputs
+- automatic mutation coverage analysis (251 mutations, 32% caught on photo-gallery)
+- invariant mining from range analysis
 
-Try next:
+Try next (informed by mutation coverage blind spots):
+- laws for global constant sensitivity, e.g. gap changes must still produce non-negative item widths
+- laws for `clamp` boundary behavior so comparison mutations get caught
+- laws for aspect-ratio scaling factors (the `0.85` / `1.05` geometry)
+- 1D/line layout verification surface (currently unverified: `get1DItemSize`, `getLineLayout` positioning)
 - richer range contracts in the sidecar DSL, but only if a real opaque helper needs them
 - better quotient / remainder reasoning for grid placement
 - more sequence facts for append-only arrays, e.g. prefix-sum-ish growth and "one output per input"

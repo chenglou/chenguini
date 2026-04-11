@@ -1,10 +1,138 @@
-import * as ts from 'typescript'
+import type {InlineFunction, IrExpression, IrInstruction, IrProgram} from './ir'
+import {lowerSourceProgram} from './ir'
+import {
+  appendRangeArrayItem,
+  applyAssignmentOperator,
+  applyComparisonOperator,
+  applyNumericOperator,
+  applyRangeAssignmentOperator,
+  applyRangeNumericOperator,
+  bindRangeValueToName,
+  bindValueToName,
+  type BoolExpr,
+  booleanValue,
+  compareNullableRangeValues,
+  compareRangeNumbers,
+  compareRangeStringValues,
+  concreteArray,
+  concreteNull,
+  concreteNumber,
+  concreteString,
+  expectArray,
+  expectBoolean,
+  expectConcreteNumber,
+  expectConcreteNumberValue,
+  expectFunction,
+  expectNumber,
+  expectObject,
+  expectRangeArray,
+  expectRangeBoolean,
+  expectRangeNumber,
+  expectRangeObject,
+  expectString,
+  getArrayItem,
+  getArrayProperty,
+  getIndexableItem,
+  getRangeArrayItemAt,
+  getRangeArrayProperty,
+  getRangeIndexableItem,
+  getRangeProp,
+  getRangeStringProperty,
+  getProp,
+  getStringProperty,
+  isComparisonOperator,
+  isRangeComparisonOperator,
+  joinRangeValues,
+  maxRangeNumber,
+  minRangeNumber,
+  type Mode,
+  narrowableComparisonOperator,
+  narrowRangeNumberPair,
+  negateBoolExpr,
+  negateNumber,
+  negateRangeNumber,
+  numberValue,
+  objectValue,
+  rangeArray,
+  rangeBoolean,
+  rangeNull,
+  rangeNumber,
+  rangeObject,
+  rangeString,
+  type RangeAccessPath,
+  type RangeValue,
+  setRangeValueAtPath,
+  type StaticLayoutLawKind,
+  type StaticLayoutLawWitness,
+  type Value,
+} from './values'
 
-export type WitnessValue = boolean | number | string | null
+// Re-export value-layer symbols so existing call-sites can keep importing from './core'.
+export type {
+  ArrayValue,
+  BoolExpr,
+  ComparisonOp,
+  Mode,
+  NumberValue,
+  ObjectValue,
+  OpaqueValue,
+  NullValue,
+  RangeArrayValue,
+  RangeBooleanValue,
+  RangeNumberValue,
+  RangeObjectValue,
+  RangeOpaqueValue,
+  RangeNullValue,
+  RangeStringValue,
+  RangeTruth,
+  RangeValue,
+  ScalarExpr,
+  StringValue,
+  Value,
+  WitnessValue,
+} from './values'
+export {
+  addExpr,
+  applyComparisonOperator,
+  applyNumericOperator,
+  concreteArray,
+  concreteNull,
+  concreteNumber,
+  concreteNumberArrayIsStrictlyIncreasing,
+  concreteObject,
+  concreteOpaque,
+  concreteString,
+  constExpr,
+  describeNumericArray,
+  divExpr,
+  epsilon,
+  expectArray,
+  expectBoolean,
+  expectConcreteNumber,
+  expectNumber,
+  expectObject,
+  expectRangeArray,
+  expectRangeNumber,
+  expectRangeObject,
+  expectRangeString,
+  expectString,
+  expectSymbolicNumber,
+  formatScalarExpr,
+  getProp,
+  getRangeProp,
+  mulExpr,
+  rangeArray,
+  rangeNumber,
+  rangeObject,
+  rangeString,
+  subExpr,
+  symbolicExprEquals,
+  symbolicNumber,
+  symbolicObject,
+  symbolicOpaque,
+} from './values'
 
-export type StaticLayoutLawWitness = Record<string, WitnessValue>
-
-export type StaticLayoutLawKind = 'symbolic' | 'range' | 'concrete-fixture' | 'concrete-sweep'
+// Report types
 
 export type StaticLayoutLawSummary = {
   name: string
@@ -28,123 +156,7 @@ export type InternalLawSummary = {
   firstFailure: StaticLayoutLawWitness | null
 }
 
-export type Mode = 'concrete' | 'symbolic'
-export type ComparisonOp = '>' | '>=' | '<' | '<=' | '===' | '!=='
-type NarrowedComparisonOp = '>' | '>=' | '<' | '<=' | '==' | '!='
-
-export type ScalarExpr =
-  | {kind: 'const'; value: number}
-  | {kind: 'var'; name: string}
-  | {kind: 'add'; left: ScalarExpr; right: ScalarExpr}
-  | {kind: 'sub'; left: ScalarExpr; right: ScalarExpr}
-  | {kind: 'mul'; left: ScalarExpr; right: ScalarExpr}
-  | {kind: 'div'; left: ScalarExpr; right: ScalarExpr}
-
-export type BoolExpr = {
-  kind: 'compare'
-  op: ComparisonOp
-  left: ScalarExpr
-  right: ScalarExpr
-}
-
-export type NumberValue =
-  | {kind: 'number'; mode: 'concrete'; value: number}
-  | {kind: 'number'; mode: 'symbolic'; expr: ScalarExpr}
-
-export type StringValue = {
-  kind: 'string'
-  mode: 'concrete'
-  value: string
-}
-
-export type BooleanValue =
-  | {kind: 'boolean'; mode: 'concrete'; value: boolean}
-  | {kind: 'boolean'; mode: 'symbolic'; expr: BoolExpr}
-
-export type ObjectValue = {
-  kind: 'object'
-  mode: Mode
-  props: Record<string, Value>
-}
-
-export type ArrayValue = {
-  kind: 'array'
-  mode: 'concrete'
-  items: Value[]
-}
-
-type InlineFunction = {
-  params: string[]
-  entryBlockId: string
-  blocks: Map<string, IrBlock>
-}
-
-type FunctionValue = {
-  kind: 'function'
-  mode: 'concrete'
-  fn: InlineFunction
-  closure: Map<string, Value>
-}
-
-export type OpaqueValue = {
-  kind: 'opaque'
-  mode: Mode
-  label: string
-}
-
-export type NullValue = {
-  kind: 'null'
-  mode: Mode
-}
-
-export type Value = NumberValue | StringValue | BooleanValue | ObjectValue | ArrayValue | FunctionValue | OpaqueValue | NullValue
-
-export type RangeTruth = 'always-true' | 'always-false' | 'maybe'
-
-export type RangeNumberValue = {
-  kind: 'range-number'
-  min: number
-  max: number
-  isInteger: boolean
-}
-
-export type RangeBooleanValue = {
-  kind: 'range-boolean'
-  truth: RangeTruth
-}
-
-export type RangeStringValue = {
-  kind: 'range-string'
-  minLength: number
-  maxLength: number
-  exactValue: string | null
-}
-
-export type RangeObjectValue = {
-  kind: 'range-object'
-  props: Record<string, RangeValue>
-}
-
-export type RangeArrayValue = {
-  kind: 'range-array'
-  lengthMin: number
-  lengthMax: number
-  items: RangeValue[] | null
-  item: RangeValue | null
-  last: RangeValue | null
-  isStrictlyIncreasingNumeric: boolean
-}
-
-export type RangeOpaqueValue = {
-  kind: 'range-opaque'
-  label: string
-}
-
-export type RangeNullValue = {
-  kind: 'range-null'
-}
-
-export type RangeValue = RangeNumberValue | RangeBooleanValue | RangeStringValue | RangeObjectValue | RangeArrayValue | RangeOpaqueValue | RangeNullValue
+// Evaluation state types
 
 export type FunctionOverride = {
   evaluate?: (args: Value[], mode: Mode, context: {
@@ -186,92 +198,6 @@ export type ReturnCase = {
   env?: Map<string, Value>
   value: Value
 }
-
-type IrBindingName =
-  | {kind: 'identifier'; name: string}
-  | {kind: 'object'; elements: Array<{key: string; name: IrBindingName}>}
-
-type IrProgram = {
-  functions: Map<string, IrFunction>
-  globals: Map<string, number>
-}
-
-type IrFunction = InlineFunction & {
-  name: string
-}
-
-type IrBlock = {
-  id: string
-  instructions: IrInstruction[]
-  terminator: IrTerminator
-}
-
-type MutableIrBlock = {
-  id: string
-  instructions: IrInstruction[]
-  terminator: IrTerminator | null
-}
-
-type IrInstruction =
-  | {kind: 'declare'; declarations: Array<{name: IrBindingName; initializer: IrExpression}>}
-  | {kind: 'expression'; expression: IrExpression}
-
-type IrTerminator =
-  | {kind: 'return'; expression: IrExpression}
-  | {kind: 'goto'; targetBlockId: string}
-  | {kind: 'branch'; condition: IrExpression; thenBlockId: string; elseBlockId: string}
-  | {kind: 'end'}
-
-type IrExpression =
-  | {kind: 'number'; value: number}
-  | {kind: 'string'; value: string}
-  | {kind: 'boolean'; value: boolean}
-  | {kind: 'null'}
-  | {kind: 'identifier'; name: string}
-  | {kind: 'prefix'; operator: '+' | '-'; operand: IrExpression}
-  | {kind: 'postfix-update'; target: string; operator: '++' | '--'}
-  | {kind: 'array'; items: IrExpression[]}
-  | {kind: 'property'; object: IrExpression; property: string}
-  | {kind: 'index'; object: IrExpression; index: IrExpression}
-  | {kind: 'binary'; operator: IrBinaryOperator; left: IrExpression; right: IrExpression}
-  | {kind: 'conditional'; condition: IrExpression; whenTrue: IrExpression; whenFalse: IrExpression}
-  | {kind: 'object'; properties: IrObjectProperty[]}
-  | {kind: 'call'; callee: IrCallee; args: IrExpression[]}
-  | {kind: 'arrow'; fn: InlineFunction}
-  | {kind: 'assign'; target: string; operator: '=' | '+=' | '-='; value: IrExpression}
-
-type IrBinaryOperator =
-  | '+'
-  | '-'
-  | '*'
-  | '/'
-  | '%'
-  | '??'
-  | '>'
-  | '>='
-  | '<'
-  | '<='
-  | '=='
-  | '!='
-  | '==='
-  | '!=='
-  | '||'
-  | '&&'
-
-type IrObjectProperty =
-  | {kind: 'property'; name: string; value: IrExpression}
-  | {kind: 'spread'; value: IrExpression}
-
-type IrCallee =
-  | {kind: 'identifier'; name: string}
-  | {kind: 'property'; object: IrExpression; property: string}
-
-type RangeAccessPath = {
-  root: string
-  props: string[]
-}
-
-export const epsilon = 0.0001
 
 // LoweredProgramAnalyzer deliberately handles a partial TS/JS subset:
 // locals, loops, arrays, records, small helpers, and a few intrinsics.
@@ -470,8 +396,8 @@ export class LoweredProgramAnalyzer {
         return [{
           state,
           value: {
-            kind: 'function',
-            mode: 'concrete',
+            kind: 'function' as const,
+            mode: 'concrete' as const,
             fn: expression.fn,
             closure: new Map(state.env),
           },
@@ -656,6 +582,8 @@ export class LoweredProgramAnalyzer {
   }
 }
 
+// Reporting
+
 export function check(
   laws: Map<string, InternalLawSummary>,
   name: string,
@@ -694,6 +622,8 @@ export function buildStaticLayoutReport(suite: string, analyzedFile: string, law
   }
 }
 
+// Callback invocation
+
 export function invokeConcreteFunctionValue(
   analyzer: LoweredProgramAnalyzer,
   outerState: EvalState,
@@ -723,481 +653,16 @@ export function invokeConcreteFunctionValue(
   }))
 }
 
-function lowerSourceProgram(sourceText: string, externalGlobals: Record<string, number>, includeFunctions: string[] | null): IrProgram {
-  const sourceFile = ts.createSourceFile('layout-source.ts', sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-  const globals = new Map<string, number>()
-  const functions = new Map<string, IrFunction>()
-  const allowedFunctions = includeFunctions == null ? null : new Set(includeFunctions)
+// Range case joining
 
-  for (const statement of sourceFile.statements) {
-    if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        if (!ts.isIdentifier(declaration.name) || declaration.initializer == null) continue
-        const value = evaluateConstNumber(declaration.initializer, globals)
-        if (value != null) globals.set(declaration.name.text, value)
-      }
-      continue
-    }
-
-    if (ts.isFunctionDeclaration(statement) && statement.name != null && statement.body != null) {
-      if (allowedFunctions != null && !allowedFunctions.has(statement.name.text)) continue
-      functions.set(statement.name.text, lowerFunction(statement.name.text, statement.parameters, statement.body.statements))
-    }
-  }
-
-  for (const [name, value] of Object.entries(externalGlobals)) globals.set(name, value)
-  return {functions, globals}
+export function joinRangeCases(cases: RangeReturnCase[]): RangeValue {
+  if (cases.length === 0) throw new Error('Expected at least 1 range case')
+  let current = cases[0]!.value
+  for (let i = 1; i < cases.length; i++) current = joinRangeValues(current, cases[i]!.value)
+  return current
 }
 
-function lowerFunction(name: string, parameters: ts.NodeArray<ts.ParameterDeclaration>, statements: ts.NodeArray<ts.Statement>): IrFunction {
-  const context = new LoweringContext()
-  const entryBlockId = context.createBlock('entry')
-  const parameterNames = parameters.map(parameter => {
-    if (!ts.isIdentifier(parameter.name)) throw new Error(`Unsupported parameter pattern in ${name}`)
-    return parameter.name.text
-  })
-  const finalBlockId = lowerStatementsInto(context, entryBlockId, statements, null, null)
-  if (finalBlockId != null) ensureBlockTerminator(context, finalBlockId, {kind: 'end'})
-  return {
-    name,
-    params: parameterNames,
-    entryBlockId,
-    blocks: context.finalize(),
-  }
-}
-
-function lowerInlineFunction(parameters: ts.NodeArray<ts.ParameterDeclaration>, body: ts.ConciseBody): InlineFunction {
-  const context = new LoweringContext()
-  const entryBlockId = context.createBlock('inline_entry')
-  const params = parameters.map(parameter => {
-    if (!ts.isIdentifier(parameter.name)) throw new Error('Only identifier inline parameters are supported')
-    return parameter.name.text
-  })
-  if (ts.isBlock(body)) {
-    const finalBlockId = lowerStatementsInto(context, entryBlockId, body.statements, null, null)
-    if (finalBlockId != null) ensureBlockTerminator(context, finalBlockId, {kind: 'end'})
-  } else {
-    context.getBlock(entryBlockId).terminator = {kind: 'return', expression: lowerExpression(body)}
-  }
-  return {
-    params,
-    entryBlockId,
-    blocks: context.finalize(),
-  }
-}
-
-class LoweringContext {
-  private nextBlockId = 0
-  private readonly blocks = new Map<string, MutableIrBlock>()
-
-  createBlock(prefix: string) {
-    const id = `${prefix}_${this.nextBlockId++}`
-    this.blocks.set(id, {id, instructions: [], terminator: null})
-    return id
-  }
-
-  getBlock(id: string) {
-    const block = this.blocks.get(id)
-    if (block == null) throw new Error(`Unknown block ${id}`)
-    return block
-  }
-
-  finalize() {
-    const finalized = new Map<string, IrBlock>()
-    for (const [id, block] of this.blocks) {
-      finalized.set(id, {
-        id,
-        instructions: block.instructions,
-        terminator: block.terminator ?? {kind: 'end'},
-      })
-    }
-    return finalized
-  }
-}
-
-function lowerStatementsInto(
-  context: LoweringContext,
-  initialBlockId: string | null,
-  statements: readonly ts.Statement[],
-  breakTargetBlockId: string | null,
-  continueTargetBlockId: string | null,
-): string | null {
-  let currentBlockId = initialBlockId
-  for (const statement of statements) {
-    if (currentBlockId == null) break
-    currentBlockId = lowerStatementInto(context, currentBlockId, statement, breakTargetBlockId, continueTargetBlockId)
-  }
-  return currentBlockId
-}
-
-function lowerStatementInto(
-  context: LoweringContext,
-  currentBlockId: string,
-  statement: ts.Statement,
-  breakTargetBlockId: string | null,
-  continueTargetBlockId: string | null,
-): string | null {
-  const block = context.getBlock(currentBlockId)
-
-  if (ts.isVariableStatement(statement)) {
-    block.instructions.push({
-      kind: 'declare',
-      declarations: statement.declarationList.declarations.map(declaration => {
-        if (declaration.initializer == null) throw new Error('Only initialized declarations are supported')
-        return {
-          name: lowerBindingName(declaration.name),
-          initializer: lowerExpression(declaration.initializer),
-        }
-      }),
-    })
-    return currentBlockId
-  }
-
-  if (ts.isExpressionStatement(statement)) {
-    block.instructions.push({
-      kind: 'expression',
-      expression: lowerExpression(statement.expression),
-    })
-    return currentBlockId
-  }
-
-  if (ts.isReturnStatement(statement)) {
-    if (statement.expression == null) throw new Error('Bare return is not supported')
-    ensureBlockTerminator(context, currentBlockId, {kind: 'return', expression: lowerExpression(statement.expression)})
-    return null
-  }
-
-  if (ts.isBlock(statement)) {
-    return lowerStatementsInto(context, currentBlockId, statement.statements, breakTargetBlockId, continueTargetBlockId)
-  }
-
-  if (ts.isIfStatement(statement)) {
-    const thenBlockId = context.createBlock('if_then')
-    const elseBlockId = context.createBlock('if_else')
-    const joinBlockId = context.createBlock('if_join')
-
-    ensureBlockTerminator(context, currentBlockId, {
-      kind: 'branch',
-      condition: lowerExpression(statement.expression),
-      thenBlockId,
-      elseBlockId,
-    })
-
-    const thenExit = lowerStatementInto(context, thenBlockId, statement.thenStatement, breakTargetBlockId, continueTargetBlockId)
-    if (thenExit != null) ensureBlockTerminator(context, thenExit, {kind: 'goto', targetBlockId: joinBlockId})
-
-    const elseExit =
-      statement.elseStatement == null
-        ? elseBlockId
-        : lowerStatementInto(context, elseBlockId, statement.elseStatement, breakTargetBlockId, continueTargetBlockId)
-    if (elseExit != null) ensureBlockTerminator(context, elseExit, {kind: 'goto', targetBlockId: joinBlockId})
-
-    return joinBlockId
-  }
-
-  if (ts.isSwitchStatement(statement)) {
-    const afterSwitchBlockId = context.createBlock('switch_after')
-    const defaultClause = statement.caseBlock.clauses.find(clause => ts.isDefaultClause(clause)) ?? null
-    const caseClauses = statement.caseBlock.clauses.filter(clause => ts.isCaseClause(clause))
-    let currentTestBlockId = currentBlockId
-
-    for (let i = 0; i < caseClauses.length; i++) {
-      const clause = caseClauses[i]!
-      const clauseBlockId = context.createBlock('switch_case')
-      const nextTestBlockId =
-        i === caseClauses.length - 1
-          ? defaultClause == null ? afterSwitchBlockId : context.createBlock('switch_default_test')
-          : context.createBlock('switch_test')
-      ensureBlockTerminator(context, currentTestBlockId, {
-        kind: 'branch',
-        condition: {
-          kind: 'binary',
-          operator: '===',
-          left: lowerExpression(statement.expression),
-          right: lowerExpression(clause.expression),
-        },
-        thenBlockId: clauseBlockId,
-        elseBlockId: nextTestBlockId,
-      })
-
-      const clauseExit = lowerStatementsInto(context, clauseBlockId, stripTrailingCaseBreak(clause.statements), afterSwitchBlockId, continueTargetBlockId)
-      if (clauseExit != null) ensureBlockTerminator(context, clauseExit, {kind: 'goto', targetBlockId: afterSwitchBlockId})
-      currentTestBlockId = nextTestBlockId
-    }
-
-    if (defaultClause != null) {
-      const defaultBlockId = context.createBlock('switch_default')
-      ensureBlockTerminator(context, currentTestBlockId, {kind: 'goto', targetBlockId: defaultBlockId})
-      const defaultExit = lowerStatementsInto(context, defaultBlockId, stripTrailingCaseBreak(defaultClause.statements), afterSwitchBlockId, continueTargetBlockId)
-      if (defaultExit != null) ensureBlockTerminator(context, defaultExit, {kind: 'goto', targetBlockId: afterSwitchBlockId})
-    } else if (caseClauses.length === 0) {
-      ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: afterSwitchBlockId})
-    }
-
-    return afterSwitchBlockId
-  }
-
-  if (ts.isForStatement(statement)) {
-    if (statement.initializer != null) {
-      if (ts.isVariableDeclarationList(statement.initializer)) {
-        context.getBlock(currentBlockId).instructions.push({
-          kind: 'declare',
-          declarations: statement.initializer.declarations.map(declaration => {
-            if (declaration.initializer == null) throw new Error('Only initialized for declarations are supported')
-            return {
-              name: lowerBindingName(declaration.name),
-              initializer: lowerExpression(declaration.initializer),
-            }
-          }),
-        })
-      } else {
-        context.getBlock(currentBlockId).instructions.push({
-          kind: 'expression',
-          expression: lowerExpression(statement.initializer),
-        })
-      }
-    }
-
-    const conditionBlockId = context.createBlock('for_condition')
-    const bodyBlockId = context.createBlock('for_body')
-    const incrementBlockId = context.createBlock('for_increment')
-    const afterBlockId = context.createBlock('for_after')
-
-    ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: conditionBlockId})
-
-    const conditionBlock = context.getBlock(conditionBlockId)
-    conditionBlock.terminator =
-      statement.condition == null
-        ? {kind: 'goto', targetBlockId: bodyBlockId}
-        : {
-            kind: 'branch',
-            condition: lowerExpression(statement.condition),
-            thenBlockId: bodyBlockId,
-            elseBlockId: afterBlockId,
-          }
-
-    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId, incrementBlockId)
-    if (bodyExit != null) ensureBlockTerminator(context, bodyExit, {kind: 'goto', targetBlockId: incrementBlockId})
-
-    const incrementBlock = context.getBlock(incrementBlockId)
-    if (statement.incrementor != null) {
-      incrementBlock.instructions.push({
-        kind: 'expression',
-        expression: lowerExpression(statement.incrementor),
-      })
-    }
-    incrementBlock.terminator = {kind: 'goto', targetBlockId: conditionBlockId}
-    return afterBlockId
-  }
-
-  if (ts.isWhileStatement(statement)) {
-    const conditionBlockId = context.createBlock('while_condition')
-    const bodyBlockId = context.createBlock('while_body')
-    const afterBlockId = context.createBlock('while_after')
-
-    ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: conditionBlockId})
-
-    const conditionBlock = context.getBlock(conditionBlockId)
-    conditionBlock.terminator = {
-      kind: 'branch',
-      condition: lowerExpression(statement.expression),
-      thenBlockId: bodyBlockId,
-      elseBlockId: afterBlockId,
-    }
-
-    const bodyExit = lowerStatementInto(context, bodyBlockId, statement.statement, afterBlockId, conditionBlockId)
-    if (bodyExit != null) ensureBlockTerminator(context, bodyExit, {kind: 'goto', targetBlockId: conditionBlockId})
-    return afterBlockId
-  }
-
-  if (ts.isBreakStatement(statement)) {
-    if (breakTargetBlockId == null) throw new Error('Break statement is only supported inside loop/switch lowering')
-    ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: breakTargetBlockId})
-    return null
-  }
-
-  if (ts.isContinueStatement(statement)) {
-    if (continueTargetBlockId == null) throw new Error('Continue statement is only supported inside loop lowering')
-    ensureBlockTerminator(context, currentBlockId, {kind: 'goto', targetBlockId: continueTargetBlockId})
-    return null
-  }
-
-  throw new Error(`Unsupported statement kind while lowering: ${ts.SyntaxKind[statement.kind]}`)
-}
-
-function stripTrailingCaseBreak(statements: readonly ts.Statement[]) {
-  if (statements.length === 0) return statements
-  const last = statements[statements.length - 1]!
-  return ts.isBreakStatement(last) ? statements.slice(0, -1) : statements
-}
-
-function ensureBlockTerminator(context: LoweringContext, blockId: string, terminator: IrTerminator) {
-  const block = context.getBlock(blockId)
-  if (block.terminator != null) throw new Error(`Block ${blockId} already has a terminator`)
-  block.terminator = terminator
-}
-
-function lowerBindingName(name: ts.BindingName): IrBindingName {
-  if (ts.isIdentifier(name)) return {kind: 'identifier', name: name.text}
-  if (ts.isObjectBindingPattern(name)) {
-    return {
-      kind: 'object',
-      elements: name.elements.map(element => {
-        if (element.dotDotDotToken != null) throw new Error('Rest object binding is not supported')
-        const key =
-          element.propertyName == null
-            ? ts.isIdentifier(element.name) ? element.name.text : unsupported('Nested object binding without property name is not supported')
-            : getPropertyName(element.propertyName)
-        return {key, name: lowerBindingName(element.name)}
-      }),
-    }
-  }
-  throw new Error(`Unsupported binding pattern: ${ts.SyntaxKind[name.kind]}`)
-}
-
-function lowerExpression(expression: ts.Expression): IrExpression {
-  if (ts.isParenthesizedExpression(expression)) return lowerExpression(expression.expression)
-  if (ts.isNonNullExpression(expression)) return lowerExpression(expression.expression)
-  if (ts.isAsExpression(expression)) return lowerExpression(expression.expression)
-  if (ts.isSatisfiesExpression(expression)) return lowerExpression(expression.expression)
-  if (ts.isNumericLiteral(expression)) return {kind: 'number', value: Number(expression.text)}
-  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return {kind: 'string', value: expression.text}
-  if (expression.kind === ts.SyntaxKind.NullKeyword) return {kind: 'null'}
-  if (expression.kind === ts.SyntaxKind.TrueKeyword) return {kind: 'boolean', value: true}
-  if (expression.kind === ts.SyntaxKind.FalseKeyword) return {kind: 'boolean', value: false}
-  if (ts.isIdentifier(expression)) return {kind: 'identifier', name: expression.text}
-  if (ts.isPrefixUnaryExpression(expression)) {
-    if (expression.operator !== ts.SyntaxKind.MinusToken && expression.operator !== ts.SyntaxKind.PlusToken) {
-      throw new Error(`Unsupported unary operator: ${ts.tokenToString(expression.operator)}`)
-    }
-    return {
-      kind: 'prefix',
-      operator: expression.operator === ts.SyntaxKind.MinusToken ? '-' : '+',
-      operand: lowerExpression(expression.operand),
-    }
-  }
-  if (ts.isPostfixUnaryExpression(expression)) {
-    if (!ts.isIdentifier(expression.operand)) throw new Error('Only identifier postfix expressions are supported')
-    return {
-      kind: 'postfix-update',
-      target: expression.operand.text,
-      operator: expression.operator === ts.SyntaxKind.PlusPlusToken ? '++' : '--',
-    }
-  }
-  if (ts.isArrayLiteralExpression(expression)) {
-    if (expression.elements.some(element => ts.isSpreadElement(element))) throw new Error('Array spread is not supported yet')
-    return {
-      kind: 'array',
-      items: expression.elements.map(element => lowerExpression(element)),
-    }
-  }
-  if (ts.isPropertyAccessChain(expression)) {
-    const object = lowerExpression(expression.expression)
-    return {
-      kind: 'conditional',
-      condition: {
-        kind: 'binary',
-        operator: '==',
-        left: object,
-        right: {kind: 'null'},
-      },
-      whenTrue: {kind: 'null'},
-      whenFalse: {
-        kind: 'property',
-        object,
-        property: expression.name.text,
-      },
-    }
-  }
-  if (ts.isPropertyAccessExpression(expression)) {
-    return {
-      kind: 'property',
-      object: lowerExpression(expression.expression),
-      property: expression.name.text,
-    }
-  }
-  if (ts.isElementAccessExpression(expression)) {
-    return {
-      kind: 'index',
-      object: lowerExpression(expression.expression),
-      index: lowerExpression(expression.argumentExpression),
-    }
-  }
-  if (ts.isBinaryExpression(expression)) {
-    if (isAssignmentToken(expression.operatorToken.kind)) {
-      if (!ts.isIdentifier(expression.left)) throw new Error('Only identifier assignments are supported')
-      return {
-        kind: 'assign',
-        target: expression.left.text,
-        operator: assignmentTokenToOperator(expression.operatorToken.kind),
-        value: lowerExpression(expression.right),
-      }
-    }
-    return {
-      kind: 'binary',
-      operator: binaryTokenToOperator(expression.operatorToken.kind),
-      left: lowerExpression(expression.left),
-      right: lowerExpression(expression.right),
-    }
-  }
-  if (ts.isConditionalExpression(expression)) {
-    return {
-      kind: 'conditional',
-      condition: lowerExpression(expression.condition),
-      whenTrue: lowerExpression(expression.whenTrue),
-      whenFalse: lowerExpression(expression.whenFalse),
-    }
-  }
-  if (ts.isObjectLiteralExpression(expression)) {
-    return {
-      kind: 'object',
-      properties: expression.properties.map(property => {
-        if (ts.isSpreadAssignment(property)) return {kind: 'spread', value: lowerExpression(property.expression)} satisfies IrObjectProperty
-        if (ts.isShorthandPropertyAssignment(property)) {
-          return {
-            kind: 'property',
-            name: property.name.text,
-            value: lowerExpression(property.name),
-          } satisfies IrObjectProperty
-        }
-        if (ts.isPropertyAssignment(property)) {
-          return {
-            kind: 'property',
-            name: getPropertyName(property.name),
-            value: lowerExpression(property.initializer),
-          } satisfies IrObjectProperty
-        }
-        throw new Error(`Unsupported object property kind: ${ts.SyntaxKind[property.kind]}`)
-      }),
-    }
-  }
-  if (ts.isCallExpression(expression)) {
-    return {
-      kind: 'call',
-      callee: lowerCallee(expression.expression),
-      args: expression.arguments.map(argument => lowerExpression(argument)),
-    }
-  }
-  if (ts.isArrowFunction(expression)) {
-    return {
-      kind: 'arrow',
-      fn: lowerInlineFunction(expression.parameters, expression.body),
-    }
-  }
-  throw new Error(`Unsupported expression kind while lowering: ${ts.SyntaxKind[expression.kind]}`)
-}
-
-function lowerCallee(expression: ts.LeftHandSideExpression): IrCallee {
-  if (ts.isIdentifier(expression)) return {kind: 'identifier', name: expression.text}
-  if (ts.isPropertyAccessExpression(expression)) {
-    return {
-      kind: 'property',
-      object: lowerExpression(expression.expression),
-      property: expression.name.text,
-    }
-  }
-  throw new Error(`Unsupported call expression: ${expression.getText()}`)
-}
+// CFG execution
 
 function executeFunctionBlocks(analyzer: LoweredProgramAnalyzer, fn: InlineFunction, initialStates: EvalState[]): ReturnCase[] {
   const returns: ReturnCase[] = []
@@ -1321,6 +786,8 @@ function executeRangeFunctionBlocks(analyzer: LoweredProgramAnalyzer, fn: Inline
   return returns
 }
 
+// Instruction dispatch
+
 function executeInstruction(analyzer: LoweredProgramAnalyzer, state: EvalState, instruction: IrInstruction): EvalState[] {
   if (instruction.kind === 'declare') {
     let states = [state]
@@ -1360,6 +827,8 @@ function executeRangeInstruction(analyzer: LoweredProgramAnalyzer, state: RangeS
   }
   return states
 }
+
+// Binary expression evaluation
 
 function combineBinaryCases(analyzer: LoweredProgramAnalyzer, state: EvalState, expression: Extract<IrExpression, {kind: 'binary'}>): EvalCase[] {
   const leftCases = analyzer.evalExpression(state, expression.left)
@@ -1548,6 +1017,8 @@ function combineRangeBinaryCases(analyzer: LoweredProgramAnalyzer, state: RangeS
   return results
 }
 
+// Range narrowing (condition-level, needs the evaluator for sub-expression reading)
+
 function narrowRangeStatesForCondition(
   analyzer: LoweredProgramAnalyzer,
   state: RangeState,
@@ -1623,6 +1094,59 @@ function narrowRangeStatesForSimpleComparison(
 
   return [{env: nextEnv}]
 }
+
+function readSimpleRangeValue(analyzer: LoweredProgramAnalyzer, state: RangeState, expression: IrExpression): RangeValue | null {
+  switch (expression.kind) {
+    case 'number':
+      return rangeNumber(expression.value, expression.value, Number.isInteger(expression.value))
+    case 'string':
+      return rangeString(expression.value)
+    case 'null':
+      return rangeNull()
+    case 'boolean':
+      return rangeBoolean(expression.value ? 'always-true' : 'always-false')
+    case 'identifier': {
+      const local = state.env.get(expression.name)
+      if (local != null) return local
+      try {
+        const global = analyzer.getGlobalNumber(expression.name)
+        return rangeNumber(global, global, Number.isInteger(global))
+      } catch {
+        return null
+      }
+    }
+    case 'prefix': {
+      const operand = readSimpleRangeValue(analyzer, state, expression.operand)
+      if (operand?.kind !== 'range-number') return null
+      return expression.operator === '-' ? negateRangeNumber(operand) : operand
+    }
+    case 'property': {
+      const target = readSimpleRangeValue(analyzer, state, expression.object)
+      if (target == null) return null
+      if (target.kind === 'range-object') return target.props[expression.property] ?? null
+      if (target.kind === 'range-array') return getRangeArrayProperty(target, expression.property)
+      if (target.kind === 'range-string') return getRangeStringProperty(target, expression.property)
+      return null
+    }
+    default:
+      return null
+  }
+}
+
+function getRangeAccessPath(expression: IrExpression): RangeAccessPath | null {
+  if (expression.kind === 'identifier') return {root: expression.name, props: []}
+  if (expression.kind === 'property') {
+    const base = getRangeAccessPath(expression.object)
+    if (base == null) return null
+    return {
+      root: base.root,
+      props: [...base.props, expression.property],
+    }
+  }
+  return null
+}
+
+// Call expression evaluation
 
 function evaluateCallExpression(analyzer: LoweredProgramAnalyzer, state: EvalState, expression: Extract<IrExpression, {kind: 'call'}>): EvalCase[] {
   if (expression.callee.kind === 'property' && expression.callee.property === 'at') {
@@ -1860,6 +1384,8 @@ function evaluateRangeCallExpression(analyzer: LoweredProgramAnalyzer, state: Ra
   throw new Error('Unsupported range call expression')
 }
 
+// Math intrinsics
+
 function evaluateMathCall(name: string, args: Value[], mode: Mode): Value {
   const numbers = args.map(arg => expectNumber(arg))
   if (mode === 'symbolic') throw new Error(`Math.${name} is not supported in symbolic mode yet`)
@@ -1902,1015 +1428,12 @@ function evaluateRangeMathCall(name: string, args: RangeValue[]): RangeValue {
   }
 }
 
-function evaluateConstNumber(expression: ts.Expression, globals: Map<string, number>): number | null {
-  if (ts.isParenthesizedExpression(expression)) return evaluateConstNumber(expression.expression, globals)
-  if (ts.isAsExpression(expression)) return evaluateConstNumber(expression.expression, globals)
-  if (ts.isSatisfiesExpression(expression)) return evaluateConstNumber(expression.expression, globals)
-  if (ts.isNumericLiteral(expression)) return Number(expression.text)
-  if (ts.isIdentifier(expression)) return globals.get(expression.text) ?? null
-  if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.MinusToken) {
-    const operand = evaluateConstNumber(expression.operand, globals)
-    return operand == null ? null : -operand
-  }
-  return null
-}
-
-function applyNumericOperator(left: NumberValue, right: NumberValue, operator: '+' | '-' | '*' | '/' | '%') {
-  if (left.mode !== right.mode) throw new Error('Mixed concrete and symbolic numeric values are not supported')
-  if (left.mode === 'concrete') {
-    const leftValue = expectConcreteNumberValue(left)
-    const rightValue = expectConcreteNumberValue(right)
-    switch (operator) {
-      case '+':
-        return concreteNumber(leftValue + rightValue)
-      case '-':
-        return concreteNumber(leftValue - rightValue)
-      case '%':
-        return concreteNumber(leftValue % rightValue)
-      case '*':
-        return concreteNumber(leftValue * rightValue)
-      case '/':
-        return concreteNumber(leftValue / rightValue)
-    }
-  }
-
-  const leftExpr = expectSymbolicNumberValue(left)
-  const rightExpr = expectSymbolicNumberValue(right)
-  switch (operator) {
-    case '+':
-      return symbolicNumberFromExpr(addExpr(leftExpr, rightExpr))
-    case '-':
-      return symbolicNumberFromExpr(subExpr(leftExpr, rightExpr))
-    case '*':
-      return symbolicNumberFromExpr(mulExpr(leftExpr, rightExpr))
-    case '/':
-      return symbolicNumberFromExpr(divExpr(leftExpr, rightExpr))
-    default:
-      throw new Error(`Unsupported symbolic operator: ${operator}`)
-  }
-}
-
-function applyComparisonOperator(left: Value, right: Value, operator: ComparisonOp | '==' | '!=') {
-  if (operator === '==' || operator === '!=') {
-    if (left.kind === 'number' && right.kind === 'number') {
-      if (left.mode !== right.mode) throw new Error('Mixed concrete and symbolic comparison is not supported')
-      if (left.mode === 'symbolic') throw new Error(`Loose ${operator} is not supported in symbolic mode`)
-      const leftValue = expectConcreteNumberValue(left)
-      const rightValue = expectConcreteNumberValue(right)
-      return booleanValue('concrete', operator === '==' ? leftValue === rightValue : leftValue !== rightValue)
-    }
-    if (left.kind === 'null' || right.kind === 'null') {
-      const equal = left.kind === 'null' && right.kind === 'null'
-      return booleanValue('concrete', operator === '==' ? equal : !equal)
-    }
-    if (left.kind === 'boolean' && right.kind === 'boolean') {
-      if (left.mode !== 'concrete' || right.mode !== 'concrete') throw new Error(`Loose ${operator} is only supported in concrete mode`)
-      return booleanValue('concrete', operator === '==' ? left.value === right.value : left.value !== right.value)
-    }
-    if (left.kind === 'string' && right.kind === 'string') {
-      return booleanValue('concrete', operator === '==' ? left.value === right.value : left.value !== right.value)
-    }
-    throw new Error(`Loose ${operator} is only supported for numbers, strings, booleans, and null checks`)
-  }
-
-  if (operator === '===' || operator === '!==') {
-    if (left.kind === 'number' && right.kind === 'number') {
-      if (left.mode !== right.mode) throw new Error('Mixed concrete and symbolic comparison is not supported')
-      if (left.mode === 'concrete') {
-        const leftValue = expectConcreteNumberValue(left)
-        const rightValue = expectConcreteNumberValue(right)
-        return booleanValue('concrete', operator === '===' ? leftValue === rightValue : leftValue !== rightValue)
-      }
-      return symbolicBoolean({
-        kind: 'compare',
-        op: operator,
-        left: expectSymbolicNumberValue(left),
-        right: expectSymbolicNumberValue(right),
-      })
-    }
-    if (left.kind === 'string' && right.kind === 'string') {
-      return booleanValue('concrete', operator === '===' ? left.value === right.value : left.value !== right.value)
-    }
-    if (left.kind === 'boolean' && right.kind === 'boolean') {
-      if (left.mode !== 'concrete' || right.mode !== 'concrete') throw new Error(`Strict ${operator} is only supported in concrete boolean mode`)
-      return booleanValue('concrete', operator === '===' ? left.value === right.value : left.value !== right.value)
-    }
-    if (left.kind === 'null' || right.kind === 'null') {
-      const equal = left.kind === 'null' && right.kind === 'null'
-      return booleanValue('concrete', operator === '===' ? equal : !equal)
-    }
-    return booleanValue('concrete', operator === '!==')
-  }
-
-  if (left.kind !== 'number' || right.kind !== 'number') throw new Error(`Operator ${operator} expects numeric operands`)
-  if (left.mode !== right.mode) throw new Error('Mixed concrete and symbolic comparison is not supported')
-  if (left.mode === 'concrete') {
-    const leftValue = expectConcreteNumberValue(left)
-    const rightValue = expectConcreteNumberValue(right)
-    switch (operator) {
-      case '>':
-        return booleanValue('concrete', leftValue > rightValue)
-      case '>=':
-        return booleanValue('concrete', leftValue >= rightValue)
-      case '<':
-        return booleanValue('concrete', leftValue < rightValue)
-      case '<=':
-        return booleanValue('concrete', leftValue <= rightValue)
-    }
-  }
-
-  return symbolicBoolean({
-    kind: 'compare',
-    op: operator,
-    left: expectSymbolicNumberValue(left),
-    right: expectSymbolicNumberValue(right),
-  })
-}
-
-export function symbolicExprEquals(left: ScalarExpr, right: ScalarExpr) {
-  const linear = toLinearExpr(subExpr(left, right))
-  if (linear == null) return false
-  if (Math.abs(linear.constant) > epsilon) return false
-  for (const coefficient of Object.values(linear.terms)) if (Math.abs(coefficient) > epsilon) return false
-  return true
-}
-
-type LinearExpr = {
-  constant: number
-  terms: Record<string, number>
-}
-
-function toLinearExpr(expr: ScalarExpr): LinearExpr | null {
-  switch (expr.kind) {
-    case 'const':
-      return {constant: expr.value, terms: {}}
-    case 'var':
-      return {constant: 0, terms: {[expr.name]: 1}}
-    case 'add': {
-      const left = toLinearExpr(expr.left)
-      const right = toLinearExpr(expr.right)
-      if (left == null || right == null) return null
-      return combineLinear(left, right, 1)
-    }
-    case 'sub': {
-      const left = toLinearExpr(expr.left)
-      const right = toLinearExpr(expr.right)
-      if (left == null || right == null) return null
-      return combineLinear(left, right, -1)
-    }
-    case 'mul':
-      if (expr.left.kind === 'const') {
-        const right = toLinearExpr(expr.right)
-        return right == null ? null : scaleLinear(right, expr.left.value)
-      }
-      if (expr.right.kind === 'const') {
-        const left = toLinearExpr(expr.left)
-        return left == null ? null : scaleLinear(left, expr.right.value)
-      }
-      return null
-    case 'div':
-      if (expr.right.kind !== 'const') return null
-      const left = toLinearExpr(expr.left)
-      return left == null ? null : scaleLinear(left, 1 / expr.right.value)
-  }
-}
-
-function combineLinear(left: LinearExpr, right: LinearExpr, rightScale: number): LinearExpr {
-  const terms: Record<string, number> = {...left.terms}
-  for (const [name, coefficient] of Object.entries(right.terms)) {
-    const nextCoefficient = (terms[name] ?? 0) + coefficient * rightScale
-    if (Math.abs(nextCoefficient) <= epsilon) delete terms[name]
-    else terms[name] = nextCoefficient
-  }
-  return {
-    constant: left.constant + right.constant * rightScale,
-    terms,
-  }
-}
-
-function scaleLinear(linear: LinearExpr, factor: number): LinearExpr {
-  const terms: Record<string, number> = {}
-  for (const [name, coefficient] of Object.entries(linear.terms)) {
-    const next = coefficient * factor
-    if (Math.abs(next) > epsilon) terms[name] = next
-  }
-  return {
-    constant: linear.constant * factor,
-    terms,
-  }
-}
-
-export function formatScalarExpr(expr: ScalarExpr): string {
-  switch (expr.kind) {
-    case 'const':
-      return String(expr.value)
-    case 'var':
-      return expr.name
-    case 'add':
-      return `(${formatScalarExpr(expr.left)} + ${formatScalarExpr(expr.right)})`
-    case 'sub':
-      return `(${formatScalarExpr(expr.left)} - ${formatScalarExpr(expr.right)})`
-    case 'mul':
-      return `(${formatScalarExpr(expr.left)} * ${formatScalarExpr(expr.right)})`
-    case 'div':
-      return `(${formatScalarExpr(expr.left)} / ${formatScalarExpr(expr.right)})`
-  }
-}
-
-function negateBoolExpr(expr: BoolExpr): BoolExpr {
-  return {
-    kind: 'compare',
-    op:
-      expr.op === '>' ? '<='
-      : expr.op === '>=' ? '<'
-      : expr.op === '<' ? '>='
-      : expr.op === '<=' ? '>'
-      : expr.op === '===' ? '!=='
-      : '===',
-    left: expr.left,
-    right: expr.right,
-  }
-}
-
-function getPropertyName(name: ts.PropertyName | undefined) {
-  if (name == null) throw new Error('Object property name is missing')
-  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text
-  throw new Error(`Unsupported property name: ${ts.SyntaxKind[name.kind]}`)
-}
-
-export function getProp(object: ObjectValue, key: string) {
-  const value = object.props[key]
-  if (value == null) throw new Error(`Missing property ${key}`)
-  return value
-}
-
-function getArrayProperty(array: ArrayValue, key: string) {
-  if (key === 'length') return concreteNumber(array.items.length)
-  throw new Error(`Unsupported array property: ${key}`)
-}
-
-function getStringProperty(value: StringValue, key: string) {
-  if (key === 'length') return concreteNumber(value.value.length)
-  throw new Error(`Unsupported string property: ${key}`)
-}
-
-function getArrayItem(array: ArrayValue, index: number) {
-  const item = array.items[index]
-  if (item == null) throw new Error(`Array index ${index} is out of bounds`)
-  return item
-}
-
-function getIndexableItem(value: Value, index: number) {
-  if (value.kind === 'array') return getArrayItem(value, index)
-  if (value.kind === 'string') return concreteString(value.value[index] ?? '')
-  throw new Error(`Expected array or string index access, got ${value.kind}`)
-}
-
-function bindValueToName(env: Map<string, Value>, name: IrBindingName, value: Value) {
-  if (name.kind === 'identifier') {
-    env.set(name.name, value)
-    return
-  }
-
-  const object = expectObject(value)
-  for (const element of name.elements) bindValueToName(env, element.name, getProp(object, element.key))
-}
-
-function bindRangeValueToName(env: Map<string, RangeValue>, name: IrBindingName, value: RangeValue) {
-  if (name.kind === 'identifier') {
-    env.set(name.name, value)
-    return
-  }
-
-  const object = expectRangeObject(value)
-  for (const element of name.elements) bindRangeValueToName(env, element.name, getRangeProp(object, element.key))
-}
+// Helpers
 
 function withConstraint(state: EvalState, constraint: BoolExpr): EvalState {
   return {
     ...state,
     constraints: [...state.constraints, constraint],
-  }
-}
-
-function numberValue(mode: Mode, value: number): NumberValue {
-  return mode === 'concrete' ? concreteNumber(value) : symbolicNumberFromExpr(constExpr(value))
-}
-
-function booleanValue(mode: Mode, value: boolean): BooleanValue {
-  return mode === 'concrete'
-    ? {kind: 'boolean', mode, value}
-    : symbolicBoolean({
-        kind: 'compare',
-        op: '===',
-        left: constExpr(value ? 1 : 0),
-        right: constExpr(1),
-      })
-}
-
-export function concreteNumber(value: number): NumberValue {
-  return {kind: 'number', mode: 'concrete', value}
-}
-
-export function concreteString(value: string): StringValue {
-  return {kind: 'string', mode: 'concrete', value}
-}
-
-export function concreteNull(mode: Mode): NullValue {
-  return {kind: 'null', mode}
-}
-
-export function concreteArray(items: Value[]): ArrayValue {
-  return {kind: 'array', mode: 'concrete', items}
-}
-
-export function concreteObject(props: Record<string, Value>): ObjectValue {
-  return objectValue('concrete', props)
-}
-
-export function concreteOpaque(label: string): OpaqueValue {
-  return {kind: 'opaque', mode: 'concrete', label}
-}
-
-export function symbolicNumber(name: string): NumberValue {
-  return symbolicNumberFromExpr(varExpr(name))
-}
-
-function symbolicNumberFromExpr(expr: ScalarExpr): NumberValue {
-  return {kind: 'number', mode: 'symbolic', expr}
-}
-
-function symbolicBoolean(expr: BoolExpr): BooleanValue {
-  return {kind: 'boolean', mode: 'symbolic', expr}
-}
-
-function objectValue(mode: Mode, props: Record<string, Value>): ObjectValue {
-  return {kind: 'object', mode, props}
-}
-
-export function symbolicObject(props: Record<string, Value>): ObjectValue {
-  return objectValue('symbolic', props)
-}
-
-export function symbolicOpaque(label: string): OpaqueValue {
-  return {kind: 'opaque', mode: 'symbolic', label}
-}
-
-export function expectNumber(value: Value): NumberValue {
-  if (value.kind !== 'number') throw new Error(`Expected number, got ${value.kind}`)
-  return value
-}
-
-export function expectString(value: Value): StringValue {
-  if (value.kind !== 'string') throw new Error(`Expected string, got ${value.kind}`)
-  return value
-}
-
-export function expectConcreteNumber(value: Value) {
-  return expectConcreteNumberValue(expectNumber(value))
-}
-
-export function expectSymbolicNumber(value: Value) {
-  return expectSymbolicNumberValue(expectNumber(value))
-}
-
-export function expectBoolean(value: Value): BooleanValue {
-  if (value.kind !== 'boolean') throw new Error(`Expected boolean, got ${value.kind}`)
-  return value
-}
-
-export function expectObject(value: Value): ObjectValue {
-  if (value.kind !== 'object') throw new Error(`Expected object, got ${value.kind}`)
-  return value
-}
-
-export function expectArray(value: Value): ArrayValue {
-  if (value.kind !== 'array') throw new Error(`Expected array, got ${value.kind}`)
-  return value
-}
-
-function expectFunction(value: Value): FunctionValue {
-  if (value.kind !== 'function') throw new Error(`Expected function, got ${value.kind}`)
-  return value
-}
-
-function negateNumber(value: NumberValue): NumberValue {
-  return value.mode === 'concrete'
-    ? concreteNumber(-expectConcreteNumberValue(value))
-    : symbolicNumberFromExpr(mulExpr(constExpr(-1), expectSymbolicNumberValue(value)))
-}
-
-function expectConcreteNumberValue(value: NumberValue) {
-  if (value.mode !== 'concrete') throw new Error('Expected concrete number')
-  return value.value
-}
-
-function expectSymbolicNumberValue(value: NumberValue) {
-  if (value.mode !== 'symbolic') throw new Error('Expected symbolic number')
-  return value.expr
-}
-
-export function rangeNumber(min: number, max: number, isInteger: boolean): RangeNumberValue {
-  return {kind: 'range-number', min, max, isInteger}
-}
-
-function rangeBoolean(truth: RangeTruth): RangeBooleanValue {
-  return {kind: 'range-boolean', truth}
-}
-
-export function rangeString(exactValue: string): RangeStringValue {
-  return {
-    kind: 'range-string',
-    minLength: exactValue.length,
-    maxLength: exactValue.length,
-    exactValue,
-  }
-}
-
-function rangeStringWithLength(minLength: number, maxLength: number, exactValue: string | null = null): RangeStringValue {
-  return {
-    kind: 'range-string',
-    minLength,
-    maxLength,
-    exactValue,
-  }
-}
-
-export function rangeObject(props: Record<string, RangeValue>): RangeObjectValue {
-  return {kind: 'range-object', props}
-}
-
-export function rangeArray(items: RangeValue[]): RangeArrayValue {
-  return {
-    kind: 'range-array',
-    lengthMin: items.length,
-    lengthMax: items.length,
-    items,
-    item: joinNullableRangeItems(items),
-    last: items.at(-1) ?? null,
-    isStrictlyIncreasingNumeric: rangeItemsAreStrictlyIncreasing(items),
-  }
-}
-
-function rangeNull(): RangeNullValue {
-  return {kind: 'range-null'}
-}
-
-export function expectRangeNumber(value: RangeValue): RangeNumberValue {
-  if (value.kind !== 'range-number') throw new Error(`Expected range number, got ${value.kind}`)
-  return value
-}
-
-function expectRangeBoolean(value: RangeValue): RangeBooleanValue {
-  if (value.kind !== 'range-boolean') throw new Error(`Expected range boolean, got ${value.kind}`)
-  return value
-}
-
-export function expectRangeString(value: RangeValue): RangeStringValue {
-  if (value.kind !== 'range-string') throw new Error(`Expected range string, got ${value.kind}`)
-  return value
-}
-
-export function expectRangeObject(value: RangeValue): RangeObjectValue {
-  if (value.kind !== 'range-object') throw new Error(`Expected range object, got ${value.kind}`)
-  return value
-}
-
-export function expectRangeArray(value: RangeValue): RangeArrayValue {
-  if (value.kind !== 'range-array') throw new Error(`Expected range array, got ${value.kind}`)
-  return value
-}
-
-export function getRangeProp(object: RangeObjectValue, key: string) {
-  const value = object.props[key]
-  if (value == null) throw new Error(`Missing range property ${key}`)
-  return value
-}
-
-function getRangeArrayProperty(array: RangeArrayValue, key: string) {
-  if (key === 'length') return rangeNumber(array.lengthMin, array.lengthMax, true)
-  throw new Error(`Unsupported range array property: ${key}`)
-}
-
-function getRangeStringProperty(value: RangeStringValue, key: string) {
-  if (key === 'length') return rangeNumber(value.minLength, value.maxLength, true)
-  throw new Error(`Unsupported range string property: ${key}`)
-}
-
-function getRangeIndexableItem(value: RangeValue, index: RangeNumberValue) {
-  if (value.kind === 'range-array') return getRangeArrayItemAt(value, index)
-  if (value.kind === 'range-string') return getRangeStringItemAt(value, index)
-  throw new Error(`Expected range array index access, got ${value.kind}`)
-}
-
-function getRangeArrayItemAt(array: RangeArrayValue, index: RangeNumberValue) {
-  const normalizedIndex = normalizeRangeArrayIndex(array, index)
-  if (array.items != null && normalizedIndex != null) {
-    const joined = joinNullableRangeItems(array.items.slice(normalizedIndex.min, normalizedIndex.max + 1))
-    if (joined != null) return joined
-  }
-  if (array.item != null) return array.item
-  throw new Error('Cannot read from an empty range array')
-}
-
-function appendRangeArrayItem(array: RangeArrayValue, next: RangeValue): RangeArrayValue {
-  const items = array.items == null ? null : [...array.items, next]
-  return {
-    kind: 'range-array',
-    lengthMin: array.lengthMin + 1,
-    lengthMax: array.lengthMax + 1,
-    items,
-    item: array.item == null ? next : joinRangeValues(array.item, next),
-    last: next,
-    isStrictlyIncreasingNumeric:
-      array.isStrictlyIncreasingNumeric &&
-      rangeValuesAreStrictlyIncreasingPair(array.last, next),
-  }
-}
-
-function getRangeStringItemAt(value: RangeStringValue, index: RangeNumberValue) {
-  if (!index.isInteger) return rangeStringWithLength(0, 1)
-  if (value.exactValue != null && Math.abs(index.min - index.max) <= epsilon) {
-    const rawIndex = index.min < 0 ? value.exactValue.length + index.min : index.min
-    return rangeString(value.exactValue[rawIndex] ?? '')
-  }
-  return rangeStringWithLength(0, 1)
-}
-
-function normalizeRangeArrayIndex(array: RangeArrayValue, index: RangeNumberValue) {
-  if (!index.isInteger) return null
-  if (array.lengthMin !== array.lengthMax) return null
-  const length = array.lengthMin
-  let min = index.min
-  let max = index.max
-  if (max < 0) {
-    min += length
-    max += length
-  }
-  if (min < 0 || max >= length) return null
-  return {min, max}
-}
-
-function joinNullableRangeItems(items: RangeValue[]) {
-  if (items.length === 0) return null
-  let current = items[0]!
-  for (let i = 1; i < items.length; i++) current = joinRangeValues(current, items[i]!)
-  return current
-}
-
-function rangeItemsAreStrictlyIncreasing(items: RangeValue[]) {
-  for (let i = 1; i < items.length; i++) {
-    if (!rangeValuesAreStrictlyIncreasingPair(items[i - 1]!, items[i]!)) return false
-  }
-  return true
-}
-
-function rangeValuesAreStrictlyIncreasingPair(left: RangeValue | null, right: RangeValue | null) {
-  if (left == null || right == null) return true
-  if (left.kind !== 'range-number' || right.kind !== 'range-number') return false
-  return left.max < right.min - epsilon
-}
-
-export function joinRangeCases(cases: RangeReturnCase[]): RangeValue {
-  if (cases.length === 0) throw new Error('Expected at least 1 range case')
-  let current = cases[0]!.value
-  for (let i = 1; i < cases.length; i++) current = joinRangeValues(current, cases[i]!.value)
-  return current
-}
-
-function joinRangeValues(left: RangeValue, right: RangeValue): RangeValue {
-  if (left.kind !== right.kind) throw new Error(`Cannot join ${left.kind} with ${right.kind}`)
-  if (left.kind === 'range-number' && right.kind === 'range-number') {
-    return rangeNumber(Math.min(left.min, right.min), Math.max(left.max, right.max), left.isInteger && right.isInteger)
-  }
-  if (left.kind === 'range-boolean' && right.kind === 'range-boolean') {
-    return left.truth === right.truth ? left : rangeBoolean('maybe')
-  }
-  if (left.kind === 'range-string' && right.kind === 'range-string') {
-    return rangeStringWithLength(
-      Math.min(left.minLength, right.minLength),
-      Math.max(left.maxLength, right.maxLength),
-      left.exactValue != null && left.exactValue === right.exactValue ? left.exactValue : null,
-    )
-  }
-  if (left.kind === 'range-object' && right.kind === 'range-object') {
-    const props: Record<string, RangeValue> = {}
-    for (const key of Object.keys(left.props)) props[key] = joinRangeValues(getRangeProp(left, key), getRangeProp(right, key))
-    return rangeObject(props)
-  }
-  if (left.kind === 'range-array' && right.kind === 'range-array') {
-    const items =
-      left.items != null &&
-      right.items != null &&
-      left.items.length === right.items.length
-        ? left.items.map((item, index) => joinRangeValues(item, right.items![index]!))
-        : null
-    return {
-      kind: 'range-array',
-      lengthMin: Math.min(left.lengthMin, right.lengthMin),
-      lengthMax: Math.max(left.lengthMax, right.lengthMax),
-      items,
-      item:
-        left.item == null ? right.item
-        : right.item == null ? left.item
-        : joinRangeValues(left.item, right.item),
-      last:
-        left.last == null ? right.last
-        : right.last == null ? left.last
-        : joinRangeValues(left.last, right.last),
-      isStrictlyIncreasingNumeric: items == null ? false : rangeItemsAreStrictlyIncreasing(items),
-    }
-  }
-  if (left.kind === 'range-opaque' && right.kind === 'range-opaque') {
-    if (left.label !== right.label) throw new Error(`Cannot join opaque values ${left.label} and ${right.label}`)
-    return left
-  }
-  if (left.kind === 'range-null' && right.kind === 'range-null') return left
-  throw new Error(`Unsupported range join for ${left.kind}`)
-}
-
-function negateRangeNumber(value: RangeNumberValue) {
-  return rangeNumber(-value.max, -value.min, value.isInteger)
-}
-
-function applyRangeNumericOperator(left: RangeNumberValue, right: RangeNumberValue, operator: '+' | '-' | '*' | '/' | '%') {
-  switch (operator) {
-    case '+':
-      return rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger)
-    case '-':
-      return rangeNumber(left.min - right.max, left.max - right.min, left.isInteger && right.isInteger)
-    case '*': {
-      const products = [left.min * right.min, left.min * right.max, left.max * right.min, left.max * right.max]
-      return rangeNumber(Math.min(...products), Math.max(...products), left.isInteger && right.isInteger)
-    }
-    case '/': {
-      if (right.min <= 0 && right.max >= 0) throw new Error('Division by an interval spanning zero is not supported')
-      const quotients = [left.min / right.min, left.min / right.max, left.max / right.min, left.max / right.max]
-      return rangeNumber(Math.min(...quotients), Math.max(...quotients), false)
-    }
-    case '%': {
-      if (!left.isInteger || !right.isInteger) throw new Error('Range remainder expects integer operands')
-      if (right.min <= 0) throw new Error('Range remainder expects a positive divisor interval')
-      const leftIsSingleton = Math.abs(left.max - left.min) <= epsilon
-      const rightIsSingleton = Math.abs(right.max - right.min) <= epsilon
-      if (leftIsSingleton && rightIsSingleton) {
-        return rangeNumber(left.min % right.min, left.min % right.min, true)
-      }
-      if (right.min === right.max) {
-        const divisor = right.min
-        if (left.min >= 0) return rangeNumber(0, Math.max(0, divisor - 1), true)
-      }
-      const maxAbsDivisor = Math.max(Math.abs(right.min), Math.abs(right.max))
-      return rangeNumber(-(maxAbsDivisor - 1), maxAbsDivisor - 1, true)
-    }
-  }
-}
-
-function compareRangeNumbers(left: RangeNumberValue, right: RangeNumberValue, operator: ComparisonOp | '==' | '!='): RangeTruth {
-  switch (operator) {
-    case '>':
-      return left.min > right.max ? 'always-true' : left.max <= right.min ? 'always-false' : 'maybe'
-    case '>=':
-      return left.min >= right.max ? 'always-true' : left.max < right.min ? 'always-false' : 'maybe'
-    case '<':
-      return left.max < right.min ? 'always-true' : left.min >= right.max ? 'always-false' : 'maybe'
-    case '<=':
-      return left.max <= right.min ? 'always-true' : left.min > right.max ? 'always-false' : 'maybe'
-    case '===': {
-      const leftIsSingleton = Math.abs(left.max - left.min) <= epsilon
-      const rightIsSingleton = Math.abs(right.max - right.min) <= epsilon
-      return leftIsSingleton && rightIsSingleton && Math.abs(left.min - right.min) <= epsilon
-        ? 'always-true'
-        : left.max < right.min || right.max < left.min
-          ? 'always-false'
-          : 'maybe'
-    }
-    case '!==': {
-      const leftIsSingleton = Math.abs(left.max - left.min) <= epsilon
-      const rightIsSingleton = Math.abs(right.max - right.min) <= epsilon
-      return left.max < right.min || right.max < left.min
-        ? 'always-true'
-        : leftIsSingleton && rightIsSingleton && Math.abs(left.min - right.min) <= epsilon
-          ? 'always-false'
-          : 'maybe'
-    }
-    case '==':
-      return compareRangeNumbers(left, right, '===')
-    case '!=':
-      return compareRangeNumbers(left, right, '!==')
-  }
-}
-
-function compareNullableRangeValues(left: RangeValue, right: RangeValue, operator: '==' | '!=' | '===' | '!=='): RangeTruth | null {
-  if (left.kind !== 'range-null' && right.kind !== 'range-null') return null
-  const equal = left.kind === 'range-null' && right.kind === 'range-null'
-  return operator === '==' || operator === '==='
-    ? equal ? 'always-true' : 'always-false'
-    : equal ? 'always-false' : 'always-true'
-}
-
-function compareRangeStringValues(left: RangeValue, right: RangeValue, operator: '==' | '!=' | '===' | '!=='): RangeTruth | null {
-  if (left.kind !== 'range-string' || right.kind !== 'range-string') return null
-  const leftString = expectRangeString(left)
-  const rightString = expectRangeString(right)
-  if (leftString.exactValue != null && rightString.exactValue != null) {
-    const equal = leftString.exactValue === rightString.exactValue
-    return operator === '==' || operator === '==='
-      ? equal ? 'always-true' : 'always-false'
-      : equal ? 'always-false' : 'always-true'
-  }
-  if (leftString.maxLength < rightString.minLength || rightString.maxLength < leftString.minLength) {
-    return operator === '==' || operator === '===' ? 'always-false' : 'always-true'
-  }
-  return 'maybe'
-}
-
-function readSimpleRangeValue(analyzer: LoweredProgramAnalyzer, state: RangeState, expression: IrExpression): RangeValue | null {
-  switch (expression.kind) {
-    case 'number':
-      return rangeNumber(expression.value, expression.value, Number.isInteger(expression.value))
-    case 'string':
-      return rangeString(expression.value)
-    case 'null':
-      return rangeNull()
-    case 'boolean':
-      return rangeBoolean(expression.value ? 'always-true' : 'always-false')
-    case 'identifier': {
-      const local = state.env.get(expression.name)
-      if (local != null) return local
-      try {
-        const global = analyzer.getGlobalNumber(expression.name)
-        return rangeNumber(global, global, Number.isInteger(global))
-      } catch {
-        return null
-      }
-    }
-    case 'prefix': {
-      const operand = readSimpleRangeValue(analyzer, state, expression.operand)
-      if (operand?.kind !== 'range-number') return null
-      return expression.operator === '-' ? negateRangeNumber(operand) : operand
-    }
-    case 'property': {
-      const target = readSimpleRangeValue(analyzer, state, expression.object)
-      if (target == null) return null
-      if (target.kind === 'range-object') return target.props[expression.property] ?? null
-      if (target.kind === 'range-array') return getRangeArrayProperty(target, expression.property)
-      if (target.kind === 'range-string') return getRangeStringProperty(target, expression.property)
-      return null
-    }
-    default:
-      return null
-  }
-}
-
-function getRangeAccessPath(expression: IrExpression): RangeAccessPath | null {
-  if (expression.kind === 'identifier') return {root: expression.name, props: []}
-  if (expression.kind === 'property') {
-    const base = getRangeAccessPath(expression.object)
-    if (base == null) return null
-    return {
-      root: base.root,
-      props: [...base.props, expression.property],
-    }
-  }
-  return null
-}
-
-function setRangeValueAtPath(env: Map<string, RangeValue>, path: RangeAccessPath, nextValue: RangeValue): Map<string, RangeValue> | null {
-  if (path.props.length === 0) {
-    const nextEnv = new Map(env)
-    nextEnv.set(path.root, nextValue)
-    return nextEnv
-  }
-
-  const rootValue = env.get(path.root)
-  if (rootValue == null) return null
-  const nextRootValue = setNestedRangeValue(rootValue, path.props, nextValue)
-  if (nextRootValue == null) return null
-  const nextEnv = new Map(env)
-  nextEnv.set(path.root, nextRootValue)
-  return nextEnv
-}
-
-function setNestedRangeValue(current: RangeValue, props: string[], nextValue: RangeValue): RangeValue | null {
-  if (props.length === 0) return nextValue
-  if (current.kind !== 'range-object') return null
-  const [head, ...tail] = props
-  const child = current.props[head!]
-  if (child == null) return null
-  const nextChild = setNestedRangeValue(child, tail, nextValue)
-  if (nextChild == null) return null
-  return rangeObject({
-    ...current.props,
-    [head!]: nextChild,
-  })
-}
-
-function narrowableComparisonOperator(
-  operator: ComparisonOp | '==' | '!=',
-  assumeTrue: boolean,
-): NarrowedComparisonOp | null {
-  if (assumeTrue) {
-    if (operator === '===') return '=='
-    if (operator === '!==') return '!='
-    return operator
-  }
-  switch (operator) {
-    case '<':
-      return '>='
-    case '<=':
-      return '>'
-    case '>':
-      return '<='
-    case '>=':
-      return '<'
-    case '==':
-      return '!='
-    case '!=':
-      return '=='
-    case '===':
-      return '!='
-    case '!==':
-      return '=='
-  }
-  return null
-}
-
-function narrowRangeNumberPair(
-  left: RangeNumberValue,
-  right: RangeNumberValue,
-  operator: NarrowedComparisonOp,
-): {left: RangeNumberValue; right: RangeNumberValue} | null {
-  const truth = compareRangeNumbers(left, right, operator)
-  if (truth === 'always-false') return null
-  if (truth === 'always-true' && operator !== '==' && operator !== '!=') return {left, right}
-
-  switch (operator) {
-    case '<':
-      return narrowOrderedRangeNumberPair(left, right, true)
-    case '<=':
-      return narrowOrderedRangeNumberPair(left, right, false)
-    case '>': {
-      const narrowed = narrowOrderedRangeNumberPair(right, left, true)
-      return narrowed == null ? null : {left: narrowed.right, right: narrowed.left}
-    }
-    case '>=': {
-      const narrowed = narrowOrderedRangeNumberPair(right, left, false)
-      return narrowed == null ? null : {left: narrowed.right, right: narrowed.left}
-    }
-    case '==': {
-      const min = Math.max(left.min, right.min)
-      const max = Math.min(left.max, right.max)
-      if (min > max + epsilon) return null
-      return {
-        left: rangeNumber(min, max, left.isInteger),
-        right: rangeNumber(min, max, right.isInteger),
-      }
-    }
-    case '!=':
-      return {left, right}
-  }
-}
-
-function narrowOrderedRangeNumberPair(
-  left: RangeNumberValue,
-  right: RangeNumberValue,
-  strict: boolean,
-): {left: RangeNumberValue; right: RangeNumberValue} | null {
-  const step = strict && left.isInteger && right.isInteger ? 1 : 0
-  const nextLeft = rangeNumber(left.min, Math.min(left.max, right.max - step), left.isInteger)
-  const nextRight = rangeNumber(Math.max(right.min, left.min + step), right.max, right.isInteger)
-  if (nextLeft.min > nextLeft.max + epsilon || nextRight.min > nextRight.max + epsilon) return null
-  return {
-    left: nextLeft,
-    right: nextRight,
-  }
-}
-
-function minRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeNumberValue {
-  return rangeNumber(Math.min(left.min, right.min), Math.min(left.max, right.max), left.isInteger && right.isInteger)
-}
-
-function maxRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeNumberValue {
-  return rangeNumber(Math.max(left.min, right.min), Math.max(left.max, right.max), left.isInteger && right.isInteger)
-}
-
-function applyAssignmentOperator(current: NumberValue, next: NumberValue, operator: '+=' | '-='): NumberValue {
-  if (current.mode !== 'concrete' || next.mode !== 'concrete') throw new Error('Assignment operators are only supported in concrete mode')
-  const currentValue = expectConcreteNumberValue(current)
-  const nextValue = expectConcreteNumberValue(next)
-  return concreteNumber(operator === '+=' ? currentValue + nextValue : currentValue - nextValue)
-}
-
-function applyRangeAssignmentOperator(current: RangeNumberValue, next: RangeNumberValue, operator: '+=' | '-='): RangeNumberValue {
-  return applyRangeNumericOperator(current, next, operator === '+=' ? '+' : '-')
-}
-
-export function concreteNumberArrayIsStrictlyIncreasing(array: ArrayValue) {
-  for (let i = 1; i < array.items.length; i++) {
-    if (expectConcreteNumber(array.items[i - 1]!) >= expectConcreteNumber(array.items[i]!) - epsilon) return false
-  }
-  return true
-}
-
-export function describeNumericArray(array: ArrayValue) {
-  return array.items.map(item => expectConcreteNumber(item)).join(',')
-}
-
-export function constExpr(value: number): ScalarExpr {
-  return {kind: 'const', value}
-}
-
-function varExpr(name: string): ScalarExpr {
-  return {kind: 'var', name}
-}
-
-export function addExpr(left: ScalarExpr, right: ScalarExpr): ScalarExpr {
-  return {kind: 'add', left, right}
-}
-
-export function subExpr(left: ScalarExpr, right: ScalarExpr): ScalarExpr {
-  return {kind: 'sub', left, right}
-}
-
-export function mulExpr(left: ScalarExpr, right: ScalarExpr): ScalarExpr {
-  return {kind: 'mul', left, right}
-}
-
-export function divExpr(left: ScalarExpr, right: ScalarExpr): ScalarExpr {
-  return {kind: 'div', left, right}
-}
-
-function binaryTokenToOperator(token: ts.SyntaxKind): IrBinaryOperator {
-  switch (token) {
-    case ts.SyntaxKind.PlusToken:
-      return '+'
-    case ts.SyntaxKind.MinusToken:
-      return '-'
-    case ts.SyntaxKind.AsteriskToken:
-      return '*'
-    case ts.SyntaxKind.SlashToken:
-      return '/'
-    case ts.SyntaxKind.PercentToken:
-      return '%'
-    case ts.SyntaxKind.QuestionQuestionToken:
-      return '??'
-    case ts.SyntaxKind.GreaterThanToken:
-      return '>'
-    case ts.SyntaxKind.GreaterThanEqualsToken:
-      return '>='
-    case ts.SyntaxKind.LessThanToken:
-      return '<'
-    case ts.SyntaxKind.LessThanEqualsToken:
-      return '<='
-    case ts.SyntaxKind.EqualsEqualsToken:
-      return '=='
-    case ts.SyntaxKind.ExclamationEqualsToken:
-      return '!='
-    case ts.SyntaxKind.EqualsEqualsEqualsToken:
-      return '==='
-    case ts.SyntaxKind.ExclamationEqualsEqualsToken:
-      return '!=='
-    case ts.SyntaxKind.BarBarToken:
-      return '||'
-    case ts.SyntaxKind.AmpersandAmpersandToken:
-      return '&&'
-    default:
-      throw new Error(`Unsupported binary operator token: ${ts.tokenToString(token)}`)
-  }
-}
-
-function isComparisonOperator(operator: IrBinaryOperator): operator is ComparisonOp | '==' | '!=' {
-  return (
-    operator === '>' ||
-    operator === '>=' ||
-    operator === '<' ||
-    operator === '<=' ||
-    operator === '==' ||
-    operator === '!=' ||
-    operator === '===' ||
-    operator === '!=='
-  )
-}
-
-function isRangeComparisonOperator(operator: IrBinaryOperator): operator is ComparisonOp | '==' | '!=' {
-  return isComparisonOperator(operator)
-}
-
-function isAssignmentToken(token: ts.SyntaxKind) {
-  return token === ts.SyntaxKind.EqualsToken || token === ts.SyntaxKind.PlusEqualsToken || token === ts.SyntaxKind.MinusEqualsToken
-}
-
-function assignmentTokenToOperator(token: ts.SyntaxKind): '=' | '+=' | '-=' {
-  switch (token) {
-    case ts.SyntaxKind.EqualsToken:
-      return '='
-    case ts.SyntaxKind.PlusEqualsToken:
-      return '+='
-    case ts.SyntaxKind.MinusEqualsToken:
-      return '-='
-    default:
-      throw new Error(`Unsupported assignment token: ${ts.tokenToString(token)}`)
   }
 }
 
