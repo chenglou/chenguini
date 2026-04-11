@@ -26,6 +26,9 @@ import {
   runPhotoGalleryStaticVerification,
   runPhotoGalleryStaticVerificationForSourceFile,
 } from './photo-gallery/static-verifier.ts'
+import {runGeneratedListStaticVerification} from './layout-kernels/generated-list-static-verifier.ts'
+import {runPageBreakStaticVerification} from './layout-kernels/page-break-static-verifier.ts'
+import {runTableSpanStaticVerification} from './layout-kernels/table-span-static-verifier.ts'
 
 function replaceOnce(source, from, to) {
   const next = source.replace(from, to)
@@ -537,4 +540,72 @@ function demo(value: number) {
   ])))
 
   expect(value).toEqual(rangeNumber(0, 19, true))
+})
+
+test('generated-list verifier keeps the extracted geometry kernel ready', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/generated-list-geometry.ts', import.meta.url)).text()
+  const report = runGeneratedListStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'generated-list layout keeps level-specific indents exact in concrete cases')?.status).toBe('pass')
+  expect(getLaw(report, 'generated-list layout keeps terminal-line leader and page slot geometry exact over intervals')?.status).toBe('pass')
+  expect(getLaw(report, 'generated-list layout keeps entry tops contiguous across spacing and wrapped-line counts')?.status).toBe('pass')
+})
+
+test('page-break verifier keeps the extracted bundle kernel ready', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/page-break-bundles.ts', import.meta.url)).text()
+  const report = runPageBreakStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'page-break flow reorders promoted top floats ahead of their heading')?.status).toBe('pass')
+  expect(getLaw(report, 'page-break flow honors keep-with-next pairs when the pair only fits on the next page')?.status).toBe('pass')
+  expect(getLaw(report, 'page-break bundle keeps float count, fit, and total height exact over intervals')?.status).toBe('pass')
+})
+
+test('table-span verifier keeps the extracted negotiation kernel ready', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/table-span-columns.ts', import.meta.url)).text()
+  const report = runTableSpanStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'table-span negotiation keeps mixed single-column and spanning constraints exact in concrete cases')?.status).toBe('pass')
+  expect(getLaw(report, 'table-span negotiation keeps the per-column lower-bound vector exact over intervals')?.status).toBe('pass')
+})
+
+test('generated-list verifier catches a broken terminal leader boundary', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/generated-list-geometry.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'leaderTo: metrics.dotted && isLast ? pageBoxLeft : -1,',
+    'leaderTo: metrics.dotted && isLast ? pageRight : -1,',
+  )
+  const report = runGeneratedListStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'generated-list layout keeps terminal-line leader and page slot geometry exact over intervals')?.status).toBe('fail')
+})
+
+test('page-break verifier catches disabled promotion on fresh pages', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/page-break-bundles.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'if (current.blocks.length === 0 && promotedBundle != null) {',
+    'if (current.blocks.length > 0 && promotedBundle != null) {',
+  )
+  const report = runPageBreakStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'page-break flow reorders promoted top floats ahead of their heading')?.status).toBe('fail')
+})
+
+test('table-span verifier catches broken per-span width distribution', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/table-span-columns.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'const perColumnWidth = cell.measuredWidth / appliedSpan',
+    'const perColumnWidth = cell.measuredWidth',
+  )
+  const report = runTableSpanStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'table-span negotiation keeps the per-column lower-bound vector exact over intervals')?.status).toBe('fail')
 })

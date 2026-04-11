@@ -11,6 +11,7 @@ It contains:
 - `research.md`: what worked, what didn't, and where the real leverage came from
 - `photo-gallery/`: the photo-gallery verifier and its contract sidecar
 - `nicer-hacker-news/`: the HN thread/comment verifiers and their contract sidecar
+- `layout-kernels/`: extracted pure kernels for generated lists, page-break bundles, and table-span negotiation
 
 The demo source being analyzed still lives in:
 
