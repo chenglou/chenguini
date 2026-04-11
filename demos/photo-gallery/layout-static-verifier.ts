@@ -1,1 +1,1 @@
-export * from '../layout-verifier/photo-gallery/static-verifier'
+export * from '../../layout-verifier/photo-gallery/static-verifier'

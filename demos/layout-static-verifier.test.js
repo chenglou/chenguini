@@ -1,1 +1,1 @@
-import './layout-verifier/verifier.test.js'
+import '../layout-verifier/verifier.test.js'

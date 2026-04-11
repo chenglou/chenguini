@@ -41,7 +41,7 @@ function getLaw(report, name) {
 
 // Proof surface stays ready.
 test('photo-gallery static verifier keeps its current proof surface', async () => {
-  const sourceFilePath = new URL('../photo-gallery/layout-model.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const report = runPhotoGalleryStaticVerification(source, overrides)
@@ -56,7 +56,7 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
 })
 
 test('nicer-hacker-news static verifier keeps the row geometry slice ready', async () => {
-  const source = await Bun.file(new URL('../nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const source = await Bun.file(new URL('../demos/nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
   const report = runNicerHackerNewsStaticVerification(source)
 
   expect(report.phase).toBe('ready')
@@ -68,7 +68,7 @@ test('nicer-hacker-news static verifier keeps the row geometry slice ready', asy
 })
 
 test('nicer-hacker-news comment verifier keeps the text layout kernel ready', async () => {
-  const sourceFilePath = new URL('../nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const report = runHNCommentLayoutStaticVerification(source, overrides)
@@ -86,7 +86,7 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
 
 // Contract loading.
 test('photo-gallery verifier can auto-load imported sidecar contracts from the source file', async () => {
-  const sourceFilePath = new URL('../photo-gallery/layout-model.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
   const report = await runPhotoGalleryStaticVerificationForSourceFile(sourceFilePath)
 
   expect(report.phase).toBe('ready')
@@ -94,7 +94,7 @@ test('photo-gallery verifier can auto-load imported sidecar contracts from the s
 })
 
 test('HN comment verifier can auto-load same-file sidecar contracts', async () => {
-  const sourceFilePath = new URL('../nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
   const report = await runHNCommentLayoutStaticVerificationForSourceFile(sourceFilePath)
 
   expect(report.phase).toBe('ready')
@@ -103,7 +103,7 @@ test('HN comment verifier can auto-load same-file sidecar contracts', async () =
 
 // Mutation canaries.
 test('photo-gallery verifier catches broken track-fill math', async () => {
-  const sourceFilePath = new URL('../photo-gallery/layout-model.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const buggySource = replaceOnce(
@@ -118,7 +118,7 @@ test('photo-gallery verifier catches broken track-fill math', async () => {
 })
 
 test('photo-gallery verifier catches broken column-slot math', async () => {
-  const sourceFilePath = new URL('../photo-gallery/layout-model.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const buggySource = replaceOnce(
@@ -136,7 +136,7 @@ test('photo-gallery verifier catches broken column-slot math', async () => {
 })
 
 test('HN row verifier catches broken comment width math', async () => {
-  const source = await Bun.file(new URL('../nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const source = await Bun.file(new URL('../demos/nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
   const buggySource = replaceOnce(
     source,
     'width: row.commentLayout.width + params.commentRightGap,',
@@ -149,7 +149,7 @@ test('HN row verifier catches broken comment width math', async () => {
 })
 
 test('HN row verifier catches broken row-top interval math', async () => {
-  const source = await Bun.file(new URL('../nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const source = await Bun.file(new URL('../demos/nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
   const buggySource = replaceOnce(
     source,
     'rowTop += row.rowHeightNatural',
@@ -165,7 +165,7 @@ test('HN row verifier catches broken row-top interval math', async () => {
 })
 
 test('HN thread verifier catches broken visible-row interval bookkeeping', async () => {
-  const source = await Bun.file(new URL('../nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const source = await Bun.file(new URL('../demos/nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
   const buggySource = replaceOnce(
     source,
     'firstVisibleRowTop = rowTop',
@@ -180,7 +180,7 @@ test('HN thread verifier catches broken visible-row interval bookkeeping', async
 })
 
 test('HN thread verifier catches broken user-top clamp math', async () => {
-  const source = await Bun.file(new URL('../nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
+  const source = await Bun.file(new URL('../demos/nicer-hacker-news/hn-thread-layout.ts', import.meta.url)).text()
   const buggySource = replaceOnce(
     source,
     'const userTop = clamp(rowTop, 0, rowBottom - userHeight)',
@@ -195,7 +195,7 @@ test('HN thread verifier catches broken user-top clamp math', async () => {
 })
 
 test('HN comment verifier catches a broken minimum width clamp', async () => {
-  const sourceFilePath = new URL('../nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const buggySource = replaceOnce(
@@ -210,7 +210,7 @@ test('HN comment verifier catches a broken minimum width clamp', async () => {
 })
 
 test('HN comment verifier catches broken CRLF counting', async () => {
-  const sourceFilePath = new URL('../nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const buggySource = replaceOnce(
@@ -227,7 +227,7 @@ test('HN comment verifier catches broken CRLF counting', async () => {
 })
 
 test('HN comment verifier catches a broken substring offset in text rect geometry', async () => {
-  const sourceFilePath = new URL('../nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const buggySource = replaceOnce(
@@ -242,7 +242,7 @@ test('HN comment verifier catches a broken substring offset in text rect geometr
 })
 
 test('HN comment verifier catches a broken midpoint decision in empty-space offsets', async () => {
-  const sourceFilePath = new URL('../nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const buggySource = replaceOnce(
@@ -257,7 +257,7 @@ test('HN comment verifier catches a broken midpoint decision in empty-space offs
 })
 
 test('HN comment verifier catches broken left-edge routing over intervals', async () => {
-  const sourceFilePath = new URL('../nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
+  const sourceFilePath = new URL('../demos/nicer-hacker-news/hn-comment-layout.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
   const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
   const buggySource = replaceOnce(

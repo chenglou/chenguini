@@ -1,4 +1,4 @@
-import {prompt1DLineHeight, prompt2DLineHeight, prompt2DMaxLines, promptPaddingBottom} from '../../photo-gallery/prompt-layout'
+import {prompt1DLineHeight, prompt2DLineHeight, prompt2DMaxLines, promptPaddingBottom} from '../../demos/photo-gallery/prompt-layout'
 import {
   addExpr,
   buildStaticLayoutReport,

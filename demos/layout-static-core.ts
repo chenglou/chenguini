@@ -1,1 +1,1 @@
-export * from './layout-verifier/core'
+export * from '../layout-verifier/core'

@@ -1,1 +1,1 @@
-export * from './layout-verifier/contracts'
+export * from '../layout-verifier/contracts'

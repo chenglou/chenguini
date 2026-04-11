@@ -1,1 +1,1 @@
-import '../layout-verifier/nicer-hacker-news/verify-comment-static-layout.js'
+import '../../layout-verifier/nicer-hacker-news/verify-comment-static-layout.js'

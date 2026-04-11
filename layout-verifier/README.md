@@ -7,6 +7,8 @@ It contains:
 - `core.ts`: the lowered IR, symbolic/range/concrete evaluators, and law reporting
 - `contracts.ts`: the analyzer-side contract DSL and contract auto-loader
 - `verifier.test.js`: mutation canaries and core regression tests
+- `todo.md`: theories and precision ideas worth trying next
+- `research.md`: what worked, what didn't, and where the real leverage came from
 - `photo-gallery/`: the photo-gallery verifier and its contract sidecar
 - `nicer-hacker-news/`: the HN thread/comment verifiers and their contract sidecar
 

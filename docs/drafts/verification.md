@@ -274,16 +274,16 @@ If the verifier can discover sibling `*.static-contracts.ts` files from the anal
 
 ## Give The Verifier One Canonical Home
 
-If a verifier starts spreading across demos, stop letting its implementation live wherever it first happened to grow.
+If a verifier stops feeling like a demo helper, stop letting its implementation live wherever it first happened to grow.
 
 Give it one canonical folder, then leave tiny shims at the old paths when needed.
 
 Good:
 
-- `demos/layout-verifier/core.ts`
-- `demos/layout-verifier/contracts.ts`
-- `demos/layout-verifier/photo-gallery/...`
-- `demos/layout-verifier/nicer-hacker-news/...`
+- `layout-verifier/core.ts`
+- `layout-verifier/contracts.ts`
+- `layout-verifier/photo-gallery/...`
+- `layout-verifier/nicer-hacker-news/...`
 - tiny re-export or import-only shims where source-relative autodiscovery still expects the old path
 
 Bad:
