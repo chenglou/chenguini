@@ -5,7 +5,9 @@
     "moduleDetection": "force",
     "moduleResolution": "bundler",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": [],
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
 
     "strict": true,
@@ -19,5 +21,5 @@
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true
   },
-  "include": ["demos/**/*.ts"],
+  "include": ["demos/**/*.ts", "layout-verifier/**/*.ts"],
 }

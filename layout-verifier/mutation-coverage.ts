@@ -122,8 +122,8 @@ export function enumerateMutationSites(sourceText: string): MutationSite[] {
 }
 
 function isInTypePosition(node: ts.Node): boolean {
-  let current: ts.Node | undefined = node.parent
-  while (current != null) {
+  let current = node.parent
+  while (!ts.isSourceFile(current)) {
     if (ts.isTypeNode(current) || ts.isTypeAliasDeclaration(current) || ts.isInterfaceDeclaration(current)) return true
     current = current.parent
   }
@@ -400,6 +400,12 @@ function extractInvariantsFromValue(invariants: MinedInvariant[], functionName: 
       if (value.lengthMin === value.lengthMax) {
         invariants.push({functionName, property: path, kind: 'exact', description: `${path}.length is exactly ${value.lengthMin}`})
       }
+      break
+    case 'range-boolean':
+    case 'range-string':
+    case 'range-function':
+    case 'range-opaque':
+    case 'range-null':
       break
   }
 }

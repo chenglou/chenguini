@@ -824,8 +824,6 @@ export class LoweredProgramAnalyzer {
           }
         })
       }
-      default:
-        throw new Error('Unsupported range expression kind')
     }
   }
 }

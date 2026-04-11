@@ -42,7 +42,7 @@ test('generates reasonable mutations per site kind', () => {
     start: 0, end: 1, original: '+', line: 1, context: 'a + b',
   })
   expect(opMutations.length).toBe(1)
-  expect(opMutations[0].replacement).toBe('-')
+  expect(opMutations[0]!.replacement).toBe('-')
 })
 
 test('photo-gallery mutation coverage catches verified functions and reveals blind spots', async () => {
@@ -73,7 +73,7 @@ test('SVG diff renderer produces valid output for missed mutations', async () =>
   })
 
   if (report.missedMutations.length > 0) {
-    const result = report.missedMutations[0]
+    const result = report.missedMutations[0]!
     const mutatedSource = source.slice(0, result.mutation.site.start) + result.mutation.replacement + source.slice(result.mutation.site.end)
     const svg = renderMutationDiffSVG(source, mutatedSource, result.mutation, externalGlobals, overrides)
     expect(svg).toContain('<svg')

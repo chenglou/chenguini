@@ -4,11 +4,11 @@
   "scripts": {
     "start": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./demos/*/index.html --host=$HOST:$PORT",
     "start:templates": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./drafts/demo_templates/*/index.html --host=$HOST:$PORT",
-    "check": "tsgo && oxlint --type-aware demos --ignore-pattern '*.js'",
-    "verify:nicer-hacker-news-comment-static-layout": "bun layout-verifier/nicer-hacker-news/verify-comment-static-layout.js",
-    "test:layout-static-verifier": "bun test layout-verifier/verifier.test.js",
-    "verify:nicer-hacker-news-static-layout": "bun layout-verifier/nicer-hacker-news/verify-static-layout.js",
-    "verify:photo-gallery-static-layout": "bun layout-verifier/photo-gallery/verify-static-layout.js",
+    "check": "tsgo && oxlint --type-aware demos layout-verifier --ignore-pattern '*.js'",
+    "verify:nicer-hacker-news-comment-static-layout": "bun layout-verifier/nicer-hacker-news/verify-comment-static-layout.ts",
+    "test:layout-static-verifier": "bun test layout-verifier/verifier.test.ts",
+    "verify:nicer-hacker-news-static-layout": "bun layout-verifier/nicer-hacker-news/verify-static-layout.ts",
+    "verify:photo-gallery-static-layout": "bun layout-verifier/photo-gallery/verify-static-layout.ts",
     "verify:photo-gallery-layout": "bun demos/photo-gallery/verify-layout.js",
     "verify:photo-gallery-resize": "bun demos/photo-gallery/verify-resize.js"
   },

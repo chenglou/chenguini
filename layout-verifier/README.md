@@ -16,8 +16,8 @@ The shape is:
 
 The regression entry points are:
 
-- `verifier.test.js`: core regression tests and intentional bug canaries
-- `mutation-coverage.test.js`: photo-gallery mutation coverage and invariant mining
+- `verifier.test.ts`: core regression tests and intentional bug canaries
+- `mutation-coverage.test.ts`: photo-gallery mutation coverage and invariant mining
 
 The demo verifier folders are:
 
@@ -35,12 +35,12 @@ Tiny shim files stay in those demo folders so source-relative contract autodisco
 
 Useful commands:
 
-- `bun test layout-verifier/verifier.test.js`
-- `bun test layout-verifier/mutation-coverage.test.js`
-- `bun layout-verifier/photo-gallery/verify-static-layout.js`
-- `bun layout-verifier/nicer-hacker-news/verify-static-layout.js`
-- `bun layout-verifier/nicer-hacker-news/verify-comment-static-layout.js`
-- `bun layout-verifier/life-calendar/verify-static-layout.js`
+- `bun test layout-verifier/verifier.test.ts`
+- `bun test layout-verifier/mutation-coverage.test.ts`
+- `bun layout-verifier/photo-gallery/verify-static-layout.ts`
+- `bun layout-verifier/nicer-hacker-news/verify-static-layout.ts`
+- `bun layout-verifier/nicer-hacker-news/verify-comment-static-layout.ts`
+- `bun layout-verifier/life-calendar/verify-static-layout.ts`
 
 Reports are intentionally more than pass/fail lists. A law can carry proof mechanisms, target coverage, trusted function summaries, candidate laws, unknown proof results, and geometry witnesses.
 

@@ -26,6 +26,9 @@ import {
   rangeObject,
   rangeString,
   staticLayoutFact,
+  type StaticLayoutFunctionSummary,
+  type StaticLayoutLawSummary,
+  type StaticLayoutVerificationReport,
   symbolicNumber,
 } from './core.ts'
 import {
@@ -57,22 +60,34 @@ import {
   promptPaddingBottom,
 } from '../demos/photo-gallery/prompt-layout.ts'
 
-function replaceOnce(source, from, to) {
+function replaceOnce(source: string, from: string, to: string) {
   const next = source.replace(from, to)
   expect(next).not.toBe(source)
   return next
 }
 
-function getLaw(report, name) {
+function getLaw(report: StaticLayoutVerificationReport, name: string): StaticLayoutLawSummary {
   const law = report.laws.find(candidate => candidate.name === name)
-  expect(law).toBeDefined()
+  if (law == null) throw new Error(`Missing law ${name}`)
   return law
 }
 
-function getFunctionSummary(report, name) {
+function getFunctionSummary(report: StaticLayoutVerificationReport, name: string): StaticLayoutFunctionSummary {
   const summary = report.functionSummaries?.find(candidate => candidate.name === name)
-  expect(summary).toBeDefined()
+  if (summary == null) throw new Error(`Missing function summary ${name}`)
   return summary
+}
+
+function getFirstFailure(law: StaticLayoutLawSummary) {
+  const firstFailure = law.firstFailure
+  if (firstFailure == null) throw new Error(`Missing first failure for ${law.name}`)
+  return firstFailure
+}
+
+function getFirstUnknown(law: StaticLayoutLawSummary) {
+  const firstUnknown = law.firstUnknown
+  if (firstUnknown == null) throw new Error(`Missing first unknown for ${law.name}`)
+  return firstUnknown
 }
 
 test('law reports keep unknown separate from failures', () => {
@@ -94,8 +109,9 @@ test('law reports keep unknown separate from failures', () => {
   expect(report.phase).toBe('error')
   expect(law.status).toBe('unknown')
   expect(law.firstFailure).toBeUndefined()
-  expect(law.firstUnknown.reason).toBe('symbolic equality is not linear')
-  expect(law.firstUnknown.witness.left).toBe('x * y')
+  const unknown = getFirstUnknown(law)
+  expect(unknown.reason).toBe('symbolic equality is not linear')
+  expect(unknown.witness?.['left']).toBe('x * y')
 })
 
 test('range facts compose under one law', () => {
@@ -155,7 +171,7 @@ test('empty fact batches fail instead of crashing when the kind is explicit', ()
 
   expect(report.phase).toBe('error')
   expect(law.status).toBe('fail')
-  expect(law.firstFailure.reason).toBe('no facts to check')
+  expect(getFirstFailure(law)['reason']).toBe('no facts to check')
 })
 
 test('geometry fact failures include visual proof packets', () => {
@@ -173,10 +189,11 @@ test('geometry fact failures include visual proof packets', () => {
 
   expect(report.phase).toBe('error')
   expect(law.status).toBe('fail')
-  expect(law.firstFailure.leftOverflowBy).toBe(5)
-  expect(law.firstFailure.rightOverflowBy).toBe(15)
-  expect(law.firstFailure.overflowBy).toBe(15)
-  expect(String(law.firstFailure.geometrySvg).startsWith('<svg ')).toBe(true)
+  const failure = getFirstFailure(law)
+  expect(failure['leftOverflowBy']).toBe(5)
+  expect(failure['rightOverflowBy']).toBe(15)
+  expect(failure['overflowBy']).toBe(15)
+  expect(String(failure['geometrySvg']).startsWith('<svg ')).toBe(true)
 })
 
 test('law summaries record proof provenance', () => {
@@ -260,18 +277,18 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
   const report = runPhotoGalleryStaticVerification(source, overrides)
 
   expect(report.phase).toBe('ready')
-  expect(getLaw(report, 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
-  expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation')?.status).toBe('pass')
-  expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation')?.kind).toBe('range')
-  expect(getLaw(report, 'getGridLayout keeps column centers across width partitions')?.status).toBe('pass')
-  expect(getLaw(report, 'getGridLayout keeps column centers across width partitions')?.kind).toBe('range')
-  expect(getLaw(report, 'getGridLayout discovered cols bands stay monotone')?.status).toBe('pass')
-  expect(getLaw(report, 'getGridLayout keeps row count across width partitions')?.status).toBe('pass')
-  expect(getLaw(report, 'makeItemLayoutGeometry keeps prompt x aligned with the image')?.kind).toBe('symbolic')
-  expect(getLaw(report, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals')?.kind).toBe('range')
-  expect(getLaw(report, 'colsBoxMaxSizeXF fills the horizontal track across width partitions')?.status).toBe('pass')
-  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.kind).toBe('concrete-sweep')
-  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.checks).toBe(1281)
+  expect(getLaw(report, 'getGridLayout row items do not overlap horizontally').status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation').status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation').kind).toBe('range')
+  expect(getLaw(report, 'getGridLayout keeps column centers across width partitions').status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout keeps column centers across width partitions').kind).toBe('range')
+  expect(getLaw(report, 'getGridLayout discovered cols bands stay monotone').status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout keeps row count across width partitions').status).toBe('pass')
+  expect(getLaw(report, 'makeItemLayoutGeometry keeps prompt x aligned with the image').kind).toBe('symbolic')
+  expect(getLaw(report, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals').kind).toBe('range')
+  expect(getLaw(report, 'colsBoxMaxSizeXF fills the horizontal track across width partitions').status).toBe('pass')
+  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track').kind).toBe('concrete-sweep')
+  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track').checks).toBe(1281)
   expect(report.candidateLaws?.some(candidate => candidate.name === 'colsBoxMaxSizeXF sweep suggests filledWidth = containerSizeX')).toBe(false)
   expect(report.candidateLaws?.some(candidate => candidate.name === 'colsBoxMaxSizeXF sweep observed cols in 1..6')).toBe(true)
 })
@@ -298,19 +315,19 @@ test('photo-gallery discovered cols bands agree with representative concrete wid
   const partitions = partitionIntegerRangeByConcreteNumberValue(320, 1600, width => {
     const cases = analyzer.evaluateFunction('colsBoxMaxSizeXF', [concreteNumber(width)], 'concrete')
     expect(cases).toHaveLength(1)
-    return expectConcreteNumber(getProp(expectObject(cases[0].value), 'cols'))
+    return expectConcreteNumber(getProp(expectObject(cases[0]!.value), 'cols'))
   })
 
   for (const partition of partitions) {
     for (const width of pickIntegerBandRepresentatives(partition)) {
       const cases = analyzer.evaluateFunction('getGridLayout', [layoutSources, concreteNumber(width)], 'concrete')
       expect(cases).toHaveLength(1)
-      const layout = expectObject(cases[0].value)
+      const layout = expectObject(cases[0]!.value)
       const items = expectArray(getProp(layout, 'items'))
       const boxMaxSizeX = expectConcreteNumber(getProp(layout, 'boxMaxSizeX'))
 
       for (let itemIndex = 0; itemIndex < items.items.length; itemIndex++) {
-        const item = expectObject(items.items[itemIndex])
+        const item = expectObject(items.items[itemIndex]!)
         const layoutBox = expectObject(getProp(item, 'layoutBox'))
         const x = expectConcreteNumber(getProp(layoutBox, 'x'))
         const sizeX = expectConcreteNumber(getProp(layoutBox, 'sizeX'))
@@ -328,11 +345,11 @@ test('nicer-hacker-news static verifier keeps the row geometry slice ready', asy
   const report = runNicerHackerNewsStaticVerification(source)
 
   expect(report.phase).toBe('ready')
-  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('pass')
-  expect(getLaw(report, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals')?.status).toBe('pass')
-  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals')?.status).toBe('pass')
-  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible')?.status).toBe('pass')
-  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping internally consistent')?.checks).toBe(2)
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math').status).toBe('pass')
+  expect(getLaw(report, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals').status).toBe('pass')
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals').status).toBe('pass')
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible').status).toBe('pass')
+  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping internally consistent').checks).toBe(2)
 })
 
 test('nicer-hacker-news comment verifier keeps the text layout kernel ready', async () => {
@@ -342,16 +359,16 @@ test('nicer-hacker-news comment verifier keeps the text layout kernel ready', as
   const report = runHNCommentLayoutStaticVerification(source, overrides)
 
   expect(report.phase).toBe('ready')
-  expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')?.status).toBe('pass')
-  expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')?.kind).toBe('range')
-  expect(getLaw(report, 'commentTextLength returns the last line textEnd')?.status).toBe('pass')
-  expect(getLaw(report, 'commentTextLength returns the last line textEnd over exact layouts')?.kind).toBe('range')
-  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns exact offsets on seam intervals')?.status).toBe('pass')
-  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns null inside line interiors over intervals')?.status).toBe('pass')
-  expect(getLaw(report, 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes')?.status).toBe('pass')
-  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
-  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('pass')
-  expect(getLaw(report, 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps')?.checks).toBe(2)
+  expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings').status).toBe('pass')
+  expect(getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings').kind).toBe('range')
+  expect(getLaw(report, 'commentTextLength returns the last line textEnd').status).toBe('pass')
+  expect(getLaw(report, 'commentTextLength returns the last line textEnd over exact layouts').kind).toBe('range')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns exact offsets on seam intervals').status).toBe('pass')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns null inside line interiors over intervals').status).toBe('pass')
+  expect(getLaw(report, 'layoutPreparedHNCommentDoc keeps fragments inside their line boxes').status).toBe('pass')
+  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios').status).toBe('pass')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams').status).toBe('pass')
+  expect(getLaw(report, 'layoutPreparedHNCommentDoc derives total height from block heights and block gaps').checks).toBe(2)
 })
 
 test('life-calendar static verifier keeps the grid sizing kernel ready', async () => {
@@ -359,12 +376,12 @@ test('life-calendar static verifier keeps the grid sizing kernel ready', async (
   const report = runLifeCalendarStaticVerification(source)
 
   expect(report.phase).toBe('ready')
-  expect(getLaw(report, 'gridSizing keeps countX a multiple of 7')?.status).toBe('pass')
-  expect(getLaw(report, 'gridSizing fills gridSizeY exactly')?.status).toBe('pass')
-  expect(getLaw(report, 'gridSizing covers all cells')?.status).toBe('pass')
-  expect(getLaw(report, 'gridSizing keeps blockSize positive over viewport intervals')?.status).toBe('pass')
-  expect(getLaw(report, 'hitTest returns the expected cell index at known positions')?.status).toBe('pass')
-  expect(getLaw(report, 'hitTest returns the expected cell index at known positions')?.checks).toBe(9)
+  expect(getLaw(report, 'gridSizing keeps countX a multiple of 7').status).toBe('pass')
+  expect(getLaw(report, 'gridSizing fills gridSizeY exactly').status).toBe('pass')
+  expect(getLaw(report, 'gridSizing covers all cells').status).toBe('pass')
+  expect(getLaw(report, 'gridSizing keeps blockSize positive over viewport intervals').status).toBe('pass')
+  expect(getLaw(report, 'hitTest returns the expected cell index at known positions').status).toBe('pass')
+  expect(getLaw(report, 'hitTest returns the expected cell index at known positions').checks).toBe(9)
 })
 
 test('life-calendar verifier catches broken countX divisibility', async () => {
@@ -373,7 +390,7 @@ test('life-calendar verifier catches broken countX divisibility', async () => {
   const report = runLifeCalendarStaticVerification(buggySource)
 
   expect(report.phase).toBe('error')
-  expect(getLaw(report, 'gridSizing keeps countX a multiple of 7')?.status).toBe('fail')
+  expect(getLaw(report, 'gridSizing keeps countX a multiple of 7').status).toBe('fail')
 })
 
 test('life-calendar verifier catches broken grid height derivation', async () => {
@@ -382,7 +399,7 @@ test('life-calendar verifier catches broken grid height derivation', async () =>
   const report = runLifeCalendarStaticVerification(buggySource)
 
   expect(report.phase).toBe('error')
-  expect(getLaw(report, 'gridSizing fills gridSizeY exactly')?.status).toBe('fail')
+  expect(getLaw(report, 'gridSizing fills gridSizeY exactly').status).toBe('fail')
 })
 
 // Contract loading.
@@ -391,9 +408,9 @@ test('photo-gallery verifier can auto-load imported sidecar contracts from the s
   const report = await runPhotoGalleryStaticVerificationForSourceFile(sourceFilePath)
 
   expect(report.phase).toBe('ready')
-  expect(getLaw(report, 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
-  expect(getFunctionSummary(report, 'measurePromptLayout')?.kind).toBe('return-value')
-  expect(getFunctionSummary(report, 'measurePromptLayout')?.domains).toEqual(['concrete', 'range'])
+  expect(getLaw(report, 'getGridLayout row items do not overlap horizontally').status).toBe('pass')
+  expect(getFunctionSummary(report, 'measurePromptLayout').kind).toBe('return-value')
+  expect(getFunctionSummary(report, 'measurePromptLayout').domains).toEqual(['concrete', 'range'])
 })
 
 test('HN comment verifier can auto-load same-file sidecar contracts', async () => {
@@ -401,10 +418,10 @@ test('HN comment verifier can auto-load same-file sidecar contracts', async () =
   const report = await runHNCommentLayoutStaticVerificationForSourceFile(sourceFilePath)
 
   expect(report.phase).toBe('ready')
-  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
-  expect(getFunctionSummary(report, 'layoutNextLine')?.domains).toEqual(['concrete', 'range'])
-  expect(getFunctionSummary(report, 'walkRichInlineLineRanges')?.domains).toEqual(['concrete'])
-  expect(getFunctionSummary(report, 'pushMergedRect')?.domains).toEqual(['concrete'])
+  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios').status).toBe('pass')
+  expect(getFunctionSummary(report, 'layoutNextLine').domains).toEqual(['concrete', 'range'])
+  expect(getFunctionSummary(report, 'walkRichInlineLineRanges').domains).toEqual(['concrete'])
+  expect(getFunctionSummary(report, 'pushMergedRect').domains).toEqual(['concrete'])
 })
 
 // Mutation canaries.
@@ -420,8 +437,8 @@ test('photo-gallery verifier catches broken track-fill math', async () => {
   const report = runPhotoGalleryStaticVerification(buggySource, overrides)
 
   expect(report.phase).toBe('error')
-  expect(getLaw(report, 'colsBoxMaxSizeXF fills the horizontal track across width partitions')?.status).toBe('fail')
-  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.status).toBe('fail')
+  expect(getLaw(report, 'colsBoxMaxSizeXF fills the horizontal track across width partitions').status).toBe('fail')
+  expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track').status).toBe('fail')
 })
 
 test('photo-gallery verifier catches broken column-slot math', async () => {
@@ -437,14 +454,15 @@ test('photo-gallery verifier catches broken column-slot math', async () => {
   const law = getLaw(report, 'getGridLayout keeps column centers across width partitions')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.widthMin).toBe(law?.firstFailure?.widthMax)
-  expect(law?.firstFailure?.partitionWidthMin).toBeDefined()
-  expect(law?.firstFailure?.partitionWidthMax).toBeDefined()
-  expect(law?.firstFailure?.column).toBe(0)
-  expect(law?.firstFailure?.expectedCenterX).toBeDefined()
-  expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation')?.status).toBe('fail')
-  expect(getLaw(report, 'getGridLayout keeps column centers across width partitions')?.status).toBe('fail')
+  expect(law.status).toBe('fail')
+  const failure = getFirstFailure(law)
+  expect(failure['widthMin']).toBe(failure['widthMax'])
+  expect(failure['partitionWidthMin']).toBeDefined()
+  expect(failure['partitionWidthMax']).toBeDefined()
+  expect(failure['column']).toBe(0)
+  expect(failure['expectedCenterX']).toBeDefined()
+  expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation').status).toBe('fail')
+  expect(getLaw(report, 'getGridLayout keeps column centers across width partitions').status).toBe('fail')
 })
 
 test('photo-gallery verifier catches broken range content-height derivation', async () => {
@@ -460,10 +478,10 @@ test('photo-gallery verifier catches broken range content-height derivation', as
   const law = getLaw(report, 'getGridLayout content height comes from last rowsTop over range evaluation')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.kind).toBe('range')
-  expect(law?.firstFailure?.contentHeight).toBeDefined()
-  expect(getLaw(report, 'getGridLayout keeps content height tied to rowsTop across width partitions')?.status).toBe('fail')
+  expect(law.status).toBe('fail')
+  expect(law.kind).toBe('range')
+  expect(getFirstFailure(law)['contentHeight']).toBeDefined()
+  expect(getLaw(report, 'getGridLayout keeps content height tied to rowsTop across width partitions').status).toBe('fail')
 })
 
 test('photo-gallery verifier catches broken negative portrait scaling over width partitions', async () => {
@@ -479,9 +497,9 @@ test('photo-gallery verifier catches broken negative portrait scaling over width
   const law = getLaw(report, 'getGridLayout keeps column centers across width partitions')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.kind).toBe('range')
-  expect(law?.firstFailure?.expectedCenterX).toBeDefined()
+  expect(law.status).toBe('fail')
+  expect(law.kind).toBe('range')
+  expect(getFirstFailure(law)['expectedCenterX']).toBeDefined()
 })
 
 test('HN row verifier catches broken comment width math', async () => {
@@ -495,10 +513,11 @@ test('HN row verifier catches broken comment width math', async () => {
   const law = getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.rowIndex).toBeDefined()
-  expect(law?.firstFailure?.commentWidth).toBeDefined()
-  expect(law?.firstFailure?.expectedCommentWidth).toBeDefined()
+  expect(law.status).toBe('fail')
+  const failure = getFirstFailure(law)
+  expect(failure['rowIndex']).toBeDefined()
+  expect(failure['commentWidth']).toBeDefined()
+  expect(failure['expectedCommentWidth']).toBeDefined()
 })
 
 test('HN row verifier catches broken row-top interval math', async () => {
@@ -512,9 +531,10 @@ test('HN row verifier catches broken row-top interval math', async () => {
   const law = getLaw(report, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.secondTop).toBeDefined()
-  expect(law?.firstFailure?.expectedSecondTop).toBeDefined()
+  expect(law.status).toBe('fail')
+  const failure = getFirstFailure(law)
+  expect(failure['secondTop']).toBeDefined()
+  expect(failure['expectedSecondTop']).toBeDefined()
 })
 
 test('HN thread verifier catches broken visible-row interval bookkeeping', async () => {
@@ -528,8 +548,8 @@ test('HN thread verifier catches broken visible-row interval bookkeeping', async
   const law = getLaw(report, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.firstVisibleRowTop).toBeDefined()
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['firstVisibleRowTop']).toBeDefined()
 })
 
 test('HN thread verifier catches broken user-top clamp math', async () => {
@@ -543,8 +563,8 @@ test('HN thread verifier catches broken user-top clamp math', async () => {
   const law = getLaw(report, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.firstUserTop).toBeDefined()
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['firstUserTop']).toBeDefined()
 })
 
 test('HN comment verifier catches a broken minimum width clamp', async () => {
@@ -559,7 +579,7 @@ test('HN comment verifier catches a broken minimum width clamp', async () => {
   const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
 
   expect(report.phase).toBe('error')
-  expect(getLaw(report, 'layoutPreparedHNCommentDoc clamps width to at least one pixel')?.status).toBe('fail')
+  expect(getLaw(report, 'layoutPreparedHNCommentDoc clamps width to at least one pixel').status).toBe('fail')
 })
 
 test('HN comment verifier catches broken CRLF counting', async () => {
@@ -575,8 +595,8 @@ test('HN comment verifier catches broken CRLF counting', async () => {
   const law = getLaw(report, 'lineBreakCharCountAt returns exact line-break widths on exact strings')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.scenario).toBe('crlf')
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['scenario']).toBe('crlf')
 })
 
 test('HN comment verifier catches broken commentTextLength math', async () => {
@@ -593,10 +613,11 @@ test('HN comment verifier catches broken commentTextLength math', async () => {
   const rangeLaw = getLaw(report, 'commentTextLength returns the last line textEnd over exact layouts')
 
   expect(report.phase).toBe('error')
-  expect(concreteLaw?.status).toBe('fail')
-  expect(concreteLaw?.firstFailure?.actual).toBeDefined()
-  expect(concreteLaw?.firstFailure?.expected).toBeDefined()
-  expect(rangeLaw?.status).toBe('fail')
+  expect(concreteLaw.status).toBe('fail')
+  const concreteFailure = getFirstFailure(concreteLaw)
+  expect(concreteFailure['actual']).toBeDefined()
+  expect(concreteFailure['expected']).toBeDefined()
+  expect(rangeLaw.status).toBe('fail')
 })
 
 test('HN comment verifier catches a broken substring offset in text rect geometry', async () => {
@@ -612,10 +633,11 @@ test('HN comment verifier catches a broken substring offset in text rect geometr
   const law = getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.actualRects).toBeDefined()
-  expect(law?.firstFailure?.expectedRects).toBeDefined()
-  expect(String(law?.firstFailure?.geometrySvg).startsWith('<svg ')).toBe(true)
+  expect(law.status).toBe('fail')
+  const failure = getFirstFailure(law)
+  expect(failure['actualRects']).toBeDefined()
+  expect(failure['expectedRects']).toBeDefined()
+  expect(String(failure['geometrySvg']).startsWith('<svg ')).toBe(true)
 })
 
 test('HN comment verifier catches a broken midpoint decision in empty-space offsets', async () => {
@@ -630,7 +652,7 @@ test('HN comment verifier catches a broken midpoint decision in empty-space offs
   const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
 
   expect(report.phase).toBe('error')
-  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams')?.status).toBe('fail')
+  expect(getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns the expected offset at geometric seams').status).toBe('fail')
 })
 
 test('HN comment verifier catches broken left-edge routing over intervals', async () => {
@@ -646,8 +668,8 @@ test('HN comment verifier catches broken left-edge routing over intervals', asyn
   const law = getLaw(report, 'findHNCommentTextOffsetInEmptySpace returns exact offsets on seam intervals')
 
   expect(report.phase).toBe('error')
-  expect(law?.status).toBe('fail')
-  expect(law?.firstFailure?.scenario).toBe('inside_line_left')
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['scenario']).toBe('inside_line_left')
 })
 
 test('callback overrides thread outer local mutations back to the caller', () => {
@@ -668,7 +690,7 @@ function demo() {
     walk: {
       evaluate(args, mode, context) {
         if (mode !== 'concrete') throw new Error('walk override only supports concrete mode')
-        const callbackReturns = invokeConcreteFunctionValue(context.analyzer, context.state, args[0], [concreteNumber(1)])
+        const callbackReturns = invokeConcreteFunctionValue(context.analyzer, context.state, args[0]!, [concreteNumber(1)])
         return callbackReturns.map(result => ({
           constraints: result.state.constraints,
           env: result.state.env,
@@ -682,7 +704,7 @@ function demo() {
 
   const returns = analyzer.evaluateFunction('demo', [], 'concrete')
   expect(returns).toHaveLength(1)
-  expect(expectConcreteNumber(returns[0].value)).toBe(1)
+  expect(expectConcreteNumber(returns[0]!.value)).toBe(1)
 })
 
 test('declarative callback contracts thread outer local mutations back to the caller', () => {
@@ -708,7 +730,7 @@ function demo() {
 
   const returns = analyzer.evaluateFunction('demo', [], 'concrete')
   expect(returns).toHaveLength(1)
-  expect(expectConcreteNumber(returns[0].value)).toBe(1)
+  expect(expectConcreteNumber(returns[0]!.value)).toBe(1)
 })
 
 test('ordinary helper calls stay pure from the caller env point of view', () => {
@@ -729,7 +751,7 @@ function demo() {
 
   const returns = analyzer.evaluateFunction('demo', [], 'concrete')
   expect(returns).toHaveLength(1)
-  expect(expectConcreteNumber(returns[0].value)).toBe(3)
+  expect(expectConcreteNumber(returns[0]!.value)).toBe(3)
 })
 
 test('declarative return-value contracts can synthesize structured geometry', () => {
@@ -755,7 +777,7 @@ function demo() {
 
   const returns = analyzer.evaluateFunction('demo', [], 'concrete')
   expect(returns).toHaveLength(1)
-  expect(expectConcreteNumber(returns[0].value)).toBe(28)
+  expect(expectConcreteNumber(returns[0]!.value)).toBe(28)
 })
 
 test('declarative return-value contracts can synthesize range geometry', () => {
@@ -806,6 +828,7 @@ test('contract sketches can rediscover simple return-value summaries from sample
     },
   ])
   expect(sketch?.evidence).toBe(2)
+  if (sketch == null) throw new Error('Expected a contract sketch')
   expect(formatStaticContractSketchEntry('measure', sketch)).toBe(`measure: contract.returnValue(contractValue.object({
   width: contractValue.arg(1),
   visibleHeight: contractValue.mul(contractValue.arg(3), contractValue.number(2)),
@@ -830,7 +853,7 @@ function demo(width, lineHeight) {
 
   const returns = analyzer.evaluateFunction('demo', [concreteNumber(150), concreteNumber(11)], 'concrete')
   expect(returns).toHaveLength(1)
-  expect(expectConcreteNumber(returns[0].value)).toBe(22)
+  expect(expectConcreteNumber(returns[0]!.value)).toBe(22)
 })
 
 test('declarative lookup and string-width contracts can summarize range boundaries', () => {
@@ -886,7 +909,7 @@ function demo() {
   expect(tops.lengthMin).toBe(3)
   expect(tops.lengthMax).toBe(3)
   expect(tops.isStrictlyIncreasingNumeric).toBe(true)
-  expect(expectRangeNumber(tops.last)).toEqual(rangeNumber(180, 180, true))
+  expect(expectRangeNumber(tops.last!)).toEqual(rangeNumber(180, 180, true))
 })
 
 test('range mode drops the strict-increase flag when pushed values go backward', () => {
@@ -945,8 +968,10 @@ function demo(offset: number) {
   ])))
   expect(items.lengthMin).toBe(2)
   expect(items.lengthMax).toBe(2)
-  const first = expectRangeObject(items.items[0])
-  const second = expectRangeObject(items.items[1])
+  const exactItems = items.items
+  if (exactItems == null) throw new Error('Expected exact mapped array items')
+  const first = expectRangeObject(exactItems[0]!)
+  const second = expectRangeObject(exactItems[1]!)
 
   expect(expectRangeNumber(getRangeProp(first, 'x'))).toEqual(rangeNumber(11, 13, true))
   expect(expectRangeNumber(getRangeProp(first, 'index'))).toEqual(rangeNumber(0, 0, true))
