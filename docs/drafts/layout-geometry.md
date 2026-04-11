@@ -104,6 +104,23 @@ Bad:
 
 Once the geometry is in userland, selection and hit routing should usually become geometry queries, not DOM archaeology.
 
+## Hit Test Rects Are Half-Open
+
+For box hit testing, include the left/top edge and exclude the right/bottom edge.
+
+Good:
+
+- `x >= left && x < right`
+- `y >= top && y < bottom`
+- a pointer exactly at `gridRight` returns no cell
+
+Bad:
+
+- letting both neighboring boxes own the shared edge
+- treating `x === right` as inside, then producing `col = countX`
+
+This matches array indexing. The first pixel belongs to the box; the first pixel after it does not.
+
 ## Grid Index Math Should Show Up On Screen
 
 If a grid uses `Math.floor(i / cols)` and `i % cols`, make the verifier talk about the slot the item actually lands in.

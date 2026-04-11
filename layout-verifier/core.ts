@@ -868,6 +868,20 @@ export function checkFacts(
   witness: () => StaticLayoutLawWitness,
   options: StaticLayoutLawKind | StaticLayoutLawCheckOptions = {},
 ) {
+  if (facts.length === 0) {
+    const {kind, targets} = normalizeStaticLayoutLawCheckOptions(
+      typeof options === 'string' ? options : options.kind ?? 'concrete-fixture',
+      options,
+    )
+    checkLaw(laws, name, {
+      status: 'fail',
+      witness: {
+        ...witness(),
+        reason: 'no facts to check',
+      },
+    }, kind, 'manual-check', targets)
+    return
+  }
   const {kind, targets} = normalizeStaticLayoutLawCheckOptions(inferStaticLayoutFactsKind(facts), options)
   for (const fact of facts) checkFact(laws, name, fact, witness, {kind, targets})
 }

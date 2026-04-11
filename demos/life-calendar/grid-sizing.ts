@@ -14,6 +14,6 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
 export function hitTest(blockSize: number, countX: number, _countY: number, gridLeft: number, gridTop: number, gridFinalSizeX: number, gridFinalSizeY: number, pointer: {x: number; y: number}) {
   const px = pointer.x - gridLeft
   const py = pointer.y - gridTop
-  if (px < 0 || px > gridFinalSizeX || py < 0 || py > gridFinalSizeY) return null
+  if (px < 0 || px >= gridFinalSizeX || py < 0 || py >= gridFinalSizeY) return null
   return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
 }

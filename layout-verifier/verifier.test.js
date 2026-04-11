@@ -140,6 +140,24 @@ test('geometry facts compose under one law', () => {
   expect(law.checks).toBe(3)
 })
 
+test('empty fact batches fail instead of crashing when the kind is explicit', () => {
+  const laws = new Map()
+
+  checkFacts(laws, 'empty geometry facts', [], () => ({
+    case: 'empty',
+  }), {
+    kind: 'concrete-fixture',
+    targets: ['demo.layoutBox'],
+  })
+
+  const report = buildStaticLayoutReport('static-layout-facts', 'inline.ts', laws)
+  const law = getLaw(report, 'empty geometry facts')
+
+  expect(report.phase).toBe('error')
+  expect(law.status).toBe('fail')
+  expect(law.firstFailure.reason).toBe('no facts to check')
+})
+
 test('geometry fact failures include visual proof packets', () => {
   const laws = new Map()
 
@@ -346,7 +364,7 @@ test('life-calendar static verifier keeps the grid sizing kernel ready', async (
   expect(getLaw(report, 'gridSizing covers all cells')?.status).toBe('pass')
   expect(getLaw(report, 'gridSizing keeps blockSize positive over viewport intervals')?.status).toBe('pass')
   expect(getLaw(report, 'hitTest returns the expected cell index at known positions')?.status).toBe('pass')
-  expect(getLaw(report, 'hitTest returns the expected cell index at known positions')?.checks).toBe(7)
+  expect(getLaw(report, 'hitTest returns the expected cell index at known positions')?.checks).toBe(9)
 })
 
 test('life-calendar verifier catches broken countX divisibility', async () => {
@@ -446,6 +464,24 @@ test('photo-gallery verifier catches broken range content-height derivation', as
   expect(law?.kind).toBe('range')
   expect(law?.firstFailure?.contentHeight).toBeDefined()
   expect(getLaw(report, 'getGridLayout keeps content height tied to rowsTop across width partitions')?.status).toBe('fail')
+})
+
+test('photo-gallery verifier catches broken negative portrait scaling over width partitions', async () => {
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'boxMaxSizeX * 1.05',
+    'boxMaxSizeX * -1.05',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'getGridLayout keeps column centers across width partitions')
+
+  expect(report.phase).toBe('error')
+  expect(law?.status).toBe('fail')
+  expect(law?.kind).toBe('range')
+  expect(law?.firstFailure?.expectedCenterX).toBeDefined()
 })
 
 test('HN row verifier catches broken comment width math', async () => {

@@ -145,6 +145,8 @@ function verifyHitTestConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<strin
     {label: 'inside_last_col', px: 795, py: 55, expected: 69},
     {label: 'outside_left', px: 95, py: 55, expected: null},
     {label: 'outside_top', px: 105, py: 45, expected: null},
+    {label: 'outside_exact_right_edge', px: 800, py: 55, expected: null},
+    {label: 'outside_exact_bottom_edge', px: 105, py: 550, expected: null},
     {label: 'outside_right', px: 805, py: 55, expected: null},
     {label: 'outside_bottom', px: 105, py: 555, expected: null},
   ]
