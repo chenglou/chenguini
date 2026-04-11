@@ -28,11 +28,11 @@ import {
   expectConcreteNumber,
   expectConcreteNumberValue,
   expectFunction,
+  expectRangeFunction,
   expectNumber,
   expectObject,
   expectRangeArray,
   expectRangeBoolean,
-  expectRangeFunction,
   expectRangeNumber,
   expectRangeObject,
   expectString,
@@ -46,6 +46,7 @@ import {
   getRangeStringProperty,
   getProp,
   getStringProperty,
+  formatScalarExpr,
   isComparisonOperator,
   isRangeComparisonOperator,
   joinRangeValues,
@@ -59,17 +60,18 @@ import {
   negateRangeNumber,
   numberValue,
   objectValue,
-  type RangeArrayValue,
-  type RangeNumberValue,
+  proveSymbolicExprEquality,
   rangeArray,
   rangeBoolean,
   rangeNull,
   rangeNumber,
   rangeObject,
   rangeString,
+  type RangeArrayValue,
   type RangeAccessPath,
-  type ScalarExpr,
+  type RangeNumberValue,
   type RangeValue,
+  type ScalarExpr,
   setRangeValueAtPath,
   type StaticLayoutLawKind,
   type StaticLayoutLawWitness,
@@ -89,7 +91,6 @@ export type {
   NullValue,
   RangeArrayValue,
   RangeBooleanValue,
-  RangeFunctionValue,
   RangeNumberValue,
   RangeObjectValue,
   RangeOpaqueValue,
@@ -98,7 +99,6 @@ export type {
   RangeTruth,
   RangeValue,
   ScalarExpr,
-  StaticLayoutLawKind,
   StaticLayoutLawWitness,
   StringValue,
   Value,
@@ -125,7 +125,6 @@ export {
   expectNumber,
   expectObject,
   expectRangeArray,
-  expectRangeFunction,
   expectRangeNumber,
   expectRangeObject,
   expectRangeString,
@@ -148,7 +147,6 @@ export {
 } from './values'
 
 // Report types
-
 export type StaticLayoutLawStatus = 'pass' | 'fail' | 'unknown'
 
 export type StaticLayoutLawUnknown = {
@@ -161,20 +159,50 @@ export type StaticLayoutLawResult =
   | {status: 'fail'; witness: StaticLayoutLawWitness}
   | {status: 'unknown'; reason: string; witness?: StaticLayoutLawWitness}
 
-export type StaticLayoutFactDomain = 'concrete' | 'range' | 'symbolic'
-
 export type StaticLayoutProofResult =
   | {status: 'pass'}
   | {status: 'fail'}
   | {status: 'unknown'; reason: string}
 
+export type ConcreteRect = {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+export type ConcreteInlineBounds = {
+  left: number
+  right: number
+}
+
+export type ConcreteBlockBounds = {
+  top: number
+  bottom: number
+}
+
+export type RangeRect = {
+  left: RangeNumberValue
+  top: RangeNumberValue
+  width: RangeNumberValue
+  height: RangeNumberValue
+}
+
+export type RectEdge = 'left' | 'top' | 'right' | 'bottom' | 'width' | 'height'
+
 export type StaticLayoutFact =
   | {kind: 'symbolic-equality'; left: ScalarExpr; right: ScalarExpr}
   | {kind: 'range-equality'; left: RangeNumberValue; right: RangeNumberValue}
+  | {kind: 'range-rect-edge-equality'; rect: RangeRect; edge: RectEdge; expected: RangeNumberValue}
   | {kind: 'range-within'; value: RangeNumberValue; min?: number; max?: number}
   | {kind: 'range-non-negative'; value: RangeNumberValue}
   | {kind: 'range-integer'; value: RangeNumberValue}
   | {kind: 'range-array-length'; value: RangeArrayValue; exact: number}
+  | {kind: 'concrete-rect-edge-equality'; rect: ConcreteRect; edge: RectEdge; expected: number; tolerance: number}
+  | {kind: 'concrete-rect-x-within'; rect: ConcreteRect; bounds: ConcreteInlineBounds; tolerance: number}
+  | {kind: 'concrete-rect-x-fills'; rect: ConcreteRect; bounds: ConcreteInlineBounds; tolerance: number}
+  | {kind: 'concrete-rect-y-within'; rect: ConcreteRect; bounds: ConcreteBlockBounds; tolerance: number}
+  | {kind: 'concrete-rects-do-not-overlap-x'; left: ConcreteRect; right: ConcreteRect; tolerance: number}
   | {kind: 'concrete-close'; actual: number; expected: number; tolerance: number}
 
 export type StaticLayoutLawProofMechanism = 'manual-check' | StaticLayoutFact['kind']
@@ -191,6 +219,8 @@ export type StaticLayoutLawTargetSummary = {
   checks: number
   proofs: StaticLayoutLawProofSummary[]
 }
+
+export type StaticLayoutFactDomain = 'concrete' | 'range' | 'symbolic'
 
 export type StaticLayoutLawSummary = {
   name: string
@@ -301,6 +331,111 @@ export type ReturnCase = {
   constraints: BoolExpr[]
   env?: Map<string, Value>
   value: Value
+}
+
+export const staticLayoutFact = {
+  symbolicEquality(left: ScalarExpr, right: ScalarExpr): StaticLayoutFact {
+    return {kind: 'symbolic-equality', left, right}
+  },
+
+  rangeEquality(left: RangeNumberValue, right: RangeNumberValue): StaticLayoutFact {
+    return {kind: 'range-equality', left, right}
+  },
+
+  rangeRectEdgeEquality(rect: RangeRect, edge: RectEdge, expected: RangeNumberValue): StaticLayoutFact {
+    return {kind: 'range-rect-edge-equality', rect, edge, expected}
+  },
+
+  rangeRectLeftEquals(rect: RangeRect, expected: RangeNumberValue): StaticLayoutFact {
+    return staticLayoutFact.rangeRectEdgeEquality(rect, 'left', expected)
+  },
+
+  rangeRectTopEquals(rect: RangeRect, expected: RangeNumberValue): StaticLayoutFact {
+    return staticLayoutFact.rangeRectEdgeEquality(rect, 'top', expected)
+  },
+
+  rangeRectRightEquals(rect: RangeRect, expected: RangeNumberValue): StaticLayoutFact {
+    return staticLayoutFact.rangeRectEdgeEquality(rect, 'right', expected)
+  },
+
+  rangeRectBottomEquals(rect: RangeRect, expected: RangeNumberValue): StaticLayoutFact {
+    return staticLayoutFact.rangeRectEdgeEquality(rect, 'bottom', expected)
+  },
+
+  rangeRectWidthEquals(rect: RangeRect, expected: RangeNumberValue): StaticLayoutFact {
+    return staticLayoutFact.rangeRectEdgeEquality(rect, 'width', expected)
+  },
+
+  rangeRectHeightEquals(rect: RangeRect, expected: RangeNumberValue): StaticLayoutFact {
+    return staticLayoutFact.rangeRectEdgeEquality(rect, 'height', expected)
+  },
+
+  concreteRectEdgeEquals(rect: ConcreteRect, edge: RectEdge, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return {kind: 'concrete-rect-edge-equality', rect, edge, expected, tolerance}
+  },
+
+  concreteRectLeftEquals(rect: ConcreteRect, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return staticLayoutFact.concreteRectEdgeEquals(rect, 'left', expected, tolerance)
+  },
+
+  concreteRectTopEquals(rect: ConcreteRect, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return staticLayoutFact.concreteRectEdgeEquals(rect, 'top', expected, tolerance)
+  },
+
+  concreteRectRightEquals(rect: ConcreteRect, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return staticLayoutFact.concreteRectEdgeEquals(rect, 'right', expected, tolerance)
+  },
+
+  concreteRectBottomEquals(rect: ConcreteRect, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return staticLayoutFact.concreteRectEdgeEquals(rect, 'bottom', expected, tolerance)
+  },
+
+  concreteRectWidthEquals(rect: ConcreteRect, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return staticLayoutFact.concreteRectEdgeEquals(rect, 'width', expected, tolerance)
+  },
+
+  concreteRectHeightEquals(rect: ConcreteRect, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return staticLayoutFact.concreteRectEdgeEquals(rect, 'height', expected, tolerance)
+  },
+
+  rangeWithin(value: RangeNumberValue, bounds: {min?: number; max?: number}): StaticLayoutFact {
+    const fact: StaticLayoutFact = {kind: 'range-within', value}
+    if (bounds.min != null) fact.min = bounds.min
+    if (bounds.max != null) fact.max = bounds.max
+    return fact
+  },
+
+  rangeNonNegative(value: RangeNumberValue): StaticLayoutFact {
+    return {kind: 'range-non-negative', value}
+  },
+
+  rangeInteger(value: RangeNumberValue): StaticLayoutFact {
+    return {kind: 'range-integer', value}
+  },
+
+  rangeArrayLength(value: RangeArrayValue, exact: number): StaticLayoutFact {
+    return {kind: 'range-array-length', value, exact}
+  },
+
+  concreteRectXWithin(rect: ConcreteRect, bounds: ConcreteInlineBounds, tolerance: number = epsilon): StaticLayoutFact {
+    return {kind: 'concrete-rect-x-within', rect, bounds, tolerance}
+  },
+
+  concreteRectXFills(rect: ConcreteRect, bounds: ConcreteInlineBounds, tolerance: number = epsilon): StaticLayoutFact {
+    return {kind: 'concrete-rect-x-fills', rect, bounds, tolerance}
+  },
+
+  concreteRectYWithin(rect: ConcreteRect, bounds: ConcreteBlockBounds, tolerance: number = epsilon): StaticLayoutFact {
+    return {kind: 'concrete-rect-y-within', rect, bounds, tolerance}
+  },
+
+  concreteRectsDoNotOverlapX(left: ConcreteRect, right: ConcreteRect, tolerance: number = epsilon): StaticLayoutFact {
+    return {kind: 'concrete-rects-do-not-overlap-x', left, right, tolerance}
+  },
+
+  concreteClose(actual: number, expected: number, tolerance: number = epsilon): StaticLayoutFact {
+    return {kind: 'concrete-close', actual, expected, tolerance}
+  },
 }
 
 // LoweredProgramAnalyzer deliberately handles a partial TS/JS subset:
@@ -690,7 +825,7 @@ export class LoweredProgramAnalyzer {
         })
       }
       default:
-        throw new Error(`Unsupported range expression kind: ${(expression as {kind: string}).kind}`)
+        throw new Error('Unsupported range expression kind')
     }
   }
 }
@@ -717,30 +852,13 @@ export function checkFact(
 ) {
   const {kind, targets} = normalizeStaticLayoutLawCheckOptions(staticLayoutFactKind(fact), options)
   const result = proveStaticLayoutFact(fact)
-  switch (result.status) {
-    case 'pass':
-      checkLaw(laws, name, result, kind, fact.kind, targets)
-      return
-    case 'fail':
-      checkLaw(laws, name, {
-        status: 'fail',
-        witness: {
-          ...describeStaticLayoutFactFailure(fact),
-          ...witness(),
-        },
-      }, kind, fact.kind, targets)
-      return
-    case 'unknown':
-      checkLaw(laws, name, {
-        status: 'unknown',
-        reason: result.reason,
-        witness: {
-          ...describeStaticLayoutFactFailure(fact),
-          ...witness(),
-        },
-      }, kind, fact.kind, targets)
-      return
-  }
+  checkLaw(laws, name, result.status === 'pass' ? result : {
+    ...result,
+    witness: {
+      ...describeStaticLayoutFactFailure(fact),
+      ...witness(),
+    },
+  }, kind, fact.kind, targets)
 }
 
 export function checkFacts(
@@ -764,15 +882,7 @@ export function checkLaw(
 ) {
   let law = laws.get(name)
   if (law == null) {
-    law = {
-      name,
-      kind,
-      checks: 0,
-      proofs: new Map(),
-      targets: new Map(),
-      firstFailure: null,
-      firstUnknown: null,
-    }
+    law = {name, kind, checks: 0, proofs: new Map(), targets: new Map(), firstFailure: null, firstUnknown: null}
     laws.set(name, law)
   } else if (law.kind !== kind) {
     throw new Error(`Law ${name} mixed proof kinds: ${law.kind} vs ${kind}`)
@@ -890,13 +1000,9 @@ function combineStaticLayoutLawStatus(left: StaticLayoutLawStatus, right: Static
 }
 
 export function summarizeFunctionOverrides(overrides: Record<string, FunctionOverride>): StaticLayoutFunctionSummary[] {
-  const summaries: StaticLayoutFunctionSummary[] = []
-  for (const [name, override] of Object.entries(overrides)) {
-    if (override.summary == null) continue
-    summaries.push({name, ...override.summary})
-  }
-  summaries.sort((left, right) => left.name.localeCompare(right.name))
-  return summaries
+  return Object.entries(overrides)
+    .flatMap(([name, override]) => override.summary == null ? [] : [{name, ...override.summary}])
+    .sort((left, right) => left.name.localeCompare(right.name))
 }
 
 export function mineNumericSweepCandidateLaws(
@@ -988,27 +1094,14 @@ export function buildStaticLayoutReport(
   }
 }
 
-function candidateLaw(name: string, evidence: number, details?: StaticLayoutLawWitness): StaticLayoutCandidateLaw {
-  return {
-    name,
-    kind: 'mined-from-concrete-sweep',
-    evidence,
-    ...(details == null ? {} : {details}),
-  }
-}
-
-function formatCandidateNumber(value: number) {
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)))
-}
-
 export function proveStaticLayoutFact(fact: StaticLayoutFact): StaticLayoutProofResult {
   switch (fact.kind) {
     case 'symbolic-equality':
-      return symbolicExprEquals(fact.left, fact.right)
-        ? {status: 'pass'}
-        : {status: 'unknown', reason: 'symbolic equality is not proven by the linear expression checker'}
+      return proveSymbolicExprEquality(fact.left, fact.right)
     case 'range-equality':
       return rangeNumbersEqual(fact.left, fact.right) ? {status: 'pass'} : {status: 'fail'}
+    case 'range-rect-edge-equality':
+      return rangeNumbersEqual(getRangeRectEdge(fact.rect, fact.edge), fact.expected) ? {status: 'pass'} : {status: 'fail'}
     case 'range-within':
       if (fact.min != null && fact.value.min < fact.min - epsilon) return {status: 'fail'}
       if (fact.max != null && fact.value.max > fact.max + epsilon) return {status: 'fail'}
@@ -1019,6 +1112,16 @@ export function proveStaticLayoutFact(fact: StaticLayoutFact): StaticLayoutProof
       return fact.value.isInteger ? {status: 'pass'} : {status: 'fail'}
     case 'range-array-length':
       return fact.value.lengthMin === fact.exact && fact.value.lengthMax === fact.exact ? {status: 'pass'} : {status: 'fail'}
+    case 'concrete-rect-edge-equality':
+      return Math.abs(getConcreteRectEdge(fact.rect, fact.edge) - fact.expected) <= fact.tolerance ? {status: 'pass'} : {status: 'fail'}
+    case 'concrete-rect-x-within':
+      return concreteRectXWithin(fact.rect, fact.bounds, fact.tolerance) ? {status: 'pass'} : {status: 'fail'}
+    case 'concrete-rect-x-fills':
+      return concreteRectXFills(fact.rect, fact.bounds, fact.tolerance) ? {status: 'pass'} : {status: 'fail'}
+    case 'concrete-rect-y-within':
+      return concreteRectYWithin(fact.rect, fact.bounds, fact.tolerance) ? {status: 'pass'} : {status: 'fail'}
+    case 'concrete-rects-do-not-overlap-x':
+      return concreteRectsDoNotOverlapX(fact.left, fact.right, fact.tolerance) ? {status: 'pass'} : {status: 'fail'}
     case 'concrete-close':
       return Math.abs(fact.actual - fact.expected) <= fact.tolerance ? {status: 'pass'} : {status: 'fail'}
   }
@@ -1027,37 +1130,131 @@ export function proveStaticLayoutFact(fact: StaticLayoutFact): StaticLayoutProof
 function describeStaticLayoutFactFailure(fact: StaticLayoutFact): StaticLayoutLawWitness {
   switch (fact.kind) {
     case 'symbolic-equality':
-      return {}
+      return {
+        fact: fact.kind,
+        left: formatScalarExpr(fact.left),
+        right: formatScalarExpr(fact.right),
+      }
     case 'range-equality':
       return {
-        actualMin: fact.left.min,
-        actualMax: fact.left.max,
-        expectedMin: fact.right.min,
-        expectedMax: fact.right.max,
+        fact: fact.kind,
+        actualRange: describeRangeNumber(fact.left),
+        expectedRange: describeRangeNumber(fact.right),
       }
+    case 'range-rect-edge-equality': {
+      const actual = getRangeRectEdge(fact.rect, fact.edge)
+      return {
+        fact: fact.kind,
+        edge: fact.edge,
+        actualRange: describeRangeNumber(actual),
+        expectedRange: describeRangeNumber(fact.expected),
+      }
+    }
     case 'range-within':
       return {
-        actualMin: fact.value.min,
-        actualMax: fact.value.max,
+        fact: fact.kind,
+        valueRange: describeRangeNumber(fact.value),
         min: fact.min ?? null,
         max: fact.max ?? null,
       }
     case 'range-non-negative':
+      return {
+        fact: fact.kind,
+        valueRange: describeRangeNumber(fact.value),
+        underflowBy: Math.max(0, -fact.value.min),
+      }
     case 'range-integer':
       return {
-        actualMin: fact.value.min,
-        actualMax: fact.value.max,
+        fact: fact.kind,
+        valueRange: describeRangeNumber(fact.value),
+        isInteger: fact.value.isInteger ? 'true' : 'false',
       }
     case 'range-array-length':
       return {
+        fact: fact.kind,
         lengthMin: fact.value.lengthMin,
         lengthMax: fact.value.lengthMax,
         expectedLength: fact.exact,
       }
+    case 'concrete-rect-edge-equality': {
+      const actual = getConcreteRectEdge(fact.rect, fact.edge)
+      return {
+        fact: fact.kind,
+        edge: fact.edge,
+        actual,
+        expected: fact.expected,
+        delta: actual - fact.expected,
+        geometrySvg: svgForRectEdge(fact.rect, fact.edge, fact.expected),
+      }
+    }
+    case 'concrete-rect-x-within': {
+      const rectLeft = fact.rect.left
+      const rectRight = fact.rect.left + fact.rect.width
+      const leftOverflowBy = Math.max(0, fact.bounds.left - rectLeft)
+      const rightOverflowBy = Math.max(0, rectRight - fact.bounds.right)
+      return {
+        fact: fact.kind,
+        rectLeft,
+        rectRight,
+        boundsLeft: fact.bounds.left,
+        boundsRight: fact.bounds.right,
+        leftOverflowBy,
+        rightOverflowBy,
+        overflowBy: Math.max(leftOverflowBy, rightOverflowBy),
+        geometrySvg: svgForInlineRectBounds(fact.rect, fact.bounds),
+      }
+    }
+    case 'concrete-rect-x-fills': {
+      const rectLeft = fact.rect.left
+      const rectRight = fact.rect.left + fact.rect.width
+      return {
+        fact: fact.kind,
+        rectLeft,
+        rectRight,
+        boundsLeft: fact.bounds.left,
+        boundsRight: fact.bounds.right,
+        leftDelta: rectLeft - fact.bounds.left,
+        rightDelta: rectRight - fact.bounds.right,
+        geometrySvg: svgForInlineRectBounds(fact.rect, fact.bounds),
+      }
+    }
+    case 'concrete-rect-y-within': {
+      const rectTop = fact.rect.top
+      const rectBottom = fact.rect.top + fact.rect.height
+      const topOverflowBy = Math.max(0, fact.bounds.top - rectTop)
+      const bottomOverflowBy = Math.max(0, rectBottom - fact.bounds.bottom)
+      return {
+        fact: fact.kind,
+        rectTop,
+        rectBottom,
+        boundsTop: fact.bounds.top,
+        boundsBottom: fact.bounds.bottom,
+        topOverflowBy,
+        bottomOverflowBy,
+        overflowBy: Math.max(topOverflowBy, bottomOverflowBy),
+        geometrySvg: svgForBlockRectBounds(fact.rect, fact.bounds),
+      }
+    }
+    case 'concrete-rects-do-not-overlap-x': {
+      const leftRight = fact.left.left + fact.left.width
+      const rightRight = fact.right.left + fact.right.width
+      const overlapBy = Math.max(0, Math.min(leftRight, rightRight) - Math.max(fact.left.left, fact.right.left))
+      return {
+        fact: fact.kind,
+        leftRectLeft: fact.left.left,
+        leftRectRight: leftRight,
+        rightRectLeft: fact.right.left,
+        rightRectRight: rightRight,
+        overlapBy,
+        geometrySvg: svgForInlineRectPair(fact.left, fact.right),
+      }
+    }
     case 'concrete-close':
       return {
+        fact: fact.kind,
         actual: fact.actual,
         expected: fact.expected,
+        delta: fact.actual - fact.expected,
       }
   }
 }
@@ -1073,26 +1270,147 @@ function rangeNumbersEqual(left: RangeNumberValue, right: RangeNumberValue) {
   )
 }
 
+function describeRangeNumber(value: RangeNumberValue) {
+  return `[${value.min},${value.max}]${value.isInteger ? ':int' : ''}`
+}
+
+function getRangeRectEdge(rect: RangeRect, edge: RectEdge) {
+  switch (edge) {
+    case 'left':
+      return rect.left
+    case 'top':
+      return rect.top
+    case 'width':
+      return rect.width
+    case 'height':
+      return rect.height
+    case 'right':
+      return addRangeNumbers(rect.left, rect.width)
+    case 'bottom':
+      return addRangeNumbers(rect.top, rect.height)
+  }
+}
+
+function getConcreteRectEdge(rect: ConcreteRect, edge: RectEdge) {
+  switch (edge) {
+    case 'left':
+      return rect.left
+    case 'top':
+      return rect.top
+    case 'width':
+      return rect.width
+    case 'height':
+      return rect.height
+    case 'right':
+      return rect.left + rect.width
+    case 'bottom':
+      return rect.top + rect.height
+  }
+}
+
+function addRangeNumbers(left: RangeNumberValue, right: RangeNumberValue) {
+  return rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger)
+}
+
+function concreteRectXWithin(rect: ConcreteRect, bounds: ConcreteInlineBounds, tolerance: number) {
+  return rect.left >= bounds.left - tolerance && rect.left + rect.width <= bounds.right + tolerance
+}
+
+function concreteRectXFills(rect: ConcreteRect, bounds: ConcreteInlineBounds, tolerance: number) {
+  return Math.abs(rect.left - bounds.left) <= tolerance && Math.abs(rect.left + rect.width - bounds.right) <= tolerance
+}
+
+function concreteRectYWithin(rect: ConcreteRect, bounds: ConcreteBlockBounds, tolerance: number) {
+  return rect.top >= bounds.top - tolerance && rect.top + rect.height <= bounds.bottom + tolerance
+}
+
+function concreteRectsDoNotOverlapX(left: ConcreteRect, right: ConcreteRect, tolerance: number) {
+  return left.left + left.width <= right.left + tolerance || right.left + right.width <= left.left + tolerance
+}
+
+function svgForRectEdge(rect: ConcreteRect, edge: RectEdge, expected: number) {
+  if (edge === 'top' || edge === 'bottom' || edge === 'height') return svgForBlockRectBounds(rect, {
+    top: edge === 'height' ? rect.top : expected,
+    bottom: edge === 'height' ? rect.top + expected : expected,
+  })
+  return svgForInlineRectBounds(rect, {
+    left: edge === 'width' ? rect.left : expected,
+    right: edge === 'width' ? rect.left + expected : expected,
+  })
+}
+
+function svgForInlineRectBounds(rect: ConcreteRect, bounds: ConcreteInlineBounds) {
+  const rectRight = rect.left + rect.width
+  const min = Math.min(bounds.left, bounds.right, rect.left, rectRight)
+  const max = Math.max(bounds.left, bounds.right, rect.left, rectRight)
+  const map = makeSvgMapper(min, max, 10, 230)
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 48"><line x1="${map(bounds.left)}" y1="14" x2="${map(bounds.right)}" y2="14" stroke="#333" stroke-width="2"/><rect x="${map(rect.left)}" y="24" width="${Math.max(1, map(rectRight) - map(rect.left))}" height="10" fill="#f88" stroke="#900"/></svg>`
+}
+
+function svgForBlockRectBounds(rect: ConcreteRect, bounds: ConcreteBlockBounds) {
+  const rectBottom = rect.top + rect.height
+  const min = Math.min(bounds.top, bounds.bottom, rect.top, rectBottom)
+  const max = Math.max(bounds.top, bounds.bottom, rect.top, rectBottom)
+  const map = makeSvgMapper(min, max, 10, 70)
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><line x1="16" y1="${map(bounds.top)}" x2="16" y2="${map(bounds.bottom)}" stroke="#333" stroke-width="2"/><rect x="36" y="${map(rect.top)}" width="18" height="${Math.max(1, map(rectBottom) - map(rect.top))}" fill="#f88" stroke="#900"/></svg>`
+}
+
+function svgForInlineRectPair(left: ConcreteRect, right: ConcreteRect) {
+  const leftRight = left.left + left.width
+  const rightRight = right.left + right.width
+  const min = Math.min(left.left, leftRight, right.left, rightRight)
+  const max = Math.max(left.left, leftRight, right.left, rightRight)
+  const map = makeSvgMapper(min, max, 10, 230)
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 54"><rect x="${map(left.left)}" y="14" width="${Math.max(1, map(leftRight) - map(left.left))}" height="12" fill="#8cf" stroke="#057"/><rect x="${map(right.left)}" y="28" width="${Math.max(1, map(rightRight) - map(right.left))}" height="12" fill="#f88" stroke="#900"/></svg>`
+}
+
+function makeSvgMapper(min: number, max: number, outMin: number, outMax: number) {
+  const span = Math.max(epsilon, max - min)
+  return (value: number) => Math.round(outMin + (value - min) / span * (outMax - outMin))
+}
+
+function inferStaticLayoutFactsKind(facts: StaticLayoutFact[]): StaticLayoutLawKind {
+  if (facts.length === 0) throw new Error('Expected at least one static layout fact')
+  const kind = staticLayoutFactKind(facts[0]!)
+  for (let i = 1; i < facts.length; i++) {
+    const nextKind = staticLayoutFactKind(facts[i]!)
+    if (nextKind !== kind) throw new Error(`Mixed fact kinds: ${kind} vs ${nextKind}`)
+  }
+  return kind
+}
+
 function staticLayoutFactKind(fact: StaticLayoutFact): StaticLayoutLawKind {
   switch (fact.kind) {
     case 'symbolic-equality':
       return 'symbolic'
     case 'range-equality':
+    case 'range-rect-edge-equality':
     case 'range-within':
     case 'range-non-negative':
     case 'range-integer':
     case 'range-array-length':
       return 'range'
+    case 'concrete-rect-edge-equality':
+    case 'concrete-rect-x-within':
+    case 'concrete-rect-x-fills':
+    case 'concrete-rect-y-within':
+    case 'concrete-rects-do-not-overlap-x':
     case 'concrete-close':
       return 'concrete-fixture'
   }
 }
 
-function inferStaticLayoutFactsKind(facts: StaticLayoutFact[]) {
-  if (facts.length === 0) throw new Error('Expected at least one static layout fact')
-  const kinds = new Set(facts.map(staticLayoutFactKind))
-  if (kinds.size !== 1) throw new Error('Mixed static layout fact kinds need an explicit law kind')
-  return staticLayoutFactKind(facts[0]!)
+function candidateLaw(name: string, evidence: number, details?: StaticLayoutLawWitness): StaticLayoutCandidateLaw {
+  return {
+    name,
+    kind: 'mined-from-concrete-sweep',
+    evidence,
+    ...(details == null ? {} : {details}),
+  }
+}
+
+function formatCandidateNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)))
 }
 
 // Callback invocation

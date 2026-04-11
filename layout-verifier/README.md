@@ -6,7 +6,7 @@ The shape is:
 
 - `ir.ts`: the lowered IR types and TS-to-IR lowering pass
 - `values.ts`: the value domain — concrete, symbolic, and range types with their arithmetic, comparisons, narrowing, and symbolic algebra
-- `core.ts`: the `LoweredProgramAnalyzer`, CFG execution, expression evaluation, and law reporting
+- `core.ts`: the `LoweredProgramAnalyzer`, CFG execution, expression evaluation, typed fact checks, and law reporting
 - `discrete.ts`: tiny helpers for discovering integer seam bands and shrinking failing intervals
 - `contracts.ts`: the analyzer-side contract DSL and contract auto-loader
 - `contracts.md`: how to write and review static contract sidecars
@@ -42,10 +42,11 @@ Useful commands:
 - `bun layout-verifier/nicer-hacker-news/verify-comment-static-layout.js`
 - `bun layout-verifier/life-calendar/verify-static-layout.js`
 
-Reports are intentionally more than pass/fail lists. A law can carry proof mechanisms, target coverage, trusted function summaries, candidate laws, and unknown proof results.
+Reports are intentionally more than pass/fail lists. A law can carry proof mechanisms, target coverage, trusted function summaries, candidate laws, unknown proof results, and geometry witnesses.
 
 Use that as a ledger:
 
 - proved facts go in laws
 - trusted opaque helpers go in function summaries
 - mined and sketched ideas stay candidates until promoted by hand
+- failed rect facts should include the edge numbers, and may include a tiny SVG witness

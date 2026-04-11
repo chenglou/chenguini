@@ -17,12 +17,15 @@ import {
   getProp,
   getRangeProp,
   invokeConcreteFunctionValue,
-  type FunctionOverride,
-  type FunctionOverrideSummary,
   rangeArray,
   rangeNull,
   rangeNumber,
   rangeObject,
+  type FunctionOverride,
+  type FunctionOverrideSummary,
+  type RangeArrayValue,
+  type RangeNumberValue,
+  type StaticLayoutFactDomain,
   type RangeValue,
   type Value,
 } from './core'
@@ -38,7 +41,7 @@ export type StaticContractValueExpr =
   | {kind: 'add'; left: StaticContractValueExpr; right: StaticContractValueExpr}
   | {kind: 'mul'; left: StaticContractValueExpr; right: StaticContractValueExpr}
 
-export type StaticContractSpec =
+type ValueStaticContractSpec =
   | {
       kind: 'return-value'
       value: StaticContractValueExpr
@@ -46,12 +49,6 @@ export type StaticContractSpec =
   | {
       kind: 'return-arg'
       argIndex: number
-    }
-  | {
-      kind: 'for-each-array-item'
-      arrayArgIndex: number
-      arrayPath: string[]
-      callbackArgIndex: number
     }
   | {
       kind: 'lookup-array-item'
@@ -66,6 +63,14 @@ export type StaticContractSpec =
       textArgIndex: number
       unitWidth: number
     }
+
+type ConcreteEffectStaticContractSpec =
+  | {
+      kind: 'for-each-array-item'
+      arrayArgIndex: number
+      arrayPath: string[]
+      callbackArgIndex: number
+    }
   | {
       kind: 'push-or-merge-rect'
       rectsArgIndex: number
@@ -73,6 +78,7 @@ export type StaticContractSpec =
       tolerance?: number
     }
 
+export type StaticContractSpec = ValueStaticContractSpec | ConcreteEffectStaticContractSpec
 export type StaticContractSpecMap = Partial<Record<string, StaticContractSpec>>
 
 export type StaticContractSketchSample = {
@@ -175,166 +181,17 @@ export const contractValue = {
 export function buildStaticContractOverrides(specs: StaticContractSpecMap): Record<string, FunctionOverride> {
   const overrides: Record<string, FunctionOverride> = {}
 
-  for (const [name, spec] of Object.entries(specs)) {
+  for (const [name, maybeSpec] of Object.entries(specs)) {
+    const spec = maybeSpec
     if (spec == null) continue
-    overrides[name] = {
-      summary: summarizeContractSpec(spec),
 
-      evaluate(args, mode, context) {
-        if (mode !== 'concrete') throw new Error(`${name} contract only supports concrete mode`)
-
-        switch (spec.kind) {
-          case 'return-value':
-            return [{
-              constraints: context.state.constraints,
-              env: context.state.env,
-              value: evaluateConcreteValueExpr(spec.value, args),
-            }]
-
-          case 'return-arg':
-            return [{
-              constraints: context.state.constraints,
-              env: context.state.env,
-              value: args[spec.argIndex]!,
-            }]
-
-          case 'for-each-array-item': {
-            const callback = args[spec.callbackArgIndex]!
-            const items = expectArray(getValueAtPath(args[spec.arrayArgIndex]!, spec.arrayPath)).items
-            let activeStates = [context.state]
-            for (let i = 0; i < items.length; i++) {
-              const nextStates = []
-              for (const state of activeStates) {
-                const callbackReturns = invokeConcreteFunctionValue(context.analyzer, state, callback, [items[i]!])
-                if (callbackReturns.length !== 1) throw new Error(`${name} callback must resolve to 1 case`)
-                nextStates.push(callbackReturns[0]!.state)
-              }
-              activeStates = nextStates
-            }
-            return activeStates.map(state => ({
-              constraints: state.constraints,
-              env: state.env,
-              value: concreteNull('concrete'),
-            }))
-          }
-
-          case 'lookup-array-item': {
-            const items = expectArray(getValueAtPath(args[spec.sourceArgIndex]!, spec.arrayPath)).items
-            const index = expectConcreteNumber(getValueAtPath(args[spec.indexArgIndex]!, spec.indexPath))
-            const value = index >= items.length && spec.defaultNull ? concreteNull('concrete') : items[index]!
-            return [{
-              constraints: context.state.constraints,
-              env: context.state.env,
-              value,
-            }]
-          }
-
-          case 'string-unit-width': {
-            const text = expectString(args[spec.textArgIndex]!)
-            return [{
-              constraints: context.state.constraints,
-              env: context.state.env,
-              value: concreteNumber(text.value.length * spec.unitWidth),
-            }]
-          }
-
-          case 'push-or-merge-rect': {
-            const rects = expectArray(args[spec.rectsArgIndex]!)
-            const next = expectObject(args[spec.nextArgIndex]!)
-            const tolerance = spec.tolerance ?? 0.5
-            const previous = rects.items.at(-1)
-            if (previous != null) {
-              const previousRect = expectObject(previous)
-              const previousTop = expectConcreteNumber(getProp(previousRect, 'top'))
-              const previousHeight = expectConcreteNumber(getProp(previousRect, 'height'))
-              const previousLeft = expectConcreteNumber(getProp(previousRect, 'left'))
-              const previousWidth = expectConcreteNumber(getProp(previousRect, 'width'))
-              const nextTop = expectConcreteNumber(getProp(next, 'top'))
-              const nextHeight = expectConcreteNumber(getProp(next, 'height'))
-              const nextLeft = expectConcreteNumber(getProp(next, 'left'))
-              const nextWidth = expectConcreteNumber(getProp(next, 'width'))
-              if (
-                previousTop === nextTop &&
-                previousHeight === nextHeight &&
-                Math.abs(previousLeft + previousWidth - nextLeft) < tolerance
-              ) {
-                previousRect.props['width'] = concreteNumber(nextLeft + nextWidth - previousLeft)
-                return [{
-                  constraints: context.state.constraints,
-                  env: context.state.env,
-                  value: concreteNull('concrete'),
-                }]
-              }
-            }
-
-            rects.items.push(next)
-            return [{
-              constraints: context.state.constraints,
-              env: context.state.env,
-              value: concreteNull('concrete'),
-            }]
-          }
-        }
-      },
-
-      evaluateRange(args) {
-        switch (spec.kind) {
-          case 'return-value':
-            return [{
-              value: evaluateRangeValueExpr(spec.value, args),
-            }]
-
-          case 'return-arg':
-            return [{
-              value: args[spec.argIndex]!,
-            }]
-
-          case 'lookup-array-item': {
-            const array = expectRangeArray(getRangeValueAtPath(args[spec.sourceArgIndex]!, spec.arrayPath))
-            const index = expectRangeNumber(getRangeValueAtPath(args[spec.indexArgIndex]!, spec.indexPath))
-            return [{
-              value: lookupRangeArrayItem(array, index, spec.defaultNull ?? false),
-            }]
-          }
-
-          case 'string-unit-width': {
-            const text = expectRangeString(args[spec.textArgIndex]!)
-            return [{
-              value: multiplyRangeByConstant(
-                rangeNumber(text.minLength, text.maxLength, true),
-                spec.unitWidth,
-              ),
-            }]
-          }
-
-          default:
-            throw new Error(`${name} contract does not support range mode yet`)
-        }
-      },
-    }
+    overrides[name] =
+      isValueStaticContractSpec(spec)
+        ? buildValueStaticContractOverride(name, spec)
+        : buildConcreteEffectStaticContractOverride(name, spec)
   }
 
   return overrides
-}
-
-function summarizeContractSpec(spec: StaticContractSpec): FunctionOverrideSummary {
-  return {
-    kind: spec.kind,
-    domains: contractSpecDomains(spec),
-  }
-}
-
-function contractSpecDomains(spec: StaticContractSpec): FunctionOverrideSummary['domains'] {
-  switch (spec.kind) {
-    case 'return-value':
-    case 'return-arg':
-    case 'lookup-array-item':
-    case 'string-unit-width':
-      return ['concrete', 'range']
-    case 'for-each-array-item':
-    case 'push-or-merge-rect':
-      return ['concrete']
-  }
 }
 
 function getValueAtPath(root: Value, path: string[]) {
@@ -349,18 +206,16 @@ function getRangeValueAtPath(root: RangeValue, path: string[]) {
   return current
 }
 
-function lookupRangeArrayItem(array: ReturnType<typeof expectRangeArray>, index: ReturnType<typeof expectRangeNumber>, defaultNull: boolean): RangeValue {
-  if (index.min !== index.max || !index.isInteger) throw new Error('Range lookup-array-item contract expects an exact integer index')
-  if (array.items == null) throw new Error('Range lookup-array-item contract expects exact array items')
-  const rawIndex = index.min
-  return rawIndex >= array.items.length && defaultNull
-    ? rangeNull()
-    : array.items[rawIndex]!
+function getRequiredItem<T>(items: T[], index: number, label: string): T {
+  const item = items[index]
+  if (item == null) throw new Error(`${label} ${index} is missing`)
+  return item
 }
 
-function multiplyRangeByConstant(value: ReturnType<typeof expectRangeNumber>, factor: number) {
-  const products = [value.min * factor, value.max * factor]
-  return rangeNumber(Math.min(...products), Math.max(...products), value.isInteger && Number.isInteger(factor))
+function getRequiredRecordValue<T>(items: Record<string, T>, key: string, label: string): T {
+  const item = items[key]
+  if (item == null) throw new Error(`${label} ${key} is missing`)
+  return item
 }
 
 export async function loadStaticContractOverridesForSourceFile(sourceFilePath: string): Promise<Record<string, FunctionOverride>> {
@@ -380,7 +235,7 @@ export async function loadStaticContractOverridesForSourceFile(sourceFilePath: s
     const namedBindings = importClause?.namedBindings
     if (namedBindings == null || !ts.isNamedImports(namedBindings)) continue
 
-    const importedModulePath = resolveRelativeModulePath(sourceFilePath, specifier)
+    const importedModulePath: string | null = resolveRelativeModulePath(sourceFilePath, specifier)
     if (importedModulePath == null) continue
     const importedSidecar = await loadStaticContractsModule(toStaticContractsPath(importedModulePath))
     if (importedSidecar == null) continue
@@ -398,72 +253,12 @@ export async function loadStaticContractOverridesForSourceFile(sourceFilePath: s
   return buildStaticContractOverrides(specs)
 }
 
-function evaluateConcreteValueExpr(expression: StaticContractValueExpr, args: Value[]): Value {
-  switch (expression.kind) {
-    case 'arg':
-      return args[expression.argIndex]!
-    case 'arg-path':
-      return getValueAtPath(args[expression.argIndex]!, expression.path)
-    case 'number':
-      return concreteNumber(expression.value)
-    case 'null':
-      return concreteNull('concrete')
-    case 'array':
-      return concreteArray(expression.items.map(item => evaluateConcreteValueExpr(item, args)))
-    case 'object': {
-      const props: Record<string, Value> = {}
-      for (const [name, value] of Object.entries(expression.props)) props[name] = evaluateConcreteValueExpr(value, args)
-      return concreteObject(props)
-    }
-    case 'add': {
-      const left = expectConcreteNumber(evaluateConcreteValueExpr(expression.left, args))
-      const right = expectConcreteNumber(evaluateConcreteValueExpr(expression.right, args))
-      return concreteNumber(left + right)
-    }
-    case 'mul': {
-      const left = expectConcreteNumber(evaluateConcreteValueExpr(expression.left, args))
-      const right = expectConcreteNumber(evaluateConcreteValueExpr(expression.right, args))
-      return concreteNumber(left * right)
-    }
-  }
-}
-
-function evaluateRangeValueExpr(expression: StaticContractValueExpr, args: RangeValue[]): RangeValue {
-  switch (expression.kind) {
-    case 'arg':
-      return args[expression.argIndex]!
-    case 'arg-path':
-      return getRangeValueAtPath(args[expression.argIndex]!, expression.path)
-    case 'number':
-      return rangeNumber(expression.value, expression.value, Number.isInteger(expression.value))
-    case 'null':
-      return rangeNull()
-    case 'array':
-      return rangeArray(expression.items.map(item => evaluateRangeValueExpr(item, args)))
-    case 'object': {
-      const props: Record<string, RangeValue> = {}
-      for (const [name, value] of Object.entries(expression.props)) props[name] = evaluateRangeValueExpr(value, args)
-      return rangeObject(props)
-    }
-    case 'add': {
-      const left = expectRangeNumber(evaluateRangeValueExpr(expression.left, args))
-      const right = expectRangeNumber(evaluateRangeValueExpr(expression.right, args))
-      return rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger)
-    }
-    case 'mul': {
-      const left = expectRangeNumber(evaluateRangeValueExpr(expression.left, args))
-      const right = expectRangeNumber(evaluateRangeValueExpr(expression.right, args))
-      const products = [left.min * right.min, left.min * right.max, left.max * right.min, left.max * right.max]
-      return rangeNumber(Math.min(...products), Math.max(...products), left.isInteger && right.isInteger)
-    }
-  }
-}
-
 export function sketchStaticReturnContractFromSamples(samples: StaticContractSketchSample[]): StaticContractSketch | null {
   if (samples.length === 0) return null
-  const first = samples[0]!
+
+  const first = getRequiredItem(samples, 0, 'contract sketch sample')
   for (let argIndex = 0; argIndex < first.args.length; argIndex++) {
-    if (samples.every(sample => staticSketchValuesEqual(sample.value, sample.args[argIndex]!))) {
+    if (samples.every(sample => staticSketchValuesEqual(sample.value, getRequiredItem(sample.args, argIndex, 'contract sketch arg')))) {
       return {
         spec: contract.returnArg(argIndex),
         evidence: samples.length,
@@ -472,11 +267,12 @@ export function sketchStaticReturnContractFromSamples(samples: StaticContractSke
   }
 
   const value = sketchStaticContractValueExprFromSamples(samples)
-  if (value == null) return null
-  return {
-    spec: contract.returnValue(value),
-    evidence: samples.length,
-  }
+  return value == null
+    ? null
+    : {
+        spec: contract.returnValue(value),
+        evidence: samples.length,
+      }
 }
 
 export function formatStaticContractSketchEntry(name: string, sketch: StaticContractSketch): string {
@@ -490,157 +286,302 @@ export function formatStaticContractSpec(spec: StaticContractSpec): string {
     case 'return-arg':
       return `contract.returnArg(${spec.argIndex})`
     case 'for-each-array-item':
-      return `contract.forEachArrayItem(${spec.arrayArgIndex}, ${JSON.stringify(spec.arrayPath)}, ${spec.callbackArgIndex})`
+      return `contract.forEachArrayItem(${spec.arrayArgIndex}, ${formatStringArray(spec.arrayPath)}, ${spec.callbackArgIndex})`
     case 'lookup-array-item':
-      return `contract.lookupArrayItem(${spec.sourceArgIndex}, ${JSON.stringify(spec.arrayPath)}, ${spec.indexArgIndex}, ${JSON.stringify(spec.indexPath)}${spec.defaultNull ? ', {defaultNull: true}' : ''})`
+      return `contract.lookupArrayItem(${spec.sourceArgIndex}, ${formatStringArray(spec.arrayPath)}, ${spec.indexArgIndex}, ${formatStringArray(spec.indexPath)}${spec.defaultNull === true ? ', {defaultNull: true}' : ''})`
     case 'string-unit-width':
-      return `contract.stringUnitWidth(${spec.textArgIndex}, ${spec.unitWidth})`
+      return `contract.stringUnitWidth(${spec.textArgIndex}, ${formatNumber(spec.unitWidth)})`
     case 'push-or-merge-rect':
-      return `contract.pushOrMergeRect(${spec.rectsArgIndex}, ${spec.nextArgIndex}${spec.tolerance == null ? '' : `, {tolerance: ${spec.tolerance}}`})`
+      return `contract.pushOrMergeRect(${spec.rectsArgIndex}, ${spec.nextArgIndex}${spec.tolerance == null || spec.tolerance === 0.5 ? '' : `, {tolerance: ${formatNumber(spec.tolerance)}}`})`
+  }
+}
+
+function summarizeStaticContractSpec(spec: StaticContractSpec): FunctionOverrideSummary {
+  return {
+    kind: spec.kind,
+    domains: staticContractSpecDomains(spec),
+  }
+}
+
+function staticContractSpecDomains(spec: StaticContractSpec): StaticLayoutFactDomain[] {
+  return isValueStaticContractSpec(spec) ? ['concrete', 'range'] : ['concrete']
+}
+
+type StaticContractValueDomain<TValue> = {
+  name: StaticLayoutFactDomain
+  getValueAtPath(root: TValue, path: string[]): TValue
+  makeNumber(value: number): TValue
+  makeNull(): TValue
+  makeArray(items: TValue[]): TValue
+  makeObject(props: Record<string, TValue>): TValue
+  add(left: TValue, right: TValue): TValue
+  multiply(left: TValue, right: TValue): TValue
+  lookupArrayItem(array: TValue, index: TValue, defaultNull: boolean): TValue
+  measureStringUnitWidth(text: TValue, unitWidth: number): TValue
+}
+
+const concreteValueDomain: StaticContractValueDomain<Value> = {
+  name: 'concrete',
+  getValueAtPath,
+  makeNumber: concreteNumber,
+  makeNull: () => concreteNull('concrete'),
+  makeArray: concreteArray,
+  makeObject: concreteObject,
+  add(left, right) {
+    return concreteNumber(expectConcreteNumber(left) + expectConcreteNumber(right))
+  },
+  multiply(left, right) {
+    return concreteNumber(expectConcreteNumber(left) * expectConcreteNumber(right))
+  },
+  lookupArrayItem(array, index, defaultNull) {
+    const items = expectArray(array).items
+    const rawIndex = expectConcreteNumber(index)
+    return rawIndex >= items.length && defaultNull
+      ? concreteNull('concrete')
+      : getRequiredItem(items, rawIndex, 'contract lookup item')
+  },
+  measureStringUnitWidth(text, unitWidth) {
+    return concreteNumber(expectString(text).value.length * unitWidth)
+  },
+}
+
+const rangeValueDomain: StaticContractValueDomain<RangeValue> = {
+  name: 'range',
+  getValueAtPath: getRangeValueAtPath,
+  makeNumber(value) {
+    return rangeNumber(value, value, Number.isInteger(value))
+  },
+  makeNull: rangeNull,
+  makeArray: rangeArray,
+  makeObject: rangeObject,
+  add(left, right) {
+    const leftNumber = expectRangeNumber(left)
+    const rightNumber = expectRangeNumber(right)
+    return rangeNumber(leftNumber.min + rightNumber.min, leftNumber.max + rightNumber.max, leftNumber.isInteger && rightNumber.isInteger)
+  },
+  multiply(left, right) {
+    return multiplyRangeNumbers(expectRangeNumber(left), expectRangeNumber(right))
+  },
+  lookupArrayItem(array, index, defaultNull) {
+    return lookupRangeArrayItem(expectRangeArray(array), expectRangeNumber(index), defaultNull)
+  },
+  measureStringUnitWidth(text, unitWidth) {
+    const rangeText = expectRangeString(text)
+    return multiplyRangeByConstant(
+      rangeNumber(rangeText.minLength, rangeText.maxLength, true),
+      unitWidth,
+    )
+  },
+}
+
+function isValueStaticContractSpec(spec: StaticContractSpec): spec is ValueStaticContractSpec {
+  switch (spec.kind) {
+    case 'return-value':
+    case 'return-arg':
+    case 'lookup-array-item':
+    case 'string-unit-width':
+      return true
+    case 'for-each-array-item':
+    case 'push-or-merge-rect':
+      return false
+  }
+}
+
+function buildValueStaticContractOverride(name: string, spec: ValueStaticContractSpec): FunctionOverride {
+  return {
+    summary: summarizeStaticContractSpec(spec),
+    evaluate(args, mode, context) {
+      if (mode !== 'concrete') throw new Error(`${name} contract only supports concrete mode`)
+      return [{
+        constraints: context.state.constraints,
+        env: context.state.env,
+        value: evaluateValueStaticContractSpecInDomain(spec, args, concreteValueDomain),
+      }]
+    },
+    evaluateRange(args) {
+      return [{value: evaluateValueStaticContractSpecInDomain(spec, args, rangeValueDomain)}]
+    },
+  }
+}
+
+function buildConcreteEffectStaticContractOverride(name: string, spec: ConcreteEffectStaticContractSpec): FunctionOverride {
+  return {
+    summary: summarizeStaticContractSpec(spec),
+    evaluate(args, mode, context) {
+      if (mode !== 'concrete') throw new Error(`${name} contract only supports concrete mode`)
+
+      switch (spec.kind) {
+        case 'for-each-array-item': {
+          const callback = getRequiredItem(args, spec.callbackArgIndex, 'callback arg')
+          const root = getRequiredItem(args, spec.arrayArgIndex, 'array arg')
+          const items = expectArray(getValueAtPath(root, spec.arrayPath)).items
+          let activeStates = [context.state]
+          for (let i = 0; i < items.length; i++) {
+            const nextStates = []
+            for (const state of activeStates) {
+              const callbackReturns = invokeConcreteFunctionValue(context.analyzer, state, callback, [getRequiredItem(items, i, `${name} item`)])
+              if (callbackReturns.length !== 1) throw new Error(`${name} callback must resolve to 1 case`)
+              nextStates.push(getRequiredItem(callbackReturns, 0, `${name} callback return`).state)
+            }
+            activeStates = nextStates
+          }
+          return activeStates.map(state => ({
+            constraints: state.constraints,
+            env: state.env,
+            value: concreteNull('concrete'),
+          }))
+        }
+
+        case 'push-or-merge-rect': {
+          const rects = expectArray(getRequiredItem(args, spec.rectsArgIndex, 'rects arg'))
+          const next = expectObject(getRequiredItem(args, spec.nextArgIndex, 'next rect arg'))
+          const tolerance = spec.tolerance ?? 0.5
+          const previous = rects.items.at(-1)
+          if (previous != null) {
+            const previousRect = expectObject(previous)
+            const previousTop = expectConcreteNumber(getProp(previousRect, 'top'))
+            const previousHeight = expectConcreteNumber(getProp(previousRect, 'height'))
+            const previousLeft = expectConcreteNumber(getProp(previousRect, 'left'))
+            const previousWidth = expectConcreteNumber(getProp(previousRect, 'width'))
+            const nextTop = expectConcreteNumber(getProp(next, 'top'))
+            const nextHeight = expectConcreteNumber(getProp(next, 'height'))
+            const nextLeft = expectConcreteNumber(getProp(next, 'left'))
+            const nextWidth = expectConcreteNumber(getProp(next, 'width'))
+            if (
+              previousTop === nextTop &&
+              previousHeight === nextHeight &&
+              Math.abs(previousLeft + previousWidth - nextLeft) < tolerance
+            ) {
+              previousRect.props['width'] = concreteNumber(nextLeft + nextWidth - previousLeft)
+              return [{
+                constraints: context.state.constraints,
+                env: context.state.env,
+                value: concreteNull('concrete'),
+              }]
+            }
+          }
+
+          rects.items.push(next)
+          return [{
+            constraints: context.state.constraints,
+            env: context.state.env,
+            value: concreteNull('concrete'),
+          }]
+        }
+      }
+    },
+    evaluateRange(_args) {
+      throw new Error(`${name} contract only supports concrete mode for ${spec.kind}`)
+    },
+  }
+}
+
+function evaluateValueStaticContractSpecInDomain<TValue>(
+  spec: ValueStaticContractSpec,
+  args: TValue[],
+  domain: StaticContractValueDomain<TValue>,
+): TValue {
+  switch (spec.kind) {
+    case 'return-value':
+      return evaluateStaticContractValueExprInDomain(spec.value, args, domain)
+    case 'return-arg':
+      return getRequiredItem(args, spec.argIndex, `${domain.name} contract arg`)
+    case 'lookup-array-item': {
+      const source = getRequiredItem(args, spec.sourceArgIndex, `${domain.name} lookup source arg`)
+      const indexSource = getRequiredItem(args, spec.indexArgIndex, `${domain.name} lookup index arg`)
+      return domain.lookupArrayItem(
+        domain.getValueAtPath(source, spec.arrayPath),
+        domain.getValueAtPath(indexSource, spec.indexPath),
+        spec.defaultNull ?? false,
+      )
+    }
+    case 'string-unit-width':
+      return domain.measureStringUnitWidth(getRequiredItem(args, spec.textArgIndex, `${domain.name} text arg`), spec.unitWidth)
+  }
+}
+
+function evaluateStaticContractValueExprInDomain<TValue>(
+  expression: StaticContractValueExpr,
+  args: TValue[],
+  domain: StaticContractValueDomain<TValue>,
+): TValue {
+  switch (expression.kind) {
+    case 'arg':
+      return getRequiredItem(args, expression.argIndex, `${domain.name} contract value arg`)
+    case 'arg-path':
+      return domain.getValueAtPath(getRequiredItem(args, expression.argIndex, `${domain.name} contract value arg`), expression.path)
+    case 'number':
+      return domain.makeNumber(expression.value)
+    case 'null':
+      return domain.makeNull()
+    case 'array':
+      return domain.makeArray(expression.items.map(item => evaluateStaticContractValueExprInDomain(item, args, domain)))
+    case 'object': {
+      const props: Record<string, TValue> = {}
+      for (const [name, value] of Object.entries(expression.props)) props[name] = evaluateStaticContractValueExprInDomain(value, args, domain)
+      return domain.makeObject(props)
+    }
+    case 'add':
+      return domain.add(
+        evaluateStaticContractValueExprInDomain(expression.left, args, domain),
+        evaluateStaticContractValueExprInDomain(expression.right, args, domain),
+      )
+    case 'mul':
+      return domain.multiply(
+        evaluateStaticContractValueExprInDomain(expression.left, args, domain),
+        evaluateStaticContractValueExprInDomain(expression.right, args, domain),
+      )
   }
 }
 
 function sketchStaticContractValueExprFromSamples(samples: StaticContractSketchSample[]): StaticContractValueExpr | null {
-  if (samples.length === 0) return null
-  const first = samples[0]!
+  const first = getRequiredItem(samples, 0, 'contract sketch sample')
+  const argPath = findStaticSketchArgPathExpr(samples)
+  if (argPath != null) return argPath
 
-  const argPathExpr = findStaticSketchArgPathExpr(samples)
-  if (argPathExpr != null) return argPathExpr
+  if (samples.every(sample => sample.value.kind === 'null')) return contractValue.null()
 
-  const firstValue = first.value
-  if (firstValue.kind === 'number') return sketchStaticNumberExprFromSamples(samples)
-  if (firstValue.kind === 'null') return samples.every(sample => sample.value.kind === 'null') ? contractValue.null() : null
-  if (firstValue.kind === 'array') {
-    if (!samples.every(sample => sample.value.kind === 'array' && sample.value.items.length === firstValue.items.length)) return null
+  const numberExpr = sketchStaticNumberExprFromSamples(samples)
+  if (numberExpr != null) return numberExpr
+
+  if (first.value.kind === 'array' && samples.every(sample => sample.value.kind === 'array')) {
+    const firstItems = first.value.items
+    const allSameLength = samples.every(sample => sample.value.kind === 'array' && sample.value.items.length === firstItems.length)
+    if (!allSameLength) return null
     const items: StaticContractValueExpr[] = []
-    for (let index = 0; index < firstValue.items.length; index++) {
+    for (let index = 0; index < firstItems.length; index++) {
       const itemExpr = sketchStaticContractValueExprFromSamples(samples.map(sample => ({
         args: sample.args,
-        value: expectArray(sample.value).items[index]!,
+        value: getRequiredItem(expectArray(sample.value).items, index, 'contract sketch array item'),
       })))
       if (itemExpr == null) return null
       items.push(itemExpr)
     }
     return contractValue.array(items)
   }
-  if (firstValue.kind === 'object') {
-    const keys = Object.keys(firstValue.props)
-    if (!samples.every(sample =>
-      sample.value.kind === 'object' &&
-      keys.length === Object.keys(sample.value.props).length &&
-      keys.every(key => sample.value.kind === 'object' && sample.value.props[key] != null)
-    )) return null
+
+  if (first.value.kind === 'object' && samples.every(sample => sample.value.kind === 'object')) {
+    const keys = Object.keys(first.value.props)
+    const allSameKeys = samples.every(sample => {
+      if (sample.value.kind !== 'object') return false
+      const sampleKeys = Object.keys(sample.value.props)
+      return sampleKeys.length === keys.length && keys.every(key => sampleKeys.includes(key))
+    })
+    if (!allSameKeys) return null
+
     const props: Record<string, StaticContractValueExpr> = {}
     for (const key of keys) {
       const propExpr = sketchStaticContractValueExprFromSamples(samples.map(sample => ({
         args: sample.args,
-        value: expectObject(sample.value).props[key]!,
+        value: getProp(expectObject(sample.value), key),
       })))
       if (propExpr == null) return null
       props[key] = propExpr
     }
     return contractValue.object(props)
   }
-  return null
-}
-
-function sketchStaticNumberExprFromSamples(samples: StaticContractSketchSample[]): StaticContractValueExpr | null {
-  if (!samples.every(sample => sample.value.kind === 'number')) return null
-  const outputs = samples.map(sample => expectConcreteNumber(sample.value))
-  const firstOutput = outputs[0]!
-  if (outputs.every(output => Math.abs(output - firstOutput) <= 0.000001)) return contractValue.number(firstOutput)
-
-  for (const candidate of getStaticSketchArgPathCandidates(samples)) {
-    const inputNumbers: number[] = []
-    let inputsAreUsableNumbers = true
-    for (const value of candidate.values) {
-      if (value.kind !== 'number') {
-        inputsAreUsableNumbers = false
-        break
-      }
-      const inputNumber = expectConcreteNumber(value)
-      if (Math.abs(inputNumber) <= 0.000001) {
-        inputsAreUsableNumbers = false
-        break
-      }
-      inputNumbers.push(inputNumber)
-    }
-    if (!inputsAreUsableNumbers) continue
-
-    const ratio = firstOutput / inputNumbers[0]!
-    if (outputs.every((output, index) => Math.abs(output - inputNumbers[index]! * ratio) <= 0.000001)) {
-      return Math.abs(ratio - 1) <= 0.000001
-        ? candidate.expression
-        : contractValue.mul(candidate.expression, contractValue.number(ratio))
-    }
-  }
 
   return null
-}
-
-function findStaticSketchArgPathExpr(samples: StaticContractSketchSample[]): StaticContractValueExpr | null {
-  for (const candidate of getStaticSketchArgPathCandidates(samples)) {
-    if (samples.every((sample, index) => staticSketchValuesEqual(sample.value, candidate.values[index]!))) return candidate.expression
-  }
-  return null
-}
-
-function getStaticSketchArgPathCandidates(samples: StaticContractSketchSample[]) {
-  const first = samples[0]!
-  const candidates: Array<{expression: StaticContractValueExpr; values: Value[]}> = []
-  for (let argIndex = 0; argIndex < first.args.length; argIndex++) {
-    collectStaticSketchArgPathCandidates(samples, argIndex, [], candidates)
-  }
-  return candidates
-}
-
-function collectStaticSketchArgPathCandidates(
-  samples: StaticContractSketchSample[],
-  argIndex: number,
-  pathParts: string[],
-  candidates: Array<{expression: StaticContractValueExpr; values: Value[]}>,
-) {
-  const values = samples.map(sample => getValueAtPath(sample.args[argIndex]!, pathParts))
-  candidates.push({
-    expression: pathParts.length === 0 ? contractValue.arg(argIndex) : contractValue.argPath(argIndex, pathParts),
-    values,
-  })
-
-  const firstValue = values[0]!
-  if (firstValue.kind !== 'object') return
-  for (const key of Object.keys(firstValue.props)) {
-    if (values.every(value => value.kind === 'object' && value.props[key] != null)) {
-      collectStaticSketchArgPathCandidates(samples, argIndex, [...pathParts, key], candidates)
-    }
-  }
-}
-
-function staticSketchValuesEqual(left: Value, right: Value): boolean {
-  if (left.kind !== right.kind) return false
-  switch (left.kind) {
-    case 'number':
-      return Math.abs(expectConcreteNumber(left) - expectConcreteNumber(right)) <= 0.000001
-    case 'string':
-      return left.value === expectString(right).value
-    case 'null':
-      return true
-    case 'array': {
-      const rightArray = expectArray(right)
-      return left.items.length === rightArray.items.length &&
-        left.items.every((item, index) => staticSketchValuesEqual(item, rightArray.items[index]!))
-    }
-    case 'object': {
-      const rightObject = expectObject(right)
-      const keys = Object.keys(left.props)
-      return keys.length === Object.keys(rightObject.props).length &&
-        keys.every(key => rightObject.props[key] != null && staticSketchValuesEqual(left.props[key]!, rightObject.props[key]!))
-    }
-    case 'boolean':
-      return left.mode === 'concrete' && right.kind === 'boolean' && right.mode === 'concrete' && left.value === right.value
-    case 'function':
-    case 'opaque':
-      return false
-  }
 }
 
 function formatStaticContractValueExpr(expression: StaticContractValueExpr, depth = 0): string {
@@ -648,9 +589,9 @@ function formatStaticContractValueExpr(expression: StaticContractValueExpr, dept
     case 'arg':
       return `contractValue.arg(${expression.argIndex})`
     case 'arg-path':
-      return `contractValue.argPath(${expression.argIndex}, ${JSON.stringify(expression.path)})`
+      return `contractValue.argPath(${expression.argIndex}, ${formatStringArray(expression.path)})`
     case 'number':
-      return `contractValue.number(${formatContractNumber(expression.value)})`
+      return `contractValue.number(${formatNumber(expression.value)})`
     case 'null':
       return 'contractValue.null()'
     case 'array':
@@ -676,16 +617,146 @@ function formatStaticContractValueExpr(expression: StaticContractValueExpr, dept
   }
 }
 
+function formatStringArray(values: string[]) {
+  return `[${values.map(value => JSON.stringify(value)).join(', ')}]`
+}
+
+function formatObjectKey(key: string) {
+  return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)
+}
+
+function formatNumber(value: number) {
+  return String(value)
+}
+
 function indent(depth: number) {
   return '  '.repeat(depth)
 }
 
-function formatObjectKey(key: string) {
-  return /^[a-zA-Z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)
+function sketchStaticNumberExprFromSamples(samples: StaticContractSketchSample[]): StaticContractValueExpr | null {
+  if (!samples.every(sample => sample.value.kind === 'number' && sample.value.mode === 'concrete')) return null
+
+  const outputs = samples.map(sample => expectConcreteNumber(sample.value))
+  const firstOutput = getRequiredItem(outputs, 0, 'contract sketch output')
+  if (outputs.every(output => Math.abs(output - firstOutput) <= 0.000001)) return contractValue.number(firstOutput)
+
+  for (const candidate of getStaticSketchArgPathCandidates(samples)) {
+    const inputs = candidate.values
+    if (!inputs.every(value => value.kind === 'number' && value.mode === 'concrete')) continue
+
+    const inputNumbers = inputs.map(value => expectConcreteNumber(value))
+    if (inputNumbers.some(value => Math.abs(value) <= 0.000001)) continue
+    const ratio = getRequiredItem(outputs, 0, 'contract sketch output') / getRequiredItem(inputNumbers, 0, 'contract sketch input')
+    if (outputs.every((output, index) => Math.abs(output - getRequiredItem(inputNumbers, index, 'contract sketch input') * ratio) <= 0.000001)) {
+      return Math.abs(ratio - 1) <= 0.000001
+        ? candidate.expression
+        : contractValue.mul(candidate.expression, contractValue.number(ratio))
+    }
+  }
+
+  return null
 }
 
-function formatContractNumber(value: number) {
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)))
+function findStaticSketchArgPathExpr(samples: StaticContractSketchSample[]): StaticContractValueExpr | null {
+  for (const candidate of getStaticSketchArgPathCandidates(samples)) {
+    if (samples.every((sample, index) => staticSketchValuesEqual(sample.value, getRequiredItem(candidate.values, index, 'contract sketch candidate value')))) return candidate.expression
+  }
+  return null
+}
+
+function getStaticSketchArgPathCandidates(samples: StaticContractSketchSample[]) {
+  const first = getRequiredItem(samples, 0, 'contract sketch sample')
+  const candidates: Array<{expression: StaticContractValueExpr; values: Value[]}> = []
+  for (let argIndex = 0; argIndex < first.args.length; argIndex++) {
+    const arg = getRequiredItem(first.args, argIndex, 'contract sketch arg')
+    for (const path of collectStaticSketchValuePaths(arg)) {
+      const values: Value[] = []
+      let valid = true
+      for (const sample of samples) {
+        try {
+          values.push(getValueAtPath(getRequiredItem(sample.args, argIndex, 'contract sketch arg'), path))
+        } catch {
+          valid = false
+          break
+        }
+      }
+      if (!valid) continue
+      candidates.push({
+        expression: path.length === 0 ? contractValue.arg(argIndex) : contractValue.argPath(argIndex, path),
+        values,
+      })
+    }
+  }
+  return candidates
+}
+
+function collectStaticSketchValuePaths(value: Value, prefix: string[] = []): string[][] {
+  if (value.kind !== 'object') return [prefix]
+  return [
+    prefix,
+    ...Object.entries(value.props).flatMap(([key, prop]) => collectStaticSketchValuePaths(prop, [...prefix, key])),
+  ]
+}
+
+function staticSketchValuesEqual(left: Value, right: Value): boolean {
+  if (left.kind !== right.kind) return false
+  switch (left.kind) {
+    case 'number':
+      return right.kind === 'number' && left.mode === 'concrete' && right.mode === 'concrete' && Math.abs(left.value - right.value) <= 0.000001
+    case 'string':
+      return right.kind === 'string' && left.value === right.value
+    case 'null':
+      return true
+    case 'array':
+      return right.kind === 'array' &&
+        left.items.length === right.items.length &&
+        left.items.every((item, index) => staticSketchValuesEqual(item, getRequiredItem(right.items, index, 'contract sketch array item')))
+    case 'object': {
+      if (right.kind !== 'object') return false
+      const keys = Object.keys(left.props)
+      const rightKeys = Object.keys(right.props)
+      return keys.length === rightKeys.length &&
+        keys.every(key => rightKeys.includes(key) && staticSketchValuesEqual(
+          getRequiredRecordValue(left.props, key, 'contract sketch object prop'),
+          getRequiredRecordValue(right.props, key, 'contract sketch object prop'),
+        ))
+    }
+    case 'boolean':
+    case 'function':
+    case 'opaque':
+      return false
+  }
+}
+
+function lookupRangeArrayItem(array: RangeArrayValue, index: RangeNumberValue, defaultNull: boolean): RangeValue {
+  if (!index.isInteger) throw new Error('Range lookup-array-item expects an integer index')
+  if (index.min >= array.lengthMax && defaultNull) return rangeNull()
+
+  const indexIsSingleton = index.min === index.max
+  if (!indexIsSingleton) {
+    if (array.item != null && index.min >= 0 && index.max < array.lengthMax) return array.item
+    throw new Error('Range lookup-array-item only supports exact indexes or fully in-bounds item ranges')
+  }
+
+  let rawIndex = index.min
+  if (rawIndex < 0) {
+    if (array.lengthMin !== array.lengthMax) throw new Error('Range lookup-array-item cannot normalize negative indexes without exact length')
+    rawIndex += array.lengthMin
+  }
+
+  if (array.items != null && rawIndex >= 0 && rawIndex < array.items.length) return getRequiredItem(array.items, rawIndex, 'range lookup item')
+  if (array.item != null && rawIndex >= 0 && rawIndex < array.lengthMax) return array.item
+  if (defaultNull) return rangeNull()
+  throw new Error(`Range lookup-array-item index ${rawIndex} is out of bounds`)
+}
+
+function multiplyRangeByConstant(value: RangeNumberValue, constant: number) {
+  return multiplyRangeNumbers(value, rangeNumber(constant, constant, Number.isInteger(constant)))
+}
+
+function multiplyRangeNumbers(left: RangeNumberValue, right: RangeNumberValue) {
+  const products = [left.min * right.min, left.min * right.max, left.max * right.min, left.max * right.max]
+  return rangeNumber(Math.min(...products), Math.max(...products), left.isInteger && right.isInteger)
 }
 
 function toStaticContractsPath(sourceFilePath: string) {
@@ -695,17 +766,17 @@ function toStaticContractsPath(sourceFilePath: string) {
 
 function resolveRelativeModulePath(sourceFilePath: string, specifier: string) {
   const absoluteBase = path.resolve(path.dirname(sourceFilePath), specifier)
-  const candidates = [
+  const candidates: string[] = [
     absoluteBase + '.ts',
     absoluteBase + '.tsx',
     path.join(absoluteBase, 'index.ts'),
     path.join(absoluteBase, 'index.tsx'),
   ]
-  return candidates.find(candidate => existsSync(candidate)) ?? null
+  return candidates.find(candidate => existsSync(candidate) === true) ?? null
 }
 
 async function loadStaticContractsModule(modulePath: string): Promise<StaticContractSpecMap | null> {
-  if (!existsSync(modulePath)) return null
+  if (existsSync(modulePath) !== true) return null
   const module = await import(pathToFileURL(modulePath).href) as {
     staticLayoutContracts?: StaticContractSpecMap
   }
@@ -718,7 +789,6 @@ function mergeContractSpecs(
   modulePath: string,
 ) {
   for (const [name, spec] of Object.entries(incoming)) {
-    if (spec == null) continue
     if (target[name] != null) throw new Error(`Duplicate static contract for ${name} while loading ${modulePath}`)
     target[name] = spec
   }

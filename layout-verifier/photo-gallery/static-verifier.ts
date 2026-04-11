@@ -11,6 +11,7 @@ import {
   concreteObject,
   constExpr,
   describeNumericArray,
+  divExpr,
   epsilon,
   expectArray,
   expectConcreteNumber,
@@ -27,15 +28,16 @@ import {
   LoweredProgramAnalyzer,
   mineNumericSweepCandidateLaws,
   mulExpr,
-  divExpr,
   rangeArray,
   rangeNumber,
   rangeObject,
-  summarizeFunctionOverrides,
   type FunctionOverride,
+  type RangeNumberValue,
+  type RangeObjectValue,
   type StaticLayoutCandidateLaw,
   type StaticLayoutLawWitness,
   type StaticLayoutVerificationReport,
+  summarizeFunctionOverrides,
   symbolicExprEquals,
   symbolicNumber,
   symbolicObject,
@@ -48,12 +50,6 @@ import {
   partitionIntegerRangeByConcreteNumberValue,
   shrinkIntegerRangeByFailingPredicate,
 } from '../discrete'
-
-type WidthColsPartition = {
-  widthMin: number
-  widthMax: number
-  cols: number
-}
 
 export function runPhotoGalleryStaticVerification(
   sourceText: string,
@@ -73,12 +69,251 @@ export function runPhotoGalleryStaticVerification(
   verifyGetGridLayoutRange(sourceText, autoContractOverrides, laws)
   verifyGetGridLayoutRangeAcrossWidthPartitions(sourceText, autoContractOverrides, laws)
   verifyColsBoxMaxSizeXFRange(analyzer, laws)
-  const candidateLaws = verifyColsBoxMaxSizeXF(analyzer, laws)
+  const candidateLaws = [
+    ...verifyColsBoxMaxSizeXF(analyzer, laws),
+  ]
 
   return buildStaticLayoutReport('photo-gallery-static-layout', 'demos/photo-gallery/layout-model.ts', laws, {
     functionSummaries: summarizeFunctionOverrides(autoContractOverrides),
     candidateLaws,
   })
+}
+
+function verifyGetGridLayoutRange(
+  sourceText: string,
+  autoContractOverrides: Record<string, FunctionOverride>,
+  laws: Map<string, InternalLawSummary>,
+) {
+  const analyzer = new LoweredProgramAnalyzer(sourceText, {
+    prompt1DLineHeight,
+    prompt2DLineHeight,
+    prompt2DMaxLines,
+    promptPaddingBottom,
+  }, autoContractOverrides)
+
+  const layoutSources = rangeArray([
+    rangePhotoSource(1, 400),
+    rangePhotoSource(1.5, 700),
+    rangePhotoSource(0.75, 480),
+    rangePhotoSource(2, 900),
+    rangePhotoSource(0.5, 360),
+    rangePhotoSource(1.2, 640),
+  ])
+  const windowWidth = 760
+  const layout = expectRangeObject(joinRangeCases(analyzer.evaluateFunctionRange('getGridLayout', [
+    layoutSources,
+    rangeNumber(windowWidth, windowWidth, true),
+  ])))
+  const items = expectRangeArray(getRangeProp(layout, 'items'))
+  const rowsTop = expectRangeArray(getRangeProp(layout, 'rowsTop'))
+  const cols = expectRangeNumber(getRangeProp(layout, 'cols'))
+  const boxMaxSizeX = expectRangeNumber(getRangeProp(layout, 'boxMaxSizeX'))
+  const contentHeight = expectRangeNumber(getRangeProp(layout, 'contentHeight'))
+  const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
+
+  check(laws, 'getGridLayout preserves item count over range evaluation', items.lengthMin === 6 && items.lengthMax === 6, () => ({
+    windowWidth,
+    itemCountMin: items.lengthMin,
+    itemCountMax: items.lengthMax,
+    expectedItemCount: 6,
+  }), {kind: 'range', targets: ['getGridLayout.items']})
+
+  check(laws, 'getGridLayout rowsTop stays increasing over range evaluation', rowsTop.isStrictlyIncreasingNumeric, () => ({
+    windowWidth,
+    rowsTopCountMin: rowsTop.lengthMin,
+    rowsTopCountMax: rowsTop.lengthMax,
+  }), {kind: 'range', targets: ['getGridLayout.rowsTop']})
+
+  check(laws, 'getGridLayout rowsTop count matches row count over range evaluation', rowsTop.lengthMin === 3 && rowsTop.lengthMax === 3, () => ({
+    windowWidth,
+    rowsTopCountMin: rowsTop.lengthMin,
+    rowsTopCountMax: rowsTop.lengthMax,
+    expectedRowsTopCount: 3,
+  }), {kind: 'range', targets: ['getGridLayout.rowsTop']})
+
+  const lastRowTop = rowsTop.last == null ? null : expectRangeNumber(rowsTop.last)
+  check(laws, 'getGridLayout content height comes from last rowsTop over range evaluation', lastRowTop != null && rangesEqual(contentHeight, lastRowTop), () => ({
+    windowWidth,
+    contentHeight: describeRange(contentHeight),
+    expectedContentHeight: lastRowTop == null ? 'missing' : describeRange(lastRowTop),
+  }), {kind: 'range', targets: ['getGridLayout.contentHeight', 'getGridLayout.rowsTop']})
+
+  if (items.items == null) return
+  let slotsMatch = true
+  let firstSlotFailure: null | Record<string, number | string> = null
+  for (let itemIndex = 0; itemIndex < items.items.length; itemIndex++) {
+    const item = expectRangeObject(items.items[itemIndex]!)
+    const layoutBox = getRangeObjectProp(item, 'layoutBox')
+    const x = getRangeNumberProp(layoutBox, 'x')
+    const sizeX = getRangeNumberProp(layoutBox, 'sizeX')
+    const {row, column} = gridSlot(itemIndex, cols.min)
+    const actualCenterX = addRanges(x, divideRange(sizeX, 2))
+    const expectedCenterX = addRanges(
+      rangeNumber(boxesGapX + column * boxesGapX, boxesGapX + column * boxesGapX, false),
+      addRanges(mulRange(boxMaxSizeX, column), divideRange(boxMaxSizeX, 2)),
+    )
+    if (!rangesEqual(actualCenterX, expectedCenterX)) {
+      slotsMatch = false
+      firstSlotFailure ??= {
+        windowWidth,
+        itemIndex,
+        row,
+        column,
+        actualCenterX: describeRange(actualCenterX),
+        expectedCenterX: describeRange(expectedCenterX),
+      }
+    }
+  }
+  check(laws, 'getGridLayout keeps column centers over range evaluation', slotsMatch, () => firstSlotFailure ?? {
+    windowWidth,
+  }, {kind: 'range', targets: ['getGridLayout.items.layoutBox']})
+}
+
+function verifyGetGridLayoutRangeAcrossWidthPartitions(
+  sourceText: string,
+  autoContractOverrides: Record<string, FunctionOverride>,
+  laws: Map<string, InternalLawSummary>,
+) {
+  const analyzer = new LoweredProgramAnalyzer(sourceText, {
+    prompt1DLineHeight,
+    prompt2DLineHeight,
+    prompt2DMaxLines,
+    promptPaddingBottom,
+  }, autoContractOverrides)
+
+  const layoutSources = rangeArray([
+    rangePhotoSource(1, 400),
+    rangePhotoSource(1.5, 700),
+    rangePhotoSource(0.75, 480),
+    rangePhotoSource(2, 900),
+    rangePhotoSource(0.5, 360),
+    rangePhotoSource(1.2, 640),
+  ])
+  const partitions = partitionWidthRangeByCols(analyzer, 320, 1600)
+  const coversInterval =
+    partitions.length > 0 &&
+    partitions[0]!.widthMin === 320 &&
+    partitions.at(-1)!.widthMax === 1600 &&
+    partitions.every((partition, index) =>
+      index === 0 ? true : partition.widthMin === partitions[index - 1]!.widthMax + 1)
+  check(laws, 'getGridLayout partitions width intervals by concrete cols changes', coversInterval, () => ({
+    widthMin: 320,
+    widthMax: 1600,
+    partitions: describeIntegerBands(partitions.map(partition => ({
+      inputMin: partition.widthMin,
+      inputMax: partition.widthMax,
+      value: partition.cols,
+    }))),
+  }), {kind: 'range', targets: ['colsBoxMaxSizeXF.cols']})
+  check(laws, 'getGridLayout discovered cols bands stay monotone', partitions.every((partition, index) =>
+    index === 0 ? true : partition.cols > partitions[index - 1]!.cols), () => ({
+    partitions: describeIntegerBands(partitions.map(partition => ({
+      inputMin: partition.widthMin,
+      inputMax: partition.widthMax,
+      value: partition.cols,
+    }))),
+  }), {kind: 'range', targets: ['colsBoxMaxSizeXF.cols']})
+
+  for (const partition of partitions) {
+    const layout = expectRangeObject(joinRangeCases(analyzer.evaluateFunctionRange('getGridLayout', [
+      layoutSources,
+      rangeNumber(partition.widthMin, partition.widthMax, true),
+    ])))
+    const items = expectRangeArray(getRangeProp(layout, 'items'))
+    const rowsTop = expectRangeArray(getRangeProp(layout, 'rowsTop'))
+    const cols = expectRangeNumber(getRangeProp(layout, 'cols'))
+    const boxMaxSizeX = expectRangeNumber(getRangeProp(layout, 'boxMaxSizeX'))
+    const contentHeight = expectRangeNumber(getRangeProp(layout, 'contentHeight'))
+    const expectedRowCount = Math.ceil(layoutSources.lengthMax / partition.cols)
+    const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
+
+    check(laws, 'getGridLayout keeps cols fixed inside width partitions', cols.min === partition.cols && cols.max === partition.cols, () => ({
+      widthMin: partition.widthMin,
+      widthMax: partition.widthMax,
+      colsMin: cols.min,
+      colsMax: cols.max,
+      expectedCols: partition.cols,
+    }), {kind: 'range', targets: ['getGridLayout.cols']})
+
+    check(laws, 'getGridLayout keeps item count across width partitions', items.lengthMin === 6 && items.lengthMax === 6, () => ({
+      widthMin: partition.widthMin,
+      widthMax: partition.widthMax,
+      itemCountMin: items.lengthMin,
+      itemCountMax: items.lengthMax,
+    }), {kind: 'range', targets: ['getGridLayout.items']})
+
+    check(laws, 'getGridLayout keeps row count across width partitions', rowsTop.lengthMin === expectedRowCount + 1 && rowsTop.lengthMax === expectedRowCount + 1, () => ({
+      widthMin: partition.widthMin,
+      widthMax: partition.widthMax,
+      cols: partition.cols,
+      rowsTopCountMin: rowsTop.lengthMin,
+      rowsTopCountMax: rowsTop.lengthMax,
+      expectedRowsTopCount: expectedRowCount + 1,
+    }), {kind: 'range', targets: ['getGridLayout.rowsTop']})
+
+    const lastRowTop = rowsTop.last == null ? null : expectRangeNumber(rowsTop.last)
+    check(laws, 'getGridLayout keeps content height tied to rowsTop across width partitions', lastRowTop != null && rangesEqual(contentHeight, lastRowTop), () => ({
+      widthMin: partition.widthMin,
+      widthMax: partition.widthMax,
+      cols: partition.cols,
+      contentHeight: describeRange(contentHeight),
+      expectedContentHeight: lastRowTop == null ? 'missing' : describeRange(lastRowTop),
+    }), {kind: 'range', targets: ['getGridLayout.contentHeight', 'getGridLayout.rowsTop']})
+
+    if (items.items == null) continue
+    let slotsMatch = true
+    let firstSlotFailure: null | Record<string, number | string> = null
+    for (let itemIndex = 0; itemIndex < items.items.length; itemIndex++) {
+      const item = expectRangeObject(items.items[itemIndex]!)
+      const layoutBox = getRangeObjectProp(item, 'layoutBox')
+      const x = getRangeNumberProp(layoutBox, 'x')
+      const sizeX = getRangeNumberProp(layoutBox, 'sizeX')
+      const {row, column} = gridSlot(itemIndex, partition.cols)
+      const actualCenterX = addRanges(x, divideRange(sizeX, 2))
+      const expectedCenterX = addRanges(
+        rangeNumber(boxesGapX + column * boxesGapX, boxesGapX + column * boxesGapX, false),
+        addRanges(mulRange(boxMaxSizeX, column), divideRange(boxMaxSizeX, 2)),
+      )
+      if (!rangesEqual(actualCenterX, expectedCenterX)) {
+        const shrunkWidthBand = shrinkIntegerRangeByFailingPredicate(
+          partition.widthMin,
+          partition.widthMax,
+          (widthMin, widthMax) => getGridCenterFailureForWidthBand(
+            analyzer,
+            layoutSources,
+            widthMin,
+            widthMax,
+            partition.cols,
+          ) != null,
+        )
+        const shrunkFailure = getGridCenterFailureForWidthBand(
+          analyzer,
+          layoutSources,
+          shrunkWidthBand.min,
+          shrunkWidthBand.max,
+          partition.cols,
+        )
+        slotsMatch = false
+        firstSlotFailure ??= {
+          widthMin: shrunkWidthBand.min,
+          widthMax: shrunkWidthBand.max,
+          cols: partition.cols,
+          itemIndex,
+          row,
+          column,
+          actualCenterX: shrunkFailure == null ? describeRange(actualCenterX) : shrunkFailure.actualCenterX,
+          expectedCenterX: shrunkFailure == null ? describeRange(expectedCenterX) : shrunkFailure.expectedCenterX,
+          partitionWidthMin: partition.widthMin,
+          partitionWidthMax: partition.widthMax,
+        }
+      }
+    }
+    check(laws, 'getGridLayout keeps column centers across width partitions', slotsMatch, () => firstSlotFailure ?? {
+      widthMin: partition.widthMin,
+      widthMax: partition.widthMax,
+      cols: partition.cols,
+    }, {kind: 'range', targets: ['getGridLayout.items.layoutBox']})
+  }
 }
 
 export async function runPhotoGalleryStaticVerificationForSourceFile(sourceFilePath: string): Promise<StaticLayoutVerificationReport> {
@@ -308,10 +543,25 @@ function verifyGetGridLayoutConcrete(
       const promptBox = expectObject(getProp(prompt, 'box'))
       const left = expectConcreteNumber(getProp(layoutBox, 'x'))
       const layoutWidth = expectConcreteNumber(getProp(layoutBox, 'sizeX'))
+      const layoutTop = expectConcreteNumber(getProp(layoutBox, 'y'))
+      const layoutHeight = expectConcreteNumber(getProp(layoutBox, 'sizeY'))
       const right = left + expectConcreteNumber(getProp(layoutBox, 'sizeX'))
       const {row, column} = gridSlot(i, cols)
-      const bottom = expectConcreteNumber(getProp(layoutBox, 'y')) + expectConcreteNumber(getProp(layoutBox, 'sizeY'))
+      const bottom = layoutTop + layoutHeight
+      const layoutRect = {left, top: layoutTop, width: layoutWidth, height: layoutHeight}
       maxBottom = Math.max(maxBottom, bottom)
+      checkFact(laws, 'getGridLayout keeps each layout box inside viewport width as geometry facts', {
+        kind: 'concrete-rect-x-within',
+        rect: layoutRect,
+        bounds: {left: 0, right: windowWidth},
+        tolerance: epsilon,
+      }, () => ({
+        windowWidth,
+        cols,
+        itemIndex: i,
+        row,
+        column,
+      }), {targets: [`getGridLayout.items.${i}.layoutBox`]})
       if (left < -epsilon || right > windowWidth + epsilon) {
         withinViewport = false
         viewportFailure ??= {
@@ -351,6 +601,23 @@ function verifyGetGridLayoutConcrete(
         const next = expectObject(items.items[i + 1]!)
         const nextLayoutBox = expectObject(getProp(next, 'layoutBox'))
         const nextLeft = expectConcreteNumber(getProp(nextLayoutBox, 'x'))
+        const nextTop = expectConcreteNumber(getProp(nextLayoutBox, 'y'))
+        const nextWidth = expectConcreteNumber(getProp(nextLayoutBox, 'sizeX'))
+        const nextHeight = expectConcreteNumber(getProp(nextLayoutBox, 'sizeY'))
+        if (row === gridSlot(i + 1, cols).row) {
+          checkFact(laws, 'getGridLayout row item boxes do not overlap horizontally as geometry facts', {
+            kind: 'concrete-rects-do-not-overlap-x',
+            left: layoutRect,
+            right: {left: nextLeft, top: nextTop, width: nextWidth, height: nextHeight},
+            tolerance: epsilon,
+          }, () => ({
+            windowWidth,
+            cols,
+            leftItemIndex: i,
+            rightItemIndex: i + 1,
+            row,
+          }), {targets: [`getGridLayout.items.${i}.layoutBox`, `getGridLayout.items.${i + 1}.layoutBox`]})
+        }
         if (right > nextLeft + epsilon && row === gridSlot(i + 1, cols).row) {
           horizontalNonOverlap = false
           overlapFailure ??= {
@@ -395,216 +662,7 @@ function gridSlot(index: number, cols: number) {
   }
 }
 
-function verifyGetGridLayoutRange(
-  sourceText: string,
-  autoContractOverrides: Record<string, FunctionOverride>,
-  laws: Map<string, InternalLawSummary>,
-) {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {
-    prompt1DLineHeight,
-    prompt2DLineHeight,
-    prompt2DMaxLines,
-    promptPaddingBottom,
-  }, autoContractOverrides)
-
-  const layoutSources = rangePhotoSources()
-  const windowWidth = 760
-  const layout = expectRangeObject(joinRangeCases(analyzer.evaluateFunctionRange('getGridLayout', [
-    layoutSources,
-    rangeNumber(windowWidth, windowWidth, true),
-  ])))
-  const items = expectRangeArray(getRangeProp(layout, 'items'))
-  const rowsTop = expectRangeArray(getRangeProp(layout, 'rowsTop'))
-  const cols = expectRangeNumber(getRangeProp(layout, 'cols'))
-  const boxMaxSizeX = expectRangeNumber(getRangeProp(layout, 'boxMaxSizeX'))
-  const contentHeight = expectRangeNumber(getRangeProp(layout, 'contentHeight'))
-  const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
-
-  check(laws, 'getGridLayout preserves item count over range evaluation', items.lengthMin === 6 && items.lengthMax === 6, () => ({
-    windowWidth,
-    itemCountMin: items.lengthMin,
-    itemCountMax: items.lengthMax,
-    expectedItemCount: 6,
-  }), {kind: 'range', targets: ['getGridLayout.return.items.length']})
-
-  check(laws, 'getGridLayout rowsTop stays increasing over range evaluation', rowsTop.isStrictlyIncreasingNumeric, () => ({
-    windowWidth,
-    rowsTopCountMin: rowsTop.lengthMin,
-    rowsTopCountMax: rowsTop.lengthMax,
-  }), 'range')
-
-  check(laws, 'getGridLayout rowsTop count matches row count over range evaluation', rowsTop.lengthMin === 3 && rowsTop.lengthMax === 3, () => ({
-    windowWidth,
-    rowsTopCountMin: rowsTop.lengthMin,
-    rowsTopCountMax: rowsTop.lengthMax,
-    expectedRowsTopCount: 3,
-  }), 'range')
-
-  const lastRowTop = rowsTop.last == null ? null : expectRangeNumber(rowsTop.last)
-  check(laws, 'getGridLayout content height comes from last rowsTop over range evaluation', lastRowTop != null && rangesEqual(contentHeight, lastRowTop), () => ({
-    windowWidth,
-    contentHeight: describeRange(contentHeight),
-    expectedContentHeight: lastRowTop == null ? 'missing' : describeRange(lastRowTop),
-  }), {kind: 'range', targets: ['getGridLayout.return.contentHeight', 'getGridLayout.return.rowsTop.last']})
-
-  if (items.items == null) return
-  let slotsMatch = true
-  let firstSlotFailure: null | Record<string, number | string> = null
-  for (let itemIndex = 0; itemIndex < items.items.length; itemIndex++) {
-    const item = expectRangeObject(items.items[itemIndex]!)
-    const layoutBox = getRangeObjectProp(item, 'layoutBox')
-    const x = getRangeNumberProp(layoutBox, 'x')
-    const sizeX = getRangeNumberProp(layoutBox, 'sizeX')
-    const {row, column} = gridSlot(itemIndex, cols.min)
-    const actualCenterX = addRanges(x, divideRange(sizeX, 2))
-    const expectedCenterX = addRanges(
-      rangeNumber(boxesGapX + column * boxesGapX, boxesGapX + column * boxesGapX, false),
-      addRanges(mulRange(boxMaxSizeX, column), divideRange(boxMaxSizeX, 2)),
-    )
-    if (!rangesEqual(actualCenterX, expectedCenterX)) {
-      slotsMatch = false
-      firstSlotFailure ??= {
-        windowWidth,
-        itemIndex,
-        row,
-        column,
-        actualCenterX: describeRange(actualCenterX),
-        expectedCenterX: describeRange(expectedCenterX),
-      }
-    }
-  }
-  check(laws, 'getGridLayout keeps column centers over range evaluation', slotsMatch, () => firstSlotFailure ?? {
-    windowWidth,
-  }, {kind: 'range', targets: ['getGridLayout.return.items[].layoutBox.x', 'getGridLayout.return.items[].layoutBox.sizeX']})
-}
-
-function verifyGetGridLayoutRangeAcrossWidthPartitions(
-  sourceText: string,
-  autoContractOverrides: Record<string, FunctionOverride>,
-  laws: Map<string, InternalLawSummary>,
-) {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {
-    prompt1DLineHeight,
-    prompt2DLineHeight,
-    prompt2DMaxLines,
-    promptPaddingBottom,
-  }, autoContractOverrides)
-
-  const layoutSources = rangePhotoSources()
-  const partitions = partitionWidthRangeByCols(analyzer, 320, 1600)
-  const coversInterval = widthPartitionsCover(partitions, 320, 1600)
-  check(laws, 'getGridLayout partitions width intervals by concrete cols changes', coversInterval, () => ({
-    widthMin: 320,
-    widthMax: 1600,
-    partitions: describeWidthPartitions(partitions),
-  }), 'range')
-  check(laws, 'getGridLayout discovered cols bands stay monotone', widthPartitionColsIncrease(partitions), () => ({
-    partitions: describeWidthPartitions(partitions),
-  }), 'range')
-
-  for (const partition of partitions) {
-    const layout = expectRangeObject(joinRangeCases(analyzer.evaluateFunctionRange('getGridLayout', [
-      layoutSources,
-      rangeNumber(partition.widthMin, partition.widthMax, true),
-    ])))
-    const items = expectRangeArray(getRangeProp(layout, 'items'))
-    const rowsTop = expectRangeArray(getRangeProp(layout, 'rowsTop'))
-    const cols = expectRangeNumber(getRangeProp(layout, 'cols'))
-    const boxMaxSizeX = expectRangeNumber(getRangeProp(layout, 'boxMaxSizeX'))
-    const contentHeight = expectRangeNumber(getRangeProp(layout, 'contentHeight'))
-    const expectedRowCount = Math.ceil(layoutSources.lengthMax / partition.cols)
-    const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
-
-    check(laws, 'getGridLayout keeps cols fixed inside width partitions', cols.min === partition.cols && cols.max === partition.cols, () => ({
-      widthMin: partition.widthMin,
-      widthMax: partition.widthMax,
-      colsMin: cols.min,
-      colsMax: cols.max,
-      expectedCols: partition.cols,
-    }), {kind: 'range', targets: ['getGridLayout.return.cols']})
-
-    check(laws, 'getGridLayout keeps item count across width partitions', items.lengthMin === 6 && items.lengthMax === 6, () => ({
-      widthMin: partition.widthMin,
-      widthMax: partition.widthMax,
-      itemCountMin: items.lengthMin,
-      itemCountMax: items.lengthMax,
-    }), 'range')
-
-    check(laws, 'getGridLayout keeps row count across width partitions', rowsTop.lengthMin === expectedRowCount + 1 && rowsTop.lengthMax === expectedRowCount + 1, () => ({
-      widthMin: partition.widthMin,
-      widthMax: partition.widthMax,
-      cols: partition.cols,
-      rowsTopCountMin: rowsTop.lengthMin,
-      rowsTopCountMax: rowsTop.lengthMax,
-      expectedRowsTopCount: expectedRowCount + 1,
-    }), 'range')
-
-    const lastRowTop = rowsTop.last == null ? null : expectRangeNumber(rowsTop.last)
-    check(laws, 'getGridLayout keeps content height tied to rowsTop across width partitions', lastRowTop != null && rangesEqual(contentHeight, lastRowTop), () => ({
-      widthMin: partition.widthMin,
-      widthMax: partition.widthMax,
-      cols: partition.cols,
-      contentHeight: describeRange(contentHeight),
-      expectedContentHeight: lastRowTop == null ? 'missing' : describeRange(lastRowTop),
-    }), {kind: 'range', targets: ['getGridLayout.return.contentHeight', 'getGridLayout.return.rowsTop.last']})
-
-    if (items.items == null) continue
-    let slotsMatch = true
-    let firstSlotFailure: null | Record<string, number | string> = null
-    for (let itemIndex = 0; itemIndex < items.items.length; itemIndex++) {
-      const item = expectRangeObject(items.items[itemIndex]!)
-      const layoutBox = getRangeObjectProp(item, 'layoutBox')
-      const x = getRangeNumberProp(layoutBox, 'x')
-      const sizeX = getRangeNumberProp(layoutBox, 'sizeX')
-      const {row, column} = gridSlot(itemIndex, partition.cols)
-      const actualCenterX = addRanges(x, divideRange(sizeX, 2))
-      const expectedCenterX = addRanges(
-        rangeNumber(boxesGapX + column * boxesGapX, boxesGapX + column * boxesGapX, false),
-        addRanges(mulRange(boxMaxSizeX, column), divideRange(boxMaxSizeX, 2)),
-      )
-      if (!rangesEqual(actualCenterX, expectedCenterX)) {
-        const shrunkWidthBand = shrinkIntegerRangeByFailingPredicate(
-          partition.widthMin,
-          partition.widthMax,
-          (widthMin, widthMax) => getGridCenterFailureForWidthBand(
-            analyzer,
-            layoutSources,
-            widthMin,
-            widthMax,
-            partition.cols,
-          ) != null,
-        )
-        const shrunkFailure = getGridCenterFailureForWidthBand(
-          analyzer,
-          layoutSources,
-          shrunkWidthBand.min,
-          shrunkWidthBand.max,
-          partition.cols,
-        )
-        slotsMatch = false
-        firstSlotFailure ??= {
-          widthMin: shrunkWidthBand.min,
-          widthMax: shrunkWidthBand.max,
-          cols: partition.cols,
-          itemIndex,
-          row,
-          column,
-          actualCenterX: shrunkFailure == null ? describeRange(actualCenterX) : shrunkFailure.actualCenterX,
-          expectedCenterX: shrunkFailure == null ? describeRange(expectedCenterX) : shrunkFailure.expectedCenterX,
-          partitionWidthMin: partition.widthMin,
-          partitionWidthMax: partition.widthMax,
-        }
-      }
-    }
-    check(laws, 'getGridLayout keeps column centers across width partitions', slotsMatch, () => firstSlotFailure ?? {
-      widthMin: partition.widthMin,
-      widthMax: partition.widthMax,
-      cols: partition.cols,
-    }, {kind: 'range', targets: ['getGridLayout.return.items[].layoutBox.x', 'getGridLayout.return.items[].layoutBox.sizeX']})
-  }
-}
-
-function partitionWidthRangeByCols(analyzer: LoweredProgramAnalyzer, widthMin: number, widthMax: number): WidthColsPartition[] {
+function partitionWidthRangeByCols(analyzer: LoweredProgramAnalyzer, widthMin: number, widthMax: number) {
   return partitionIntegerRangeByConcreteNumberValue(widthMin, widthMax, width => {
     const cases = analyzer.evaluateFunction('colsBoxMaxSizeXF', [concreteNumber(width)], 'concrete')
     if (cases.length !== 1) throw new Error(`colsBoxMaxSizeXF produced ${cases.length} concrete cases at width ${width}`)
@@ -614,31 +672,6 @@ function partitionWidthRangeByCols(analyzer: LoweredProgramAnalyzer, widthMin: n
     widthMax: partition.inputMax,
     cols: partition.value,
   }))
-}
-
-function widthPartitionsCover(partitions: WidthColsPartition[], widthMin: number, widthMax: number) {
-  if (partitions.length === 0) return false
-  if (partitions[0]!.widthMin !== widthMin) return false
-  if (partitions.at(-1)!.widthMax !== widthMax) return false
-  for (let i = 1; i < partitions.length; i++) {
-    if (partitions[i]!.widthMin !== partitions[i - 1]!.widthMax + 1) return false
-  }
-  return true
-}
-
-function widthPartitionColsIncrease(partitions: WidthColsPartition[]) {
-  for (let i = 1; i < partitions.length; i++) {
-    if (partitions[i]!.cols <= partitions[i - 1]!.cols) return false
-  }
-  return true
-}
-
-function describeWidthPartitions(partitions: WidthColsPartition[]) {
-  return describeIntegerBands(partitions.map(partition => ({
-    inputMin: partition.widthMin,
-    inputMax: partition.widthMax,
-    value: partition.cols,
-  })))
 }
 
 function getGridCenterFailureForWidthBand(
@@ -690,33 +723,22 @@ function rangePhotoSource(ar: number, naturalSizeX: number) {
   })
 }
 
-function rangePhotoSources() {
-  return rangeArray([
-    rangePhotoSource(1, 400),
-    rangePhotoSource(1.5, 700),
-    rangePhotoSource(0.75, 480),
-    rangePhotoSource(2, 900),
-    rangePhotoSource(0.5, 360),
-    rangePhotoSource(1.2, 640),
-  ])
-}
-
-function getRangeObjectProp(object: ReturnType<typeof expectRangeObject>, key: string) {
+function getRangeObjectProp(object: RangeObjectValue, key: string) {
   return expectRangeObject(getRangeProp(object, key))
 }
 
-function getRangeNumberProp(object: ReturnType<typeof expectRangeObject>, key: string) {
+function getRangeNumberProp(object: RangeObjectValue, key: string) {
   return expectRangeNumber(getRangeProp(object, key))
 }
 
-function addRanges(left: ReturnType<typeof expectRangeNumber>, right: ReturnType<typeof expectRangeNumber>) {
+function addRanges(left: RangeNumberValue, right: RangeNumberValue) {
   return {
     ...rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger),
     expr: left.expr != null && right.expr != null ? addExpr(left.expr, right.expr) : null,
   }
 }
 
-function mulRange(value: ReturnType<typeof expectRangeNumber>, factor: number) {
+function mulRange(value: RangeNumberValue, factor: number) {
   const products = [value.min * factor, value.max * factor]
   return {
     ...rangeNumber(Math.min(...products), Math.max(...products), value.isInteger && Number.isInteger(factor)),
@@ -724,14 +746,14 @@ function mulRange(value: ReturnType<typeof expectRangeNumber>, factor: number) {
   }
 }
 
-function divideRange(value: ReturnType<typeof expectRangeNumber>, divisor: number) {
+function divideRange(value: RangeNumberValue, divisor: number) {
   return {
     ...rangeNumber(value.min / divisor, value.max / divisor, false),
     expr: value.expr != null ? divExpr(value.expr, constExpr(divisor)) : null,
   }
 }
 
-function rangesEqual(left: ReturnType<typeof expectRangeNumber>, right: ReturnType<typeof expectRangeNumber>) {
+function rangesEqual(left: RangeNumberValue, right: RangeNumberValue) {
   return (
     Math.abs(left.min - right.min) <= epsilon &&
     Math.abs(left.max - right.max) <= epsilon
@@ -742,7 +764,7 @@ function rangesEqual(left: ReturnType<typeof expectRangeNumber>, right: ReturnTy
   )
 }
 
-function describeRange(value: ReturnType<typeof expectRangeNumber>) {
+function describeRange(value: RangeNumberValue) {
   return `[${value.min},${value.max}]${value.isInteger ? ':int' : ''}`
 }
 
@@ -753,30 +775,19 @@ function verifyColsBoxMaxSizeXFRange(analyzer: LoweredProgramAnalyzer, laws: Map
   const cols = expectRangeNumber(getRangeProp(result, 'cols'))
   const boxMaxSizeX = expectRangeNumber(getRangeProp(result, 'boxMaxSizeX'))
 
-  checkFact(laws, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals', {
-    kind: 'range-within',
-    value: cols,
-    min: 1,
-    max: 7,
-  }, () => ({
+  check(laws, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals', cols.min >= 1 && cols.max <= 7, () => ({
     colsMin: cols.min,
     colsMax: cols.max,
-  }), {targets: ['colsBoxMaxSizeXF.return.cols']})
-  checkFact(laws, 'colsBoxMaxSizeXF keeps cols integral over width intervals', {
-    kind: 'range-integer',
-    value: cols,
-  }, () => ({
+  }), 'range')
+  check(laws, 'colsBoxMaxSizeXF keeps cols integral over width intervals', cols.isInteger, () => ({
     colsMin: cols.min,
     colsMax: cols.max,
     colsIsInteger: cols.isInteger ? 'true' : 'false',
-  }), {targets: ['colsBoxMaxSizeXF.return.cols']})
-  checkFact(laws, 'colsBoxMaxSizeXF keeps boxMaxSizeX non-negative over width intervals', {
-    kind: 'range-non-negative',
-    value: boxMaxSizeX,
-  }, () => ({
+  }), 'range')
+  check(laws, 'colsBoxMaxSizeXF keeps boxMaxSizeX non-negative over width intervals', boxMaxSizeX.min >= -epsilon, () => ({
     boxMaxSizeXMin: boxMaxSizeX.min,
     boxMaxSizeXMax: boxMaxSizeX.max,
-  }), {targets: ['colsBoxMaxSizeXF.return.boxMaxSizeX']})
+  }), 'range')
 
   const partitions = partitionWidthRangeByCols(analyzer, 320, 1600)
   for (const partition of partitions) {
@@ -796,7 +807,7 @@ function verifyColsBoxMaxSizeXFRange(analyzer: LoweredProgramAnalyzer, laws: Map
       colsMin: partitionCols.min,
       colsMax: partitionCols.max,
       expectedCols: partition.cols,
-    }), 'range')
+    }), {kind: 'range', targets: ['colsBoxMaxSizeXF.cols']})
     check(laws, 'colsBoxMaxSizeXF fills the horizontal track across width partitions', rangesEqual(
       filledWidth,
       rangeNumber(partition.widthMin, partition.widthMax, true),
@@ -805,7 +816,7 @@ function verifyColsBoxMaxSizeXFRange(analyzer: LoweredProgramAnalyzer, laws: Map
       widthMax: partition.widthMax,
       cols: partition.cols,
       filledWidth: describeRange(filledWidth),
-    }), 'range')
+    }), {kind: 'range', targets: ['colsBoxMaxSizeXF.boxMaxSizeX']})
   }
 }
 
@@ -843,35 +854,45 @@ function verifyMakeItemLayoutGeometry(analyzer: LoweredProgramAnalyzer, laws: Ma
   const layoutSizeY = expectSymbolicNumber(getProp(layoutBox, 'sizeY'))
   const layoutX = expectSymbolicNumber(getProp(layoutBox, 'x'))
 
-  check(laws, 'makeItemLayoutGeometry keeps image and layout x aligned', symbolicExprEquals(imageX, layoutX), () => ({
+  checkFact(laws, 'makeItemLayoutGeometry keeps image and layout x aligned', {
+    kind: 'symbolic-equality',
+    left: imageX,
+    right: layoutX,
+  }, () => ({
     imageX: formatScalarExpr(imageX),
     layoutX: formatScalarExpr(layoutX),
-  }), 'symbolic')
-  check(laws, 'makeItemLayoutGeometry keeps prompt x aligned with the image', symbolicExprEquals(promptX, imageX), () => ({
+  }), {targets: ['makeItemLayoutGeometry.imageBox.x', 'makeItemLayoutGeometry.layoutBox.x']})
+  checkFact(laws, 'makeItemLayoutGeometry keeps prompt x aligned with the image', {
+    kind: 'symbolic-equality',
+    left: promptX,
+    right: imageX,
+  }, () => ({
     imageX: formatScalarExpr(imageX),
     promptX: formatScalarExpr(promptX),
-  }), 'symbolic')
-  check(laws, 'makeItemLayoutGeometry puts the prompt directly below the image', symbolicExprEquals(
-    promptY,
-    addExpr(imageY, imageSizeY),
-  ), () => ({
+  }), {targets: ['makeItemLayoutGeometry.prompt.box.x', 'makeItemLayoutGeometry.imageBox.x']})
+  checkFact(laws, 'makeItemLayoutGeometry puts the prompt directly below the image', {
+    kind: 'symbolic-equality',
+    left: promptY,
+    right: addExpr(imageY, imageSizeY),
+  }, () => ({
     promptY: formatScalarExpr(promptY),
     expectedPromptY: formatScalarExpr(addExpr(imageY, imageSizeY)),
-  }), 'symbolic')
-  check(laws, 'makeItemLayoutGeometry derives layout height from image height + prompt height + bottom padding', symbolicExprEquals(
-    layoutSizeY,
-    addExpr(addExpr(imageSizeY, promptSizeY), constExpr(promptPaddingBottom)),
-  ), () => ({
+  }), {targets: ['makeItemLayoutGeometry.prompt.box.y', 'makeItemLayoutGeometry.imageBox']})
+  checkFact(laws, 'makeItemLayoutGeometry derives layout height from image height + prompt height + bottom padding', {
+    kind: 'symbolic-equality',
+    left: layoutSizeY,
+    right: addExpr(addExpr(imageSizeY, promptSizeY), constExpr(promptPaddingBottom)),
+  }, () => ({
     layoutSizeY: formatScalarExpr(layoutSizeY),
     expectedLayoutSizeY: formatScalarExpr(addExpr(addExpr(imageSizeY, promptSizeY), constExpr(promptPaddingBottom))),
-  }), 'symbolic')
+  }), {targets: ['makeItemLayoutGeometry.layoutBox.sizeY']})
 }
 
 function verifyColsBoxMaxSizeXF(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>): StaticLayoutCandidateLaw[] {
   const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
+  const samples: StaticLayoutLawWitness[] = []
   let previousCols = 0
   let previousBoxMaxSizeX = Infinity
-  const samples: StaticLayoutLawWitness[] = []
   for (let containerSizeX = 320; containerSizeX <= 1600; containerSizeX++) {
     const cases = analyzer.evaluateFunction('colsBoxMaxSizeXF', [concreteNumber(containerSizeX)], 'concrete')
     check(laws, 'colsBoxMaxSizeXF stays branch-free per concrete width', cases.length === 1, () => ({

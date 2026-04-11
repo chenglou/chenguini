@@ -1,7 +1,9 @@
 import {expect, test} from 'bun:test'
 import {
   buildStaticLayoutReport,
+  check,
   checkFact,
+  checkFacts,
   concreteArray,
   concreteNull,
   concreteNumber,
@@ -12,15 +14,19 @@ import {
   expectRangeArray,
   expectRangeNumber,
   expectRangeObject,
+  expectSymbolicNumber,
   getProp,
   getRangeProp,
   invokeConcreteFunctionValue,
   joinRangeCases,
   LoweredProgramAnalyzer,
+  mulExpr,
   rangeArray,
   rangeNumber,
   rangeObject,
   rangeString,
+  staticLayoutFact,
+  symbolicNumber,
 } from './core.ts'
 import {
   buildStaticContractOverrides,
@@ -63,6 +69,171 @@ function getLaw(report, name) {
   return law
 }
 
+function getFunctionSummary(report, name) {
+  const summary = report.functionSummaries?.find(candidate => candidate.name === name)
+  expect(summary).toBeDefined()
+  return summary
+}
+
+test('law reports keep unknown separate from failures', () => {
+  const laws = new Map()
+  const x = expectSymbolicNumber(symbolicNumber('x'))
+  const y = expectSymbolicNumber(symbolicNumber('y'))
+
+  checkFact(laws, 'non-linear symbolic equality reports unknown', staticLayoutFact.symbolicEquality(
+    mulExpr(x, y),
+    mulExpr(y, x),
+  ), () => ({
+    left: 'x * y',
+    right: 'y * x',
+  }))
+
+  const report = buildStaticLayoutReport('static-layout-facts', 'inline.ts', laws)
+  const law = getLaw(report, 'non-linear symbolic equality reports unknown')
+
+  expect(report.phase).toBe('error')
+  expect(law.status).toBe('unknown')
+  expect(law.firstFailure).toBeUndefined()
+  expect(law.firstUnknown.reason).toBe('symbolic equality is not linear')
+  expect(law.firstUnknown.witness.left).toBe('x * y')
+})
+
+test('range facts compose under one law', () => {
+  const laws = new Map()
+
+  checkFacts(laws, 'range facts share one law summary', [
+    staticLayoutFact.rangeEquality(rangeNumber(10, 20, true), rangeNumber(10, 20, true)),
+    staticLayoutFact.rangeNonNegative(rangeNumber(0, 12, true)),
+    staticLayoutFact.rangeArrayLength(rangeArray([rangeNumber(1, 1, true), rangeNumber(2, 2, true)]), 2),
+  ], () => ({
+    case: 'range facts',
+  }))
+
+  const report = buildStaticLayoutReport('static-layout-facts', 'inline.ts', laws)
+  const law = getLaw(report, 'range facts share one law summary')
+
+  expect(report.phase).toBe('ready')
+  expect(law.status).toBe('pass')
+  expect(law.kind).toBe('range')
+  expect(law.checks).toBe(3)
+})
+
+test('geometry facts compose under one law', () => {
+  const laws = new Map()
+  const left = {left: 0, top: 10, width: 40, height: 20}
+  const right = {left: 48, top: 12, width: 32, height: 18}
+
+  checkFacts(laws, 'geometry facts share one law summary', [
+    staticLayoutFact.concreteRectXWithin(left, {left: 0, right: 100}),
+    staticLayoutFact.concreteRectYWithin(right, {top: 0, bottom: 40}),
+    staticLayoutFact.concreteRectsDoNotOverlapX(left, right),
+  ], () => ({
+    case: 'geometry facts',
+  }))
+
+  const report = buildStaticLayoutReport('static-layout-facts', 'inline.ts', laws)
+  const law = getLaw(report, 'geometry facts share one law summary')
+
+  expect(report.phase).toBe('ready')
+  expect(law.status).toBe('pass')
+  expect(law.kind).toBe('concrete-fixture')
+  expect(law.checks).toBe(3)
+})
+
+test('geometry fact failures include visual proof packets', () => {
+  const laws = new Map()
+
+  checkFact(laws, 'overflowing rect carries a proof packet', staticLayoutFact.concreteRectXWithin(
+    {left: -5, top: 0, width: 120, height: 10},
+    {left: 0, right: 100},
+  ), () => ({
+    case: 'overflow',
+  }))
+
+  const report = buildStaticLayoutReport('static-layout-facts', 'inline.ts', laws)
+  const law = getLaw(report, 'overflowing rect carries a proof packet')
+
+  expect(report.phase).toBe('error')
+  expect(law.status).toBe('fail')
+  expect(law.firstFailure.leftOverflowBy).toBe(5)
+  expect(law.firstFailure.rightOverflowBy).toBe(15)
+  expect(law.firstFailure.overflowBy).toBe(15)
+  expect(String(law.firstFailure.geometrySvg).startsWith('<svg ')).toBe(true)
+})
+
+test('law summaries record proof provenance', () => {
+  const laws = new Map()
+
+  check(laws, 'mixed proof law', true, () => ({
+    case: 'manual',
+  }))
+  checkFact(laws, 'mixed proof law', staticLayoutFact.concreteClose(10, 10), () => ({
+    case: 'fact',
+  }))
+
+  const report = buildStaticLayoutReport('static-layout-facts', 'inline.ts', laws)
+  const law = getLaw(report, 'mixed proof law')
+
+  expect(law.status).toBe('pass')
+  expect(law.checks).toBe(2)
+  expect(law.proofs).toEqual([
+    {mechanism: 'manual-check', checks: 1},
+    {mechanism: 'concrete-close', checks: 1},
+  ])
+})
+
+test('law summaries and reports record proof targets', () => {
+  const laws = new Map()
+
+  checkFact(laws, 'viewport law', staticLayoutFact.concreteRectXWithin(
+    {left: 0, top: 0, width: 100, height: 20},
+    {left: 0, right: 120},
+  ), () => ({
+    case: 'inside viewport',
+  }), {
+    targets: ['getGridLayout.items[].layoutBox.x', 'getGridLayout.items[].layoutBox.sizeX'],
+  })
+  check(laws, 'viewport law', true, () => ({
+    case: 'prompt width',
+  }), {
+    targets: ['getGridLayout.items[].layoutBox.sizeX', 'getGridLayout.items[].prompt.box.sizeX'],
+  })
+
+  const report = buildStaticLayoutReport('static-layout-facts', 'inline.ts', laws)
+  const law = getLaw(report, 'viewport law')
+
+  expect(law.targets).toEqual([
+    {
+      target: 'getGridLayout.items[].layoutBox.sizeX',
+      checks: 2,
+      proofs: [
+        {mechanism: 'concrete-rect-x-within', checks: 1},
+        {mechanism: 'manual-check', checks: 1},
+      ],
+    },
+    {
+      target: 'getGridLayout.items[].layoutBox.x',
+      checks: 1,
+      proofs: [{mechanism: 'concrete-rect-x-within', checks: 1}],
+    },
+    {
+      target: 'getGridLayout.items[].prompt.box.sizeX',
+      checks: 1,
+      proofs: [{mechanism: 'manual-check', checks: 1}],
+    },
+  ])
+  expect(report.coverage.find(target => target.target === 'getGridLayout.items[].layoutBox.sizeX')).toEqual({
+    target: 'getGridLayout.items[].layoutBox.sizeX',
+    checks: 2,
+    status: 'pass',
+    laws: ['viewport law'],
+    proofs: [
+      {mechanism: 'concrete-rect-x-within', checks: 1},
+      {mechanism: 'manual-check', checks: 1},
+    ],
+  })
+})
+
 // Proof surface stays ready.
 test('photo-gallery static verifier keeps its current proof surface', async () => {
   const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
@@ -72,7 +243,6 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
 
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
-  expect(getLaw(report, 'getGridLayout keeps each item centered in its column slot')?.status).toBe('pass')
   expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation')?.status).toBe('pass')
   expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation')?.kind).toBe('range')
   expect(getLaw(report, 'getGridLayout keeps column centers across width partitions')?.status).toBe('pass')
@@ -81,13 +251,11 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
   expect(getLaw(report, 'getGridLayout keeps row count across width partitions')?.status).toBe('pass')
   expect(getLaw(report, 'makeItemLayoutGeometry keeps prompt x aligned with the image')?.kind).toBe('symbolic')
   expect(getLaw(report, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals')?.kind).toBe('range')
-  expect(getLaw(report, 'colsBoxMaxSizeXF keeps cols in supported range over width intervals')?.proofs?.[0]?.mechanism).toBe('range-within')
-  expect(report.coverage.some(summary => summary.target === 'colsBoxMaxSizeXF.return.cols')).toBe(true)
-  expect(report.functionSummaries?.some(summary => summary.name === 'measurePromptLayout' && summary.domains.includes('range'))).toBe(true)
-  expect(report.candidateLaws?.some(candidate => candidate.name.includes('boxMaxSizeX'))).toBe(true)
   expect(getLaw(report, 'colsBoxMaxSizeXF fills the horizontal track across width partitions')?.status).toBe('pass')
   expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.kind).toBe('concrete-sweep')
   expect(getLaw(report, 'colsBoxMaxSizeXF exactly fills the horizontal track')?.checks).toBe(1281)
+  expect(report.candidateLaws?.some(candidate => candidate.name === 'colsBoxMaxSizeXF sweep suggests filledWidth = containerSizeX')).toBe(false)
+  expect(report.candidateLaws?.some(candidate => candidate.name === 'colsBoxMaxSizeXF sweep observed cols in 1..6')).toBe(true)
 })
 
 test('photo-gallery discovered cols bands agree with representative concrete widths', async () => {
@@ -135,24 +303,6 @@ test('photo-gallery discovered cols bands agree with representative concrete wid
       }
     }
   }
-})
-
-test('static reports keep unknown separate from failures and summarize target coverage', () => {
-  const laws = new Map()
-  checkFact(laws, 'symbolic fact can be unknown', {
-    kind: 'symbolic-equality',
-    left: {kind: 'mul', left: {kind: 'var', name: 'x'}, right: {kind: 'var', name: 'x'}},
-    right: {kind: 'var', name: 'x'},
-  }, () => ({
-    target: 'demo.return.width',
-  }), {targets: ['demo.return.width']})
-
-  const report = buildStaticLayoutReport('unit', 'unit.ts', laws)
-  expect(report.phase).toBe('error')
-  expect(getLaw(report, 'symbolic fact can be unknown')?.status).toBe('unknown')
-  expect(getLaw(report, 'symbolic fact can be unknown')?.firstUnknown?.reason).toBeDefined()
-  expect(report.coverage[0]?.target).toBe('demo.return.width')
-  expect(report.coverage[0]?.status).toBe('unknown')
 })
 
 test('nicer-hacker-news static verifier keeps the row geometry slice ready', async () => {
@@ -224,6 +374,8 @@ test('photo-gallery verifier can auto-load imported sidecar contracts from the s
 
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'getGridLayout row items do not overlap horizontally')?.status).toBe('pass')
+  expect(getFunctionSummary(report, 'measurePromptLayout')?.kind).toBe('return-value')
+  expect(getFunctionSummary(report, 'measurePromptLayout')?.domains).toEqual(['concrete', 'range'])
 })
 
 test('HN comment verifier can auto-load same-file sidecar contracts', async () => {
@@ -232,6 +384,9 @@ test('HN comment verifier can auto-load same-file sidecar contracts', async () =
 
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('pass')
+  expect(getFunctionSummary(report, 'layoutNextLine')?.domains).toEqual(['concrete', 'range'])
+  expect(getFunctionSummary(report, 'walkRichInlineLineRanges')?.domains).toEqual(['concrete'])
+  expect(getFunctionSummary(report, 'pushMergedRect')?.domains).toEqual(['concrete'])
 })
 
 // Mutation canaries.
@@ -270,7 +425,6 @@ test('photo-gallery verifier catches broken column-slot math', async () => {
   expect(law?.firstFailure?.partitionWidthMax).toBeDefined()
   expect(law?.firstFailure?.column).toBe(0)
   expect(law?.firstFailure?.expectedCenterX).toBeDefined()
-  expect(getLaw(report, 'getGridLayout keeps each item centered in its column slot')?.status).toBe('fail')
   expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation')?.status).toBe('fail')
   expect(getLaw(report, 'getGridLayout keeps column centers across width partitions')?.status).toBe('fail')
 })
@@ -302,9 +456,13 @@ test('HN row verifier catches broken comment width math', async () => {
     'width: row.commentLayout.width - params.commentRightGap,',
   )
   const report = runNicerHackerNewsStaticVerification(buggySource)
+  const law = getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')
 
   expect(report.phase).toBe('error')
-  expect(getLaw(report, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math')?.status).toBe('fail')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.rowIndex).toBeDefined()
+  expect(law?.firstFailure?.commentWidth).toBeDefined()
+  expect(law?.firstFailure?.expectedCommentWidth).toBeDefined()
 })
 
 test('HN row verifier catches broken row-top interval math', async () => {
@@ -415,9 +573,13 @@ test('HN comment verifier catches a broken substring offset in text rect geometr
     'const fragmentStart = Math.max(0, start - fragment.textStart + 1)',
   )
   const report = runHNCommentLayoutStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')
 
   expect(report.phase).toBe('error')
-  expect(getLaw(report, 'findHNCommentTextRects returns the expected merged geometry on concrete scenarios')?.status).toBe('fail')
+  expect(law?.status).toBe('fail')
+  expect(law?.firstFailure?.actualRects).toBeDefined()
+  expect(law?.firstFailure?.expectedRects).toBeDefined()
+  expect(String(law?.firstFailure?.geometrySvg).startsWith('<svg ')).toBe(true)
 })
 
 test('HN comment verifier catches a broken midpoint decision in empty-space offsets', async () => {

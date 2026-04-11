@@ -20,6 +20,8 @@ import {
   getProp,
   joinRangeCases,
   LoweredProgramAnalyzer,
+  type ArrayValue,
+  type FunctionOverride,
   type StaticLayoutVerificationReport,
 } from './core'
 import type {RangeValue} from './values'
@@ -202,7 +204,8 @@ export function runMutationCoverage(
   verify: (mutatedSource: string) => StaticLayoutVerificationReport,
 ): MutationCoverageReport {
   const sites = enumerateMutationSites(sourceText)
-  const allMutations = sites.flatMap(site => generateMutations(site))
+  const allMutations: Mutation[] = []
+  for (const site of sites) allMutations.push(...generateMutations(site))
 
   const results: MutationResult[] = []
   for (const mutation of allMutations) {
@@ -238,7 +241,7 @@ export function runMutationCoverage(
 
 type LayoutRect = {x: number; y: number; w: number; h: number; label: string}
 
-function extractGridRects(analyzer: LoweredProgramAnalyzer, layoutSources: any): LayoutRect[] {
+function extractGridRects(analyzer: LoweredProgramAnalyzer, layoutSources: ArrayValue): LayoutRect[] {
   const returns = analyzer.evaluateFunction('getGridLayout', [layoutSources, concreteNumber(800)], 'concrete')
   if (returns.length !== 1) return []
   const layout = expectObject(returns[0]!.value)
@@ -281,7 +284,7 @@ export function renderMutationDiffSVG(
   mutatedSource: string,
   mutation: Mutation,
   externalGlobals: Record<string, number>,
-  overrides: Record<string, any>,
+  overrides: Record<string, FunctionOverride>,
 ): string {
   const layoutSources = makeTestLayoutSources()
   let originalRects: LayoutRect[] = []

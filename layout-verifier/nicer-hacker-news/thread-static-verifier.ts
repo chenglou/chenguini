@@ -1,6 +1,9 @@
 import {
   buildStaticLayoutReport,
   check,
+  checkFact,
+  checkFacts,
+  type ConcreteRect,
   concreteArray,
   concreteNumber,
   concreteObject,
@@ -19,6 +22,9 @@ import {
   rangeArray,
   rangeNumber,
   rangeObject,
+  staticLayoutFact,
+  type RangeRect,
+  type StaticLayoutFact,
   type StaticLayoutVerificationReport,
 } from '../core'
 
@@ -54,10 +60,12 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
   })])))
 
   const rows = expectRangeArray(getRangeProp(layout, 'rows'))
-  check(laws, 'layoutHNThreadVisualGeometry preserves row count over width and height intervals', rows.lengthMin === 3 && rows.lengthMax === 3, () => ({
+  checkFact(laws, 'layoutHNThreadVisualGeometry preserves row count over width and height intervals', staticLayoutFact.rangeArrayLength(rows, 3), () => ({
     rowCountMin: rows.lengthMin,
     rowCountMax: rows.lengthMax,
-  }), 'range')
+  }), {
+    targets: ['layoutHNThreadVisualGeometry.rows[]'],
+  })
   if (rows.items == null || rows.items.length !== 3) return
 
   const firstRow = expectRangeObject(rows.items[0]!)
@@ -72,12 +80,18 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
   const firstCommentRect = getRangeObjectProp(firstRow, 'commentRect')
   const secondCommentRect = getRangeObjectProp(secondRow, 'commentRect')
   const thirdCommentRect = getRangeObjectProp(thirdRow, 'commentRect')
+  const firstRowBox = rangeRectFromObject(firstRowRect)
+  const secondRowBox = rangeRectFromObject(secondRowRect)
+  const thirdRowBox = rangeRectFromObject(thirdRowRect)
+  const firstUserBox = rangeRectFromObject(firstUserRect)
+  const secondUserBox = rangeRectFromObject(secondUserRect)
+  const thirdUserBox = rangeRectFromObject(thirdUserRect)
+  const firstCommentBox = rangeRectFromObject(firstCommentRect)
+  const secondCommentBox = rangeRectFromObject(secondCommentRect)
+  const thirdCommentBox = rangeRectFromObject(thirdCommentRect)
   const firstTop = getRangeNumberProp(firstRowRect, 'top')
-  const firstHeight = getRangeNumberProp(firstRowRect, 'height')
   const secondTop = getRangeNumberProp(secondRowRect, 'top')
-  const secondHeight = getRangeNumberProp(secondRowRect, 'height')
   const thirdTop = getRangeNumberProp(thirdRowRect, 'top')
-  const thirdHeight = getRangeNumberProp(thirdRowRect, 'height')
   const firstUserTop = getRangeNumberProp(firstUserRect, 'top')
   const secondUserTop = getRangeNumberProp(secondUserRect, 'top')
   const thirdUserTop = getRangeNumberProp(thirdUserRect, 'top')
@@ -89,93 +103,82 @@ function verifyThreadVisualGeometryRange(analyzer: LoweredProgramAnalyzer, laws:
   const firstVisibleRowTop = getRangeNumberProp(layout, 'firstVisibleRowTop')
   const contentHeight = getRangeNumberProp(layout, 'contentHeight')
 
-  check(laws, 'layoutHNThreadVisualGeometry keeps row tops contiguous over intervals', rangesEqual(
-    secondTop,
-    firstBottom,
-  ) && rangesEqual(
-    thirdTop,
-    secondBottom,
-  ) && rangesEqual(
-    firstBottom,
-    addRanges(firstTop, firstHeight),
-  ) && rangesEqual(
-    secondBottom,
-    addRanges(secondTop, secondHeight),
-  ) && rangesEqual(
-    thirdBottom,
-    addRanges(thirdTop, thirdHeight),
-  ), () => ({
+  checkFacts(laws, 'layoutHNThreadVisualGeometry keeps row tops contiguous over intervals', [
+    staticLayoutFact.rangeRectTopEquals(secondRowBox, firstBottom),
+    staticLayoutFact.rangeRectTopEquals(thirdRowBox, secondBottom),
+    staticLayoutFact.rangeRectBottomEquals(firstRowBox, firstBottom),
+    staticLayoutFact.rangeRectBottomEquals(secondRowBox, secondBottom),
+    staticLayoutFact.rangeRectBottomEquals(thirdRowBox, thirdBottom),
+  ], () => ({
     secondTop: describeRange(secondTop),
     expectedSecondTop: describeRange(firstBottom),
     thirdTop: describeRange(thirdTop),
     expectedThirdTop: describeRange(secondBottom),
-  }), 'range')
-  check(laws, 'layoutHNThreadVisualGeometry keeps comment x tied to indent math over intervals', rangesEqual(
-    getRangeNumberProp(firstCommentRect, 'left'),
-    rangeNumber(24, 24, true),
-  ) && rangesEqual(
-    getRangeNumberProp(secondCommentRect, 'left'),
-    rangeNumber(48, 48, true),
-  ) && rangesEqual(
-    getRangeNumberProp(thirdCommentRect, 'left'),
-    rangeNumber(72, 72, true),
-  ), () => ({
+  }), {
+    targets: [
+      'layoutHNThreadVisualGeometry.rows[].rowRect.top',
+      'layoutHNThreadVisualGeometry.rows[].rowRect.height',
+      'layoutHNThreadVisualGeometry.rows[].rowBottom',
+    ],
+  })
+  checkFacts(laws, 'layoutHNThreadVisualGeometry keeps comment x tied to indent math over intervals', [
+    staticLayoutFact.rangeRectLeftEquals(firstCommentBox, rangeNumber(24, 24, true)),
+    staticLayoutFact.rangeRectLeftEquals(secondCommentBox, rangeNumber(48, 48, true)),
+    staticLayoutFact.rangeRectLeftEquals(thirdCommentBox, rangeNumber(72, 72, true)),
+  ], () => ({
     firstLeft: describeRange(getRangeNumberProp(firstCommentRect, 'left')),
     secondLeft: describeRange(getRangeNumberProp(secondCommentRect, 'left')),
     thirdLeft: describeRange(getRangeNumberProp(thirdCommentRect, 'left')),
-  }), 'range')
-  check(laws, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals', rangesEqual(
-    firstUserTop,
-    firstTop,
-  ) && rangesEqual(
-    secondUserTop,
-    secondTop,
-  ) && rangesEqual(
-    thirdUserTop,
-    thirdTop,
-  ), () => ({
+  }), {
+    targets: ['layoutHNThreadVisualGeometry.rows[].commentRect.left'],
+  })
+  checkFacts(laws, 'layoutHNThreadVisualGeometry keeps user tops pinned to row tops over intervals', [
+    staticLayoutFact.rangeRectTopEquals(firstUserBox, firstTop),
+    staticLayoutFact.rangeRectTopEquals(secondUserBox, secondTop),
+    staticLayoutFact.rangeRectTopEquals(thirdUserBox, thirdTop),
+  ], () => ({
     firstUserTop: describeRange(firstUserTop),
     expectedFirstUserTop: describeRange(firstTop),
     secondUserTop: describeRange(secondUserTop),
     expectedSecondUserTop: describeRange(secondTop),
     thirdUserTop: describeRange(thirdUserTop),
     expectedThirdUserTop: describeRange(thirdTop),
-  }), 'range')
-  check(laws, 'layoutHNThreadVisualGeometry keeps comment width tied to comment layout width over intervals', rangesEqual(
-    getRangeNumberProp(firstCommentRect, 'width'),
-    rangeNumber(260, 340, true),
-  ) && rangesEqual(
-    getRangeNumberProp(secondCommentRect, 'width'),
-    rangeNumber(220, 280, true),
-  ) && rangesEqual(
-    getRangeNumberProp(thirdCommentRect, 'width'),
-    rangeNumber(180, 240, true),
-  ), () => ({
+  }), {
+    targets: ['layoutHNThreadVisualGeometry.rows[].userRect.top', 'layoutHNThreadVisualGeometry.rows[].rowRect.top'],
+  })
+  checkFacts(laws, 'layoutHNThreadVisualGeometry keeps comment width tied to comment layout width over intervals', [
+    staticLayoutFact.rangeRectWidthEquals(firstCommentBox, rangeNumber(260, 340, true)),
+    staticLayoutFact.rangeRectWidthEquals(secondCommentBox, rangeNumber(220, 280, true)),
+    staticLayoutFact.rangeRectWidthEquals(thirdCommentBox, rangeNumber(180, 240, true)),
+  ], () => ({
     firstWidth: describeRange(getRangeNumberProp(firstCommentRect, 'width')),
     secondWidth: describeRange(getRangeNumberProp(secondCommentRect, 'width')),
     thirdWidth: describeRange(getRangeNumberProp(thirdCommentRect, 'width')),
-  }), 'range')
-  check(laws, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible', rangesEqual(
-    firstVisibleRowIndex,
-    rangeNumber(0, 0, true),
-  ) && rangesEqual(
-    lastVisibleRowIndex,
-    rangeNumber(2, 2, true),
-  ) && rangesEqual(
-    firstVisibleRowTop,
-    rangeNumber(0, 0, true),
-  ), () => ({
+  }), {
+    targets: ['layoutHNThreadVisualGeometry.rows[].commentRect.width'],
+  })
+  checkFacts(laws, 'layoutHNThreadVisualGeometry keeps visible-row bookkeeping fixed when every row is visible', [
+    staticLayoutFact.rangeEquality(firstVisibleRowIndex, rangeNumber(0, 0, true)),
+    staticLayoutFact.rangeEquality(lastVisibleRowIndex, rangeNumber(2, 2, true)),
+    staticLayoutFact.rangeEquality(firstVisibleRowTop, rangeNumber(0, 0, true)),
+  ], () => ({
     firstVisibleRowIndex: describeRange(firstVisibleRowIndex),
     lastVisibleRowIndex: describeRange(lastVisibleRowIndex),
     firstVisibleRowTop: describeRange(firstVisibleRowTop),
-  }), 'range')
-  check(laws, 'layoutHNThreadVisualGeometry derives content height from the last row bottom plus scrollTopCap over intervals', rangesEqual(
-    contentHeight,
-    addRanges(thirdBottom, rangeNumber(40, 40, true)),
-  ), () => ({
+  }), {
+    targets: [
+      'layoutHNThreadVisualGeometry.firstVisibleRowIndex',
+      'layoutHNThreadVisualGeometry.lastVisibleRowIndex',
+      'layoutHNThreadVisualGeometry.firstVisibleRowTop',
+    ],
+  })
+  const expectedContentHeight = addRanges(thirdBottom, rangeNumber(40, 40, true))
+  checkFact(laws, 'layoutHNThreadVisualGeometry derives content height from the last row bottom plus scrollTopCap over intervals', staticLayoutFact.rangeEquality(contentHeight, expectedContentHeight), () => ({
     contentHeight: describeRange(contentHeight),
-    expectedContentHeight: describeRange(addRanges(thirdBottom, rangeNumber(40, 40, true))),
-  }), 'range')
+    expectedContentHeight: describeRange(expectedContentHeight),
+  }), {
+    targets: ['layoutHNThreadVisualGeometry.contentHeight', 'layoutHNThreadVisualGeometry.rows[].rowBottom'],
+  })
 }
 
 function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
@@ -190,16 +193,20 @@ function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<s
     containerWidth: rangeNumber(640, 760, true),
   })])))
 
-  check(laws, 'layoutHNRowHitGeometry preserves row count over height intervals', result.lengthMin === 3 && result.lengthMax === 3, () => ({
+  checkFact(laws, 'layoutHNRowHitGeometry preserves row count over height intervals', staticLayoutFact.rangeArrayLength(result, 3), () => ({
     rowCountMin: result.lengthMin,
     rowCountMax: result.lengthMax,
-  }), 'range')
+  }), {
+    targets: ['layoutHNRowHitGeometry[]'],
+  })
   if (result.items == null || result.items.length !== 3) return
   const rows = result.items
 
   const firstRect = getRangeObjectProp(expectRangeObject(rows[0]!), 'rowRect')
   const secondRect = getRangeObjectProp(expectRangeObject(rows[1]!), 'rowRect')
   const thirdRect = getRangeObjectProp(expectRangeObject(rows[2]!), 'rowRect')
+  const secondBox = rangeRectFromObject(secondRect)
+  const thirdBox = rangeRectFromObject(thirdRect)
   const firstTop = getRangeNumberProp(firstRect, 'top')
   const firstHeight = getRangeNumberProp(firstRect, 'height')
   const secondTop = getRangeNumberProp(secondRect, 'top')
@@ -207,53 +214,77 @@ function verifyRowHitGeometryRange(analyzer: LoweredProgramAnalyzer, laws: Map<s
   const thirdTop = getRangeNumberProp(thirdRect, 'top')
   const thirdHeight = getRangeNumberProp(thirdRect, 'height')
 
-  let widthMatches = true
-  let leftIsZero = true
+  const fullWidthFacts: StaticLayoutFact[] = []
   for (let rowIndex = 0; rowIndex < result.items.length; rowIndex++) {
     const row = expectRangeObject(result.items[rowIndex]!)
     const rowRect = getRangeObjectProp(row, 'rowRect')
-    const width = getRangeNumberProp(rowRect, 'width')
-    const left = getRangeNumberProp(rowRect, 'left')
-    if (left.min !== 0 || left.max !== 0) leftIsZero = false
-    if (width.min !== 640 || width.max !== 760) widthMatches = false
+    const box = rangeRectFromObject(rowRect)
+    fullWidthFacts.push(
+      staticLayoutFact.rangeRectLeftEquals(box, rangeNumber(0, 0, true)),
+      staticLayoutFact.rangeRectWidthEquals(box, rangeNumber(640, 760, true)),
+    )
   }
 
-  check(laws, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals', rangesEqual(
-    secondTop,
-    addRanges(firstTop, firstHeight),
-  ) && rangesEqual(
-    thirdTop,
-    addRanges(secondTop, secondHeight),
-  ), () => ({
+  checkFacts(laws, 'layoutHNRowHitGeometry keeps row tops contiguous over height intervals', [
+    staticLayoutFact.rangeRectTopEquals(secondBox, addRanges(firstTop, firstHeight)),
+    staticLayoutFact.rangeRectTopEquals(thirdBox, addRanges(secondTop, secondHeight)),
+  ], () => ({
     secondTop: describeRange(secondTop),
     expectedSecondTop: describeRange(addRanges(firstTop, firstHeight)),
     thirdTop: describeRange(thirdTop),
     expectedThirdTop: describeRange(addRanges(secondTop, secondHeight)),
-  }), 'range')
-  check(laws, 'layoutHNRowHitGeometry keeps each row full-width over width intervals', widthMatches && leftIsZero, () => ({
-    leftIsZero: leftIsZero ? 'true' : 'false',
+  }), {
+    targets: ['layoutHNRowHitGeometry[].rowRect.top', 'layoutHNRowHitGeometry[].rowRect.height'],
+  })
+  checkFacts(laws, 'layoutHNRowHitGeometry keeps each row full-width over width intervals', fullWidthFacts, () => ({
+    left: rows.map(item => {
+      const rowRect = getRangeObjectProp(expectRangeObject(item), 'rowRect')
+      return describeRange(getRangeNumberProp(rowRect, 'left'))
+    }).join('|'),
     width: rows.map(item => {
       const rowRect = getRangeObjectProp(expectRangeObject(item), 'rowRect')
       return describeRange(getRangeNumberProp(rowRect, 'width'))
     }).join('|'),
-  }), 'range')
-  check(laws, 'layoutHNRowHitGeometry keeps row heights non-negative over height intervals', firstHeight.min >= 0 && secondHeight.min >= 0 && thirdHeight.min >= 0, () => ({
+  }), {
+    targets: ['layoutHNRowHitGeometry[].rowRect.left', 'layoutHNRowHitGeometry[].rowRect.width'],
+  })
+  checkFacts(laws, 'layoutHNRowHitGeometry keeps row heights non-negative over height intervals', [
+    staticLayoutFact.rangeNonNegative(firstHeight),
+    staticLayoutFact.rangeNonNegative(secondHeight),
+    staticLayoutFact.rangeNonNegative(thirdHeight),
+  ], () => ({
     firstHeight: describeRange(firstHeight),
     secondHeight: describeRange(secondHeight),
     thirdHeight: describeRange(thirdHeight),
-  }), 'range')
+  }), {
+    targets: ['layoutHNRowHitGeometry[].rowRect.height'],
+  })
 }
 
 function addRanges(left: ReturnType<typeof expectRangeNumber>, right: ReturnType<typeof expectRangeNumber>) {
   return rangeNumber(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger)
 }
 
-function rangesEqual(left: ReturnType<typeof expectRangeNumber>, right: ReturnType<typeof expectRangeNumber>) {
-  return left.min === right.min && left.max === right.max && left.isInteger === right.isInteger
-}
-
 function describeRange(value: ReturnType<typeof expectRangeNumber>) {
   return `[${value.min},${value.max}]${value.isInteger ? ':int' : ''}`
+}
+
+function rangeRectFromObject(object: ReturnType<typeof expectRangeObject>): RangeRect {
+  return {
+    left: getRangeNumberProp(object, 'left'),
+    top: getRangeNumberProp(object, 'top'),
+    width: getRangeNumberProp(object, 'width'),
+    height: getRangeNumberProp(object, 'height'),
+  }
+}
+
+function concreteRectFromObject(object: ReturnType<typeof expectObject>): ConcreteRect {
+  return {
+    left: expectConcreteNumber(getProp(object, 'left')),
+    top: expectConcreteNumber(getProp(object, 'top')),
+    width: expectConcreteNumber(getProp(object, 'width')),
+    height: expectConcreteNumber(getProp(object, 'height')),
+  }
 }
 
 function rangeRowHitInput(indent: number, rowHeightMin: number, rowHeightMax: number) {
@@ -324,27 +355,80 @@ function verifyRowHitGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<string
 
     let expectedTop = scenario.submissionHeight - scenario.scrollTopCap
     let monotone = true
-    let widthsMatch = true
+    let rowHeightsNonNegative = true
+    const fullWidthFacts: StaticLayoutFact[] = []
+    let topFailure: null | Record<string, number | string> = null
+    let widthFailure: null | Record<string, number | string> = null
     for (let i = 0; i < rows.items.length; i++) {
       const row = expectObject(rows.items[i]!)
       const rowRect = expectObject(getProp(row, 'rowRect'))
+      const rowBox = concreteRectFromObject(rowRect)
       const top = expectConcreteNumber(getProp(rowRect, 'top'))
       const left = expectConcreteNumber(getProp(rowRect, 'left'))
       const width = expectConcreteNumber(getProp(rowRect, 'width'))
       const height = expectConcreteNumber(getProp(rowRect, 'height'))
-      if (Math.abs(top - expectedTop) > epsilon) monotone = false
-      if (left !== 0 || Math.abs(width - scenario.containerWidth) > epsilon || height < -epsilon) widthsMatch = false
+      if (Math.abs(top - expectedTop) > epsilon) {
+        monotone = false
+        topFailure ??= {
+          scenario: scenario.label,
+          rowIndex: i,
+          top,
+          expectedTop,
+          delta: top - expectedTop,
+        }
+      }
+      if (left !== 0 || Math.abs(width - scenario.containerWidth) > epsilon) {
+        widthFailure ??= {
+          scenario: scenario.label,
+          rowIndex: i,
+          left,
+          width,
+          expectedWidth: scenario.containerWidth,
+          height,
+        }
+      }
+      fullWidthFacts.push(staticLayoutFact.concreteRectXFills(rowBox, {left: 0, right: scenario.containerWidth}))
+      if (height < -epsilon) {
+        rowHeightsNonNegative = false
+        widthFailure ??= {
+          scenario: scenario.label,
+          rowIndex: i,
+          left,
+          width,
+          expectedWidth: scenario.containerWidth,
+          height,
+        }
+      }
       expectedTop += height
     }
 
     check(laws, 'layoutHNRowHitGeometry stacks row tops contiguously', monotone, () => ({
       scenario: scenario.label,
-      firstExpectedTop: scenario.submissionHeight - scenario.scrollTopCap,
-    }), 'concrete-fixture')
-    check(laws, 'layoutHNRowHitGeometry keeps each row full-width and non-negative', widthsMatch, () => ({
+      ...(topFailure ?? {firstExpectedTop: scenario.submissionHeight - scenario.scrollTopCap}),
+    }), {
+      targets: ['layoutHNRowHitGeometry[].rowRect.top', 'layoutHNRowHitGeometry[].rowRect.height'],
+    })
+    if (fullWidthFacts.length > 0) {
+      checkFacts(laws, 'layoutHNRowHitGeometry keeps each row full-width and non-negative', fullWidthFacts, () => ({
+        scenario: scenario.label,
+        ...(widthFailure ?? {containerWidth: scenario.containerWidth}),
+      }), {
+        targets: ['layoutHNRowHitGeometry[].rowRect.left', 'layoutHNRowHitGeometry[].rowRect.width'],
+      })
+    } else {
+      check(laws, 'layoutHNRowHitGeometry keeps each row full-width and non-negative', true, () => ({
+        scenario: scenario.label,
+        ...(widthFailure ?? {containerWidth: scenario.containerWidth}),
+      }), {
+        targets: ['layoutHNRowHitGeometry[].rowRect.left', 'layoutHNRowHitGeometry[].rowRect.width'],
+      })
+    }
+    check(laws, 'layoutHNRowHitGeometry keeps each row full-width and non-negative', rowHeightsNonNegative, () => ({
       scenario: scenario.label,
-      containerWidth: scenario.containerWidth,
-    }), 'concrete-fixture')
+      ...(widthFailure ?? {containerWidth: scenario.containerWidth}),
+    }), {
+      targets: ['layoutHNRowHitGeometry[].rowRect.height'],
+    })
   }
 }
 
@@ -423,9 +507,14 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
     }), 'concrete-fixture')
 
     let monotone = true
-    let commentMathMatches = true
-    let userRectStaysInsideRow = true
+    const commentMathFacts: StaticLayoutFact[] = []
+    let commentHeightsNonNegative = true
+    const userRectFacts: StaticLayoutFact[] = []
     let gutterStaysOrdered = true
+    let monotoneFailure: null | Record<string, number | string> = null
+    let commentFailure: null | Record<string, number | string> = null
+    let userFailure: null | Record<string, number | string> = null
+    let gutterFailure: null | Record<string, number | string> = null
     let maxRowBottom = scenario.rowsScrollerTopGap + scenario.scrollerPeekUp - scenario.scrollTopCap
     for (let i = 0; i < rows.items.length; i++) {
       const row = expectObject(rows.items[i]!)
@@ -433,6 +522,8 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
       const rowRect = expectObject(getProp(row, 'rowRect'))
       const userRect = expectObject(getProp(row, 'userRect'))
       const commentRect = expectObject(getProp(row, 'commentRect'))
+      const userBox = concreteRectFromObject(userRect)
+      const commentBox = concreteRectFromObject(commentRect)
       const gutter = expectObject(getProp(row, 'gutter'))
 
       const rowTop = expectConcreteNumber(getProp(rowRect, 'top'))
@@ -448,35 +539,126 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
       const userHeight = expectConcreteNumber(getProp(userRect, 'height'))
       const gutterTop = expectConcreteNumber(getProp(gutter, 'top'))
       const gutterBottom = expectConcreteNumber(getProp(gutter, 'bottom'))
+      const commentLeft = expectConcreteNumber(getProp(commentRect, 'left'))
+      const commentWidth = expectConcreteNumber(getProp(commentRect, 'width'))
+      const commentHeight = expectConcreteNumber(getProp(commentRect, 'height'))
 
-      if (Math.abs(rowBottom - (rowTop + rowHeight)) > epsilon || rowTop + epsilon < maxRowBottom) monotone = false
-      if (rowLeft !== 0 || Math.abs(rowWidth - scenario.containerWidth) > epsilon) monotone = false
-      if (Math.abs(expectConcreteNumber(getProp(commentRect, 'left')) - expectedCommentLeft) > epsilon) commentMathMatches = false
-      if (Math.abs(expectConcreteNumber(getProp(commentRect, 'width')) - expectedCommentWidth) > epsilon) commentMathMatches = false
-      if (expectConcreteNumber(getProp(commentRect, 'height')) < -epsilon) commentMathMatches = false
-      if (userTop < rowTop - epsilon || userTop + userHeight > rowBottom + epsilon) userRectStaysInsideRow = false
-      if (gutterBottom + epsilon < gutterTop) gutterStaysOrdered = false
+      if (
+        Math.abs(rowBottom - (rowTop + rowHeight)) > epsilon ||
+        rowTop + epsilon < maxRowBottom ||
+        rowLeft !== 0 ||
+        Math.abs(rowWidth - scenario.containerWidth) > epsilon
+      ) {
+        monotone = false
+        monotoneFailure ??= {
+          scenario: scenario.label,
+          rowIndex: i,
+          rowTop,
+          previousRowBottom: maxRowBottom,
+          rowBottom,
+          expectedRowBottom: rowTop + rowHeight,
+          rowLeft,
+          rowWidth,
+          expectedRowWidth: scenario.containerWidth,
+        }
+      }
+
+      commentMathFacts.push(
+        staticLayoutFact.concreteRectLeftEquals(commentBox, expectedCommentLeft),
+        staticLayoutFact.concreteRectWidthEquals(commentBox, expectedCommentWidth),
+      )
+      if (
+        Math.abs(commentLeft - expectedCommentLeft) > epsilon ||
+        Math.abs(commentWidth - expectedCommentWidth) > epsilon ||
+        commentHeight < -epsilon
+      ) {
+        commentFailure ??= {
+          scenario: scenario.label,
+          rowIndex: i,
+          commentLeft,
+          expectedCommentLeft,
+          commentWidth,
+          expectedCommentWidth,
+          commentHeight,
+        }
+      }
+      if (commentHeight < -epsilon) {
+        commentHeightsNonNegative = false
+      }
+
+      if (userTop < rowTop - epsilon || userTop + userHeight > rowBottom + epsilon) {
+        userRectFacts.push(staticLayoutFact.concreteRectYWithin(userBox, {top: rowTop, bottom: rowBottom}))
+        userFailure ??= {
+          scenario: scenario.label,
+          rowIndex: i,
+          userTop,
+          userBottom: userTop + userHeight,
+          rowTop,
+          rowBottom,
+        }
+      } else {
+        userRectFacts.push(staticLayoutFact.concreteRectYWithin(userBox, {top: rowTop, bottom: rowBottom}))
+      }
+      if (gutterBottom + epsilon < gutterTop) {
+        gutterStaysOrdered = false
+        gutterFailure ??= {
+          scenario: scenario.label,
+          rowIndex: i,
+          gutterTop,
+          gutterBottom,
+        }
+      }
       maxRowBottom = rowBottom
     }
 
     check(laws, 'layoutHNThreadVisualGeometry keeps row bottoms monotone and full-width', monotone, () => ({
       scenario: scenario.label,
-      rowCount: rows.items.length,
-    }), 'concrete-fixture')
-    check(laws, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math', commentMathMatches, () => ({
+      ...(monotoneFailure ?? {rowCount: rows.items.length}),
+    }), {
+      targets: [
+        'layoutHNThreadVisualGeometry.rows[].rowRect.left',
+        'layoutHNThreadVisualGeometry.rows[].rowRect.width',
+        'layoutHNThreadVisualGeometry.rows[].rowRect.top',
+        'layoutHNThreadVisualGeometry.rows[].rowRect.height',
+        'layoutHNThreadVisualGeometry.rows[].rowBottom',
+      ],
+    })
+    checkFacts(laws, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math', commentMathFacts, () => ({
       scenario: scenario.label,
-    }), 'concrete-fixture')
-    check(laws, 'layoutHNThreadVisualGeometry keeps the user rect inside the row', userRectStaysInsideRow, () => ({
+      ...(commentFailure ?? {}),
+    }), {
+      targets: ['layoutHNThreadVisualGeometry.rows[].commentRect.left', 'layoutHNThreadVisualGeometry.rows[].commentRect.width'],
+    })
+    check(laws, 'layoutHNThreadVisualGeometry keeps comment x and width tied to indent math', commentHeightsNonNegative, () => ({
       scenario: scenario.label,
-    }), 'concrete-fixture')
+      ...(commentFailure ?? {}),
+    }), {
+      targets: ['layoutHNThreadVisualGeometry.rows[].commentRect.height'],
+    })
+    checkFacts(laws, 'layoutHNThreadVisualGeometry keeps the user rect inside the row', userRectFacts, () => ({
+      scenario: scenario.label,
+      ...(userFailure ?? {}),
+    }), {
+      targets: [
+        'layoutHNThreadVisualGeometry.rows[].userRect.top',
+        'layoutHNThreadVisualGeometry.rows[].userRect.height',
+        'layoutHNThreadVisualGeometry.rows[].rowRect.top',
+        'layoutHNThreadVisualGeometry.rows[].rowRect.height',
+      ],
+    })
     check(laws, 'layoutHNThreadVisualGeometry keeps gutter segments ordered', gutterStaysOrdered, () => ({
       scenario: scenario.label,
-    }), 'concrete-fixture')
+      ...(gutterFailure ?? {}),
+    }), {
+      targets: ['layoutHNThreadVisualGeometry.rows[].gutter.top', 'layoutHNThreadVisualGeometry.rows[].gutter.bottom'],
+    })
     check(laws, 'layoutHNThreadVisualGeometry derives content height from the last row bottom plus scrollTopCap', Math.abs(contentHeight - (maxRowBottom + scenario.scrollTopCap)) <= epsilon, () => ({
       scenario: scenario.label,
       contentHeight,
       expectedContentHeight: maxRowBottom + scenario.scrollTopCap,
-    }), 'concrete-fixture')
+    }), {
+      targets: ['layoutHNThreadVisualGeometry.contentHeight', 'layoutHNThreadVisualGeometry.rows[].rowBottom'],
+    })
 
     const visibleStateConsistent =
       firstVisibleRowIndex.kind === 'null'
@@ -494,6 +676,12 @@ function verifyThreadVisualGeometry(analyzer: LoweredProgramAnalyzer, laws: Map<
       scenario: scenario.label,
       firstVisibleRowIndex: firstVisibleRowIndex.kind === 'null' ? null : expectConcreteNumber(firstVisibleRowIndex),
       lastVisibleRowIndex: lastVisibleRowIndex.kind === 'null' ? null : expectConcreteNumber(lastVisibleRowIndex),
-    }), 'concrete-fixture')
+    }), {
+      targets: [
+        'layoutHNThreadVisualGeometry.firstVisibleRowIndex',
+        'layoutHNThreadVisualGeometry.lastVisibleRowIndex',
+        'layoutHNThreadVisualGeometry.firstVisibleRowTop',
+      ],
+    })
   }
 }

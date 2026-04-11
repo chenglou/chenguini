@@ -392,6 +392,61 @@ Then flip that view around into coverage:
 
 Keep "unknown" separate from "fail". A failed fact means the code violated the law. An unknown fact means the verifier's current precision did not prove it.
 
+## Name Repeated Proof Shapes As Facts
+
+Once a verifier repeats the same boolean shape, name the fact.
+
+Good:
+
+- `symbolic-equality`
+- `range-non-negative`
+- `concrete-rect-x-within`
+- `concrete-rects-do-not-overlap-x`
+
+Bad:
+
+- `Math.abs(left - right) <= epsilon` pasted through verifier files
+- `secondTop.min === firstBottom.min && secondTop.max === firstBottom.max`
+- a generic `ok` flag with no proof shape
+
+This keeps laws about behavior while proof mechanics stay shared.
+
+## State Geometry Facts In Geometry Words
+
+When a fact is spatial, report it as geometry.
+
+Good:
+
+- `rectLeft`, `rectRight`, `boundsLeft`, `boundsRight`
+- `leftOverflowBy`, `rightOverflowBy`
+- `leftRectRight`, `rightRectLeft`, `overlapBy`
+
+Bad:
+
+- `{actual, expected}` for every failure
+- `within: false` with no edge numbers
+- full rectangle containment when the law only checks one axis
+
+Name the axis when the fact is axis-specific. If a text rect only has to fit horizontally, call it horizontal containment. Do not imply the vertical geometry was checked too.
+
+## Geometry Failures Should Draw Themselves
+
+When a geometry law fails, include the computed edges and a tiny visual packet in the report.
+
+Good:
+
+- the expected span and actual rect
+- the overflowing edge and `overflowBy`
+- a small SVG showing the two intervals or rectangles
+
+Bad:
+
+- only saying `row geometry failed`
+- making the human recompute `left + width` from scattered fields
+- treating the SVG as the oracle
+
+The numbers are the oracle. The picture just makes the bug obvious fast.
+
 ## Mined Laws Stay Suggestions
 
 Range outputs and concrete sweeps are good at finding candidate laws.

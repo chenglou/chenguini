@@ -931,10 +931,14 @@ function narrowOrderedRangeNumberPair(
 }
 
 export function minRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeNumberValue {
+  if (left.max <= right.min) return left
+  if (right.max <= left.min) return right
   return rangeNumber(Math.min(left.min, right.min), Math.min(left.max, right.max), left.isInteger && right.isInteger)
 }
 
 export function maxRangeNumber(left: RangeNumberValue, right: RangeNumberValue): RangeNumberValue {
+  if (left.min >= right.max) return left
+  if (right.min >= left.max) return right
   return rangeNumber(Math.max(left.min, right.min), Math.max(left.max, right.max), left.isInteger && right.isInteger)
 }
 
@@ -1012,11 +1016,22 @@ export function negateBoolExpr(expr: BoolExpr): BoolExpr {
 }
 
 export function symbolicExprEquals(left: ScalarExpr, right: ScalarExpr) {
+  return proveSymbolicExprEquality(left, right).status === 'pass'
+}
+
+export type SymbolicEqualityProofResult =
+  | {status: 'pass'}
+  | {status: 'fail'}
+  | {status: 'unknown'; reason: string}
+
+export function proveSymbolicExprEquality(left: ScalarExpr, right: ScalarExpr): SymbolicEqualityProofResult {
   const linear = toLinearExpr(subExpr(left, right))
-  if (linear == null) return false
-  if (Math.abs(linear.constant) > epsilon) return false
-  for (const coefficient of Object.values(linear.terms)) if (Math.abs(coefficient) > epsilon) return false
-  return true
+  if (linear == null) return {status: 'unknown', reason: 'symbolic equality is not linear'}
+  if (Math.abs(linear.constant) > epsilon) return {status: 'fail'}
+  for (const coefficient of Object.values(linear.terms)) {
+    if (Math.abs(coefficient) > epsilon) return {status: 'fail'}
+  }
+  return {status: 'pass'}
 }
 
 export function formatScalarExpr(expr: ScalarExpr): string {
