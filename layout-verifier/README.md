@@ -30,12 +30,18 @@ For the broader doctrine, read:
 - `photo-gallery/`: the photo-gallery verifier and its contract sidecar
 - `nicer-hacker-news/`: the HN thread/comment verifiers and their contract sidecar
 - `life-calendar/`: the life-calendar grid sizing and hit test verifier
+- `draggable-cards/`: the draggable-cards swap-layout verifier
+- `gesture-flick-snap-target/`: the flick-target geometry verifier
+- `scroll-anchor/`: the scroll-anchor layout verifier
 
 The demo source being analyzed still lives in:
 
 - `demos/photo-gallery/`
 - `demos/nicer-hacker-news/`
 - `demos/life-calendar/`
+- `demos/draggable-cards/`
+- `demos/gesture-flick-snap-target/`
+- `demos/scroll-anchor/`
 
 Tiny shim files stay in those demo folders so source-relative contract autodiscovery still works and old paths do not break.
 
@@ -131,6 +137,9 @@ Useful commands:
 - `bun layout-verifier/nicer-hacker-news/verify-static-layout.ts`
 - `bun layout-verifier/nicer-hacker-news/verify-comment-static-layout.ts`
 - `bun layout-verifier/life-calendar/verify-static-layout.ts`
+- `bun layout-verifier/draggable-cards/verify-static-layout.ts`
+- `bun layout-verifier/gesture-flick-snap-target/verify-static-layout.ts`
+- `bun layout-verifier/scroll-anchor/verify-static-layout.ts`
 
 ## When To Use Contracts
 
