@@ -56,6 +56,9 @@ import {
   runPhotoGalleryStaticVerificationForSourceFile,
 } from './photo-gallery/static-verifier.ts'
 import {runLifeCalendarStaticVerification} from './life-calendar/static-verifier.ts'
+import {runDraggableCardsStaticVerification} from './draggable-cards/static-verifier.ts'
+import {runGestureFlickStaticVerification} from './gesture-flick-snap-target/static-verifier.ts'
+import {runScrollAnchorStaticVerification} from './scroll-anchor/static-verifier.ts'
 import {
   prompt1DLineHeight,
   prompt2DLineHeight,
@@ -415,6 +418,39 @@ test('life-calendar static verifier keeps the grid sizing kernel ready', async (
   expect(getLaw(report, 'hitTest returns the expected cell index at known positions').checks).toBe(9)
 })
 
+test('gesture-flick-snap-target static verifier keeps the snap geometry ready', async () => {
+  const source = await Bun.file(new URL('../demos/gesture-flick-snap-target/snap-layout.ts', import.meta.url)).text()
+  const report = runGestureFlickStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'getCorners keeps each corner at the padded viewport edge').status).toBe('pass')
+  expect(getLaw(report, 'nearestCorner always returns one of the four corners').status).toBe('pass')
+  expect(getLaw(report, 'nearestCorner returns a corner with minimal squared distance').status).toBe('pass')
+  expect(getLaw(report, 'decayRestPos adds velocity divided by friction').status).toBe('pass')
+})
+
+test('draggable-cards static verifier keeps the swap geometry ready', async () => {
+  const source = await Bun.file(new URL('../demos/draggable-cards/swap-layout.ts', import.meta.url)).text()
+  const report = runDraggableCardsStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'center returns half the remaining space').status).toBe('pass')
+  expect(getLaw(report, 'shouldSwapUp uses a strict midpoint threshold').status).toBe('pass')
+  expect(getLaw(report, 'shouldSwapDown uses a strict midpoint threshold').status).toBe('pass')
+  expect(getLaw(report, 'swap thresholds leave a dead zone at the midpoint').status).toBe('pass')
+  expect(getLaw(report, 'stackLayout returns one contiguous top per row').status).toBe('pass')
+})
+
+test('scroll-anchor static verifier keeps anchor preservation ready', async () => {
+  const source = await Bun.file(new URL('../demos/scroll-anchor/anchor-layout.ts', import.meta.url)).text()
+  const report = runScrollAnchorStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'computeAnchorLayout total height matches grouped item geometry').status).toBe('pass')
+  expect(getLaw(report, 'computeAnchorLayout returns one positioned output per input item').status).toBe('pass')
+  expect(getLaw(report, 'prepending items preserves the anchored item screen y').status).toBe('pass')
+})
+
 test('life-calendar verifier catches broken countX divisibility', async () => {
   const source = await Bun.file(new URL('../demos/life-calendar/grid-sizing.ts', import.meta.url)).text()
   const buggySource = replaceOnce(source, '/ 7) * 7', '/ 7) * 6')
@@ -582,6 +618,40 @@ test('photo-gallery verifier catches broken negative portrait scaling over width
   expect(law.status).toBe('fail')
   expect(law.kind).toBe('range')
   expect(getFirstFailure(law)['expectedCenterX']).toBeDefined()
+})
+
+test('gesture-flick verifier catches broken nearestCorner comparison', async () => {
+  const source = await Bun.file(new URL('../demos/gesture-flick-snap-target/snap-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(source, 'if (d < bestDist)', 'if (d > bestDist)')
+  const report = runGestureFlickStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'nearestCorner returns a corner with minimal squared distance').status).toBe('fail')
+})
+
+test('draggable-cards verifier catches broken swap midpoint ownership', async () => {
+  const source = await Bun.file(new URL('../demos/draggable-cards/swap-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(source, 'return pointerY < neighborDestY + neighborSizeY / 2', 'return pointerY <= neighborDestY + neighborSizeY / 2')
+  const report = runDraggableCardsStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'shouldSwapUp uses a strict midpoint threshold').status).toBe('fail')
+  expect(getLaw(report, 'swap thresholds leave a dead zone at the midpoint').status).toBe('fail')
+})
+
+test('scroll-anchor verifier catches broken anchor delta direction', async () => {
+  const source = await Bun.file(new URL('../demos/scroll-anchor/anchor-layout.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'adjustedScrollTop = adjustedScrollTop + (y - anchorPrevY)',
+    'adjustedScrollTop = adjustedScrollTop - (y - anchorPrevY)',
+  )
+  const report = runScrollAnchorStaticVerification(buggySource)
+  const law = getLaw(report, 'prepending items preserves the anchored item screen y')
+
+  expect(report.phase).toBe('error')
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['afterScreenY']).toBeDefined()
 })
 
 test('HN row verifier catches broken comment width math', async () => {

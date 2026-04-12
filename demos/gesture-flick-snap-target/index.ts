@@ -1,3 +1,5 @@
+import {decayRestPos, getCorners, nearestCorner, pipH, pipW} from './snap-layout'
+
 // === scheduler
 let scheduledRaf: number | null = null
 function scheduleRender() {
@@ -34,34 +36,6 @@ function springStep(config: SpringConfig) {
 }
 function springGoToEnd(config: SpringConfig) {
   config.pos = config.dest; config.v = 0
-}
-
-// === exponential decay: calculate where a flick with given velocity would rest
-// v(t) = v0 * e^(-friction * t), position integrates to v0/friction * (1 - e^(-friction*t))
-// at rest (t->inf): displacement = v0 / friction
-const decayFriction = 4.5 // tunable
-function decayRestPos(pos: number, velocity: number) {
-  return pos + velocity / decayFriction
-}
-
-// === layout
-const pipW = 120, pipH = 80, cornerPad = 20
-function getCorners(w: number, h: number) {
-  return [
-    {x: cornerPad, y: cornerPad},                       // top-left
-    {x: w - pipW - cornerPad, y: cornerPad},             // top-right
-    {x: cornerPad, y: h - pipH - cornerPad},             // bottom-left
-    {x: w - pipW - cornerPad, y: h - pipH - cornerPad},  // bottom-right
-  ]
-}
-function nearestCorner(x: number, y: number, w: number, h: number) {
-  const corners = getCorners(w, h)
-  let best = corners[0]!, bestDist = Infinity
-  for (const c of corners) {
-    const d = (c.x - x) ** 2 + (c.y - y) ** 2
-    if (d < bestDist) { bestDist = d; best = c }
-  }
-  return best
 }
 
 // === state

@@ -455,6 +455,19 @@ Make contracts domain summaries when the fact is real. A `lookupArrayItem(...)` 
 
 Show the trusted boundary in the verifier output. Good: `measureText: concrete + range`, `walkVisibleLines: concrete-only`. Bad: making someone read the sidecar to understand which helpers were proved from source and which helpers were summarized.
 
+If a verifier-local override stands in for the same opaque helper, it must mirror the same contract facts.
+
+Good:
+
+- the sidecar says `visibleHeight = lineHeight * 2`
+- the concrete override used by a nearby 1D layout law returns that same `visibleHeight`
+
+Bad:
+
+- the sidecar says one prompt height
+- the local override uses a hardcoded `24`
+- downstream laws prove against the override's geometry, not the helper boundary the report says it trusted
+
 For the current sidecar format, see `../../layout-verifier/contracts.md`.
 
 ## Name Contracts By The Boundary They Describe
@@ -919,6 +932,24 @@ Use those seams when they buy leverage:
 - cheap-vs-rich comparisons
 
 Don't turn that into a repo-wide rule that every demo needs a shared verifier interface.
+
+## Extract Pure Geometry At The Demo Boundary
+
+When the demo already has a layout model worth checking, put that pure function in the demo folder.
+
+Good:
+
+- `grid-sizing.ts` owns `gridSizing(...)` and `hitTest(...)`
+- the demo imports those helpers to render
+- the verifier reads that same source file and checks the helpers
+
+Bad:
+
+- one copy of the layout math in the demo
+- another verifier-shaped copy in `layout-verifier/`
+- a third copy in a browser runner that tries to reconstruct the same boxes
+
+This is a local seam, not mandatory architecture. Extract the pure helper when it already names real geometry, such as `visible row range`, `image boxes`, or `selected cell`. Don't split a demo just to satisfy a checker.
 
 ## Bring In A Different Shape Early
 

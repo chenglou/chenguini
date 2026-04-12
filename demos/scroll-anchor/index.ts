@@ -1,10 +1,10 @@
-// === constant layout metrics
-const itemHeight = 100
-const headerHeight = 24
-const headerGapFirst = 0
-const headerGapRest = 32
-const headerGapBottom = 8
-const itemGap = 8
+import {
+  computeAnchorLayout,
+  headerHeight,
+  itemHeight,
+  type AnchorResult,
+} from './anchor-layout'
+
 const targetScroll = 700
 
 const colors = [
@@ -30,15 +30,10 @@ type Item = {
   color: string
 }
 
-type Anchor = {
-  id: string
-  prevY: number
-}
-
 type State = {
   counter: number
   items: Item[]
-  anchor: Anchor | null
+  anchor: AnchorResult
   storedScrollY: number // read-back value from last frame's scrollTo
   events: {
     scrollTo: number | null
@@ -112,109 +107,67 @@ function render() {
   // A scrollTo event also counts as external (we'll apply it as a side effect).
   const userScrolled = st.events.scrollTo != null || currentScrollY !== st.storedScrollY
 
-  // === layout (pure arithmetic, no DOM writes)
-  let y = 0
-  let adjustedScrollTop = st.events.scrollTo ?? currentScrollY
-  let newAnchor: Anchor | null = null
-  let isFirstSession = true
-  let idx = 0
-
-  while (idx < st.items.length) {
-    const sessionDay = st.items[idx]!.day
-    const gapTop = isFirstSession ? headerGapFirst : headerGapRest
-    y += gapTop + headerHeight + headerGapBottom
-
-    let firstInSession = true
-    while (idx < st.items.length && st.items[idx]!.day === sessionDay) {
-      const item = st.items[idx]!
-      if (!firstInSession) y += itemGap
-      firstInSession = false
-
-      // Pick new anchor: first item below scrollTop
-      if (userScrolled && newAnchor == null && y > adjustedScrollTop) {
-        newAnchor = {id: item.id, prevY: y}
-      }
-
-      // Anchor adjustment: compute scroll delta
-      if (!userScrolled && st.anchor != null && item.id === st.anchor.id && adjustedScrollTop > 40) {
-        adjustedScrollTop = adjustedScrollTop + (y - st.anchor.prevY)
-        st.anchor.prevY = y
-      }
-
-      y += itemHeight
-      idx++
-    }
-    isFirstSession = false
-  }
-
-  const totalHeight = y
+  const layout = computeAnchorLayout(
+    st.items,
+    currentScrollY,
+    st.events.scrollTo,
+    st.anchor == null ? null : st.anchor.id,
+    st.anchor == null ? 0 : st.anchor.prevY,
+    userScrolled,
+  )
 
   // === commit state
-  if (userScrolled && newAnchor != null) {
-    st.anchor = newAnchor
+  if (userScrolled && layout.newAnchor != null) {
+    st.anchor = layout.newAnchor
+  } else if (userScrolled === false && st.anchor != null) {
+    st.anchor.prevY = layout.anchorPrevY
   }
   st.events.scrollTo = st.events.addAbove = null
 
   // === DOM writes
-  const visibleTop = adjustedScrollTop
-  const visibleBottom = adjustedScrollTop + viewportH
+  const visibleTop = layout.adjustedScrollTop
+  const visibleBottom = layout.adjustedScrollTop + viewportH
 
-  y = 0
-  isFirstSession = true
-  idx = 0
-
-  while (idx < st.items.length) {
-    const sessionDay = st.items[idx]!.day
-    const gapTop = isFirstSession ? headerGapFirst : headerGapRest
-    const headerY = y + gapTop
-    y += gapTop + headerHeight + headerGapBottom
-
-    if (headerY + headerHeight > visibleTop && headerY < visibleBottom) {
-      let headerNode = domCache.nodes.get(sessionDay)
+  for (const header of layout.headerPositions) {
+    if (header.y + headerHeight > visibleTop && header.y < visibleBottom) {
+      let headerNode = domCache.nodes.get(header.day)
       if (headerNode == null) {
         headerNode = document.createElement('div')
         headerNode.className = 'day-header'
-        domCache.nodes.set(sessionDay, headerNode)
+        domCache.nodes.set(header.day, headerNode)
       }
-      headerNode.style.top = headerY + 'px'
+      headerNode.style.top = header.y + 'px'
       headerNode.style.height = headerHeight + 'px'
-      headerNode.textContent = sessionDay
+      headerNode.textContent = header.day
       if (headerNode.parentNode == null) domCache.spacer.appendChild(headerNode)
     } else {
-      const headerNode = domCache.nodes.get(sessionDay)
+      const headerNode = domCache.nodes.get(header.day)
       if (headerNode?.parentNode != null) domCache.spacer.removeChild(headerNode)
     }
-
-    let firstInSession = true
-    while (idx < st.items.length && st.items[idx]!.day === sessionDay) {
-      const item = st.items[idx]!
-      if (!firstInSession) y += itemGap
-      firstInSession = false
-
-      if (y + itemHeight > visibleTop && y < visibleBottom) {
-        let node = domCache.nodes.get(item.id)
-        if (node == null) {
-          node = document.createElement('div')
-          node.className = 'item'
-          domCache.nodes.set(item.id, node)
-        }
-        node.style.top = y + 'px'
-        node.style.height = itemHeight + 'px'
-        node.style.background = item.color
-        node.textContent = item.label + ' \u2014 ' + item.day
-        if (node.parentNode == null) domCache.spacer.appendChild(node)
-      } else {
-        const node = domCache.nodes.get(item.id)
-        if (node?.parentNode != null) domCache.spacer.removeChild(node)
-      }
-
-      y += itemHeight
-      idx++
-    }
-    isFirstSession = false
   }
 
-  domCache.spacer.style.height = totalHeight + 'px'
+  for (let itemIndex = 0; itemIndex < layout.itemPositions.length; itemIndex++) {
+    const itemPosition = layout.itemPositions[itemIndex]!
+    const item = st.items[itemIndex]!
+    if (itemPosition.y + itemHeight > visibleTop && itemPosition.y < visibleBottom) {
+      let node = domCache.nodes.get(item.id)
+      if (node == null) {
+        node = document.createElement('div')
+        node.className = 'item'
+        domCache.nodes.set(item.id, node)
+      }
+      node.style.top = itemPosition.y + 'px'
+      node.style.height = itemHeight + 'px'
+      node.style.background = item.color
+      node.textContent = item.label + ' \u2014 ' + item.day
+      if (node.parentNode == null) domCache.spacer.appendChild(node)
+    } else {
+      const node = domCache.nodes.get(item.id)
+      if (node?.parentNode != null) domCache.spacer.removeChild(node)
+    }
+  }
+
+  domCache.spacer.style.height = layout.totalHeight + 'px'
   domCache.info.textContent =
     'scrollTop: ' + Math.round(domCache.container.scrollTop) +
     ' | anchor: ' + (st.anchor != null ? st.anchor.id : 'none') +
@@ -222,8 +175,8 @@ function render() {
     ' | items: ' + st.items.length
 
   // === side effects
-  if (adjustedScrollTop !== currentScrollY) {
-    domCache.container.scrollTo({top: adjustedScrollTop, behavior: 'instant' as ScrollBehavior})
+  if (layout.adjustedScrollTop !== currentScrollY) {
+    domCache.container.scrollTo({top: layout.adjustedScrollTop, behavior: 'instant' as ScrollBehavior})
     // Read back actual value after scrollTo. Do NOT store the requested
     // value — browser truncation (Chrome: 0.5, Safari/Firefox: integers)
     // would cause a false mismatch on the next frame, making us think

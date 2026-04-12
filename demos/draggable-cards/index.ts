@@ -1,3 +1,5 @@
+import {center, rowSizeX, shouldSwapDown, shouldSwapUp, stackLayout, windowPaddingTop} from './swap-layout'
+
 // === generic scheduler & its debugger
 let scheduledRaf: number | null = null
 function scheduleRender() {
@@ -49,13 +51,6 @@ function hash(n: number) {
   n = Math.imul((n >>> 15) ^ n, 0x735a2d97);
   return (((n >>> 15) ^ n) >>> 0) / 0x100000000;
 }
-function center(containee: number, container: number) {
-  return (container - containee) / 2
-}
-
-// === constant layout metrics. The rest is dynamic
-const rowSizeX = 320
-const windowPaddingTop = 50
 
 // === state
 type RowData = {
@@ -217,25 +212,26 @@ function render(now: number) {
     d.y.pos = d.y.dest = y
     d.scale.dest = 1.1
     // dragging row upward? Swap it with previous row if cursor is above the first half previous row
-    while (dragIdx > 0 && pointerLast.y < st.data[dragIdx - 1]!.y.dest + st.data[dragIdx - 1]!.sizeY / 2) {
+    while (dragIdx > 0 && shouldSwapUp(pointerLast.y, st.data[dragIdx - 1]!.y.dest, st.data[dragIdx - 1]!.sizeY)) {
       [st.data[dragIdx], st.data[dragIdx - 1]] = [st.data[dragIdx - 1]!, st.data[dragIdx]!] // swap
       dragIdx--
     }
     // dragging row downward? Swap it with next row if cursor is below the first half next row
-    while (dragIdx < st.data.length - 1 && pointerLast.y > st.data[dragIdx + 1]!.y.dest + st.data[dragIdx + 1]!.sizeY / 2) {
+    while (dragIdx < st.data.length - 1 && shouldSwapDown(pointerLast.y, st.data[dragIdx + 1]!.y.dest, st.data[dragIdx + 1]!.sizeY)) {
       [st.data[dragIdx], st.data[dragIdx + 1]] = [st.data[dragIdx + 1]!, st.data[dragIdx]!] // swap
       dragIdx++
     }
   }
-  let top = windowPaddingTop
-  for (const d of st.data) {
+  const rowTops = stackLayout(st.data.map(d => d.sizeY), windowPaddingTop)
+  for (let rowIndex = 0; rowIndex < st.data.length; rowIndex++) {
+    const d = st.data[rowIndex]!
+    const top = rowTops[rowIndex]!
     if (newDragged != null && d.id === newDragged.id) { // already modified above
     } else {
       d.x.dest = center(rowSizeX, windowSizeX)
       d.y.dest = top
       d.scale.dest = 1
     }
-    top += d.sizeY
   }
   const cursor =
     newDragged != null ? 'grabbing' // will be "grabbing" even if cursor isn't on the card! Try dragging to left/right extremes

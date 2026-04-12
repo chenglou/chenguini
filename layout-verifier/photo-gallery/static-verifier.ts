@@ -546,9 +546,11 @@ function verifyGetLineLayoutConcrete(
         const scaleFactor = expectConcreteNumber(args[3]!)
         const ar = expectConcreteNumber(getProp(source, 'ar'))
         const naturalSizeX = expectConcreteNumber(getProp(source, 'naturalSizeX'))
-        const imageSizeX = Math.min(naturalSizeX, box1DMaxSizeX, box1DMaxSizeY * ar) * scaleFactor
+        const promptVisibleHeight = prompt1DLineHeight * 2
+        const promptAreaY = promptVisibleHeight + promptPaddingBottom
+        const imgMaxSizeY = Math.max(1, box1DMaxSizeY - promptAreaY)
+        const imageSizeX = Math.min(naturalSizeX, box1DMaxSizeX, imgMaxSizeY * ar) * scaleFactor
         const imageSizeY = imageSizeX / ar
-        const promptVisibleHeight = 24
         return [{
           constraints: [],
           value: concreteObject({
@@ -1186,15 +1188,14 @@ function expected1DOverrideMeasurement(
   box1DMaxSizeY: number,
   scaleFactor: number,
 ) {
-  const promptVisibleHeight = 24
-  const imageSizeX = Math.min(naturalSizeX, box1DMaxSizeX, box1DMaxSizeY * ar) * scaleFactor
-  const imageSizeY = imageSizeX / ar
-  return {
-    imageSizeX,
-    imageSizeY,
-    promptVisibleHeight,
-    layoutHeight: imageSizeY + promptVisibleHeight + promptPaddingBottom,
-  }
+  return expected1DMeasurement(
+    ar,
+    naturalSizeX,
+    box1DMaxSizeX,
+    box1DMaxSizeY,
+    scaleFactor,
+    prompt1DLineHeight * 2,
+  )
 }
 
 function expectedGridMeasurement(ar: number, naturalSizeX: number, boxMaxSizeX: number) {
