@@ -244,6 +244,7 @@ function verifyGetGridLayoutRange(
   const boxMaxSizeX = expectRangeNumber(getRangeProp(layout, 'boxMaxSizeX'))
   const contentHeight = expectRangeNumber(getRangeProp(layout, 'contentHeight'))
   const boxesGapX = analyzer.getGlobalNumber('boxesGapX')
+  const boxesGapY = analyzer.getGlobalNumber('boxesGapY')
 
   check(laws, 'getGridLayout preserves item count over range evaluation', items.lengthMin === 6 && items.lengthMax === 6, () => ({
     windowWidth,
@@ -273,6 +274,40 @@ function verifyGetGridLayoutRange(
   }), {kind: 'range', targets: ['getGridLayout.contentHeight', 'getGridLayout.rowsTop']})
 
   if (items.items == null) return
+  if (rowsTop.items != null) {
+    let rowsTopSpacingMatches = true
+    let firstRowsTopSpacingFailure: null | Record<string, number | string> = null
+    for (let row = 0; row < rowsTop.items.length - 1; row++) {
+      const rowTop = expectRangeNumber(rowsTop.items[row]!)
+      const nextRowTop = expectRangeNumber(rowsTop.items[row + 1]!)
+      const firstItemIndex = row * cols.min
+      const lastItemIndex = Math.min(items.items.length - 1, firstItemIndex + cols.min - 1)
+      let tallestLayoutHeight = rangeNumber(0, 0, true)
+      for (let itemIndex = firstItemIndex; itemIndex <= lastItemIndex; itemIndex++) {
+        const item = expectRangeObject(items.items[itemIndex]!)
+        const layoutBox = getRangeObjectProp(item, 'layoutBox')
+        tallestLayoutHeight = maxRanges(tallestLayoutHeight, getRangeNumberProp(layoutBox, 'sizeY'))
+      }
+      const expectedNextRowTop = addRanges(addRanges(rowTop, tallestLayoutHeight), rangeNumber(boxesGapY, boxesGapY, true))
+      if (!rangesEqual(nextRowTop, expectedNextRowTop)) {
+        rowsTopSpacingMatches = false
+        firstRowsTopSpacingFailure ??= {
+          windowWidth,
+          row,
+          nextRowTop: describeRange(nextRowTop),
+          expectedNextRowTop: describeRange(expectedNextRowTop),
+          tallestLayoutHeight: describeRange(tallestLayoutHeight),
+        }
+      }
+    }
+    check(laws, 'getGridLayout rowsTop spacing follows tallest row item over range evaluation', rowsTopSpacingMatches, () => firstRowsTopSpacingFailure ?? ({
+      windowWidth,
+    }), {
+      kind: 'range',
+      targets: ['getGridLayout.rowsTop', 'getGridLayout.items.layoutBox.sizeY'],
+    })
+  }
+
   let slotsMatch = true
   let firstSlotFailure: null | Record<string, number | string> = null
   for (let itemIndex = 0; itemIndex < items.items.length; itemIndex++) {
@@ -1238,6 +1273,10 @@ function divideRange(value: RangeNumberValue, divisor: number) {
     ...rangeNumber(value.min / divisor, value.max / divisor, false),
     expr: value.expr != null ? divExpr(value.expr, constExpr(divisor)) : null,
   }
+}
+
+function maxRanges(left: RangeNumberValue, right: RangeNumberValue) {
+  return rangeNumber(Math.max(left.min, right.min), Math.max(left.max, right.max), left.isInteger && right.isInteger)
 }
 
 function rangesEqual(left: RangeNumberValue, right: RangeNumberValue) {

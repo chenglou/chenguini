@@ -220,9 +220,10 @@ Good:
 
 - `right = left + width` is proven by affine symbolic equality
 - `cols in 1..7` is proven by a range fact
+- `cellSize ** 2` is proven equal to the same `cellSize ** 2` by structural equality
 - `x * y = y * x` reports `unknown` until the verifier has a stronger symbolic domain or solver
 
-For non-linear math, keep the expression shape before reaching for a solver. E.g. `squareSize = cellSize ** 2` can be proven against the same `cellSize ** 2` expression by structural equality. But `cellSize ** 2 = cellSize * cellSize` should still report `unknown` until the verifier has earned that rewrite.
+Keep non-linear expression shape before reaching for a solver. `cellSize ** 2 = cellSize * cellSize` should still report `unknown` until the verifier has earned that rewrite.
 
 Bad:
 
@@ -950,6 +951,8 @@ Bad:
 - a third copy in a browser runner that tries to reconstruct the same boxes
 
 This is a local seam, not mandatory architecture. Extract the pure helper when it already names real geometry, such as `visible row range`, `image boxes`, or `selected cell`. Don't split a demo just to satisfy a checker.
+
+If the helper updates state during the layout pass, return the updated state too. A scroll helper can return both `adjustedScrollTop` and `anchorAfter`; then the law can check `anchorAfter.prevY - adjustedScrollTop`, not just that scroll moved.
 
 ## Bring In A Different Shape Early
 

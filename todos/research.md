@@ -107,3 +107,23 @@ Possible operations if this becomes real later:
 - `aspringGoToEnd(...)`
 
 But this should not be treated as canon yet. The operations may be real, while the exact helper surface and naming are still too easy to bikeshed.
+
+## Third Static Verifier Demo: Life Calendar
+
+`life-calendar` was a good third verifier target because it changed the arithmetic shape without changing the verifier architecture.
+
+It forced:
+
+- `**`, `Math.sqrt(...)`, and `Math.ceil(...)` in the numeric evaluator
+- integer facts after `ceil(life / countX)`
+- direct half-open hit testing on a grid seam
+- the extraction pattern where the pure helper lives in the demo folder, the demo imports it, and the verifier reads that same file
+
+It did not force:
+
+- callback contracts
+- richer callback effects in range mode
+- append-only array reasoning
+- browser-seam modeling
+
+That was useful. The first two demos had already earned the verifier shape; the third mostly checked that the same shape still held once the math stopped looking like stacked cards and rows.

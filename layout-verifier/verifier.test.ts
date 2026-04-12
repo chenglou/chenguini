@@ -549,6 +549,36 @@ test('photo-gallery verifier catches broken half-open hit testing', async () => 
   expect(getFirstFailure(law)['scenario']).toBe('right_edge_excluded')
 })
 
+test('photo-gallery verifier catches broken clamp boundary branch shape', async () => {
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'return v > max ? max : v < min ? min : v',
+    'return v >= max ? max : v < min ? min : v',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'clamp keeps symbolic branch guards aligned with min, value, and max').status).toBe('fail')
+})
+
+test('photo-gallery verifier catches broken 1D focused scale policy', async () => {
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'get1DItemSize(source, box1DMaxSizeX, box1DMaxSizeY, i === focused ? 1 : 0.7)',
+    'get1DItemSize(source, box1DMaxSizeX, box1DMaxSizeY, i !== focused ? 1 : 0.7)',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'getLineLayout derives item sizes from 1D bounds and focus scale').status).toBe('fail')
+})
+
 test('photo-gallery verifier catches broken 1D y centering', async () => {
   const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
   const source = await Bun.file(sourceFilePath).text()
@@ -564,6 +594,21 @@ test('photo-gallery verifier catches broken 1D y centering', async () => {
   expect(report.phase).toBe('error')
   expect(law.status).toBe('fail')
   expect(getFirstFailure(law)['actualY']).toBeDefined()
+})
+
+test('photo-gallery verifier catches broken grid row centering', async () => {
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'const y = rowsTop[currentRow]! + (rowHeights[currentRow]! - measurement.layoutHeight) / 2',
+    'const y = rowsTop[currentRow]! + (rowHeights[currentRow]! - measurement.layoutHeight) / 3',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'getGridLayout vertically centers items inside row slots').status).toBe('fail')
 })
 
 test('photo-gallery verifier catches broken grid row spacing', async () => {
@@ -1171,6 +1216,21 @@ function demo() {
   })
 
   expect(expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [])))).toEqual(rangeNumber(1, 1, true))
+})
+
+test('range mode keeps Math.ceil results integral over non-integer intervals', () => {
+  const source = `
+function demo(value: number) {
+  return Math.ceil(value)
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  expect(expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('demo', [
+    rangeNumber(1.1, 2.9, false),
+  ])))).toEqual(rangeNumber(2, 3, true))
 })
 
 test('range mode narrows piecewise helpers over identifier comparisons', () => {

@@ -61,12 +61,15 @@ test('photo-gallery mutation coverage catches verified functions and reveals bli
 
   console.log(`\nMutation coverage: ${report.caught}/${report.caught + report.missed} caught (${((report.caught / (report.caught + report.missed)) * 100).toFixed(1)}%), ${report.crashed} crashed, ${report.totalSites} sites`)
 
-  // The verifier catches mutations in the verified functions
-  expect(report.caught).toBeGreaterThan(0)
+  // Keep the current proof surface from silently sliding backward.
+  expect(report.caught).toBeGreaterThanOrEqual(173)
 
   // Line 91 mutations (the track-fill formula) should be caught
   const trackFillCaught = report.caughtMutations.filter(r => r.mutation.site.line === 91)
   expect(trackFillCaught.length).toBeGreaterThan(0)
+  // These were formerly missed: hit testing and clamp branch guards.
+  expect(report.caughtMutations.some(r => r.mutation.site.context.includes('r.x <= x') && r.mutation.site.context.includes('r.sizeY'))).toBe(true)
+  expect(report.caughtMutations.some(r => r.mutation.site.context === 'return v > max ? max : v < min ? min : v')).toBe(true)
 }, 120_000)
 
 test('HN thread mutation coverage runs against the row geometry verifier', async () => {
@@ -78,7 +81,7 @@ test('HN thread mutation coverage runs against the row geometry verifier', async
   console.log(`\nHN thread mutation coverage: ${report.caught}/${report.caught + report.missed} caught (${((report.caught / (report.caught + report.missed)) * 100).toFixed(1)}%), ${report.crashed} crashed, ${report.totalSites} sites`)
 
   expect(report.totalMutations).toBeGreaterThan(0)
-  expect(report.caught).toBeGreaterThan(0)
+  expect(report.caught).toBeGreaterThanOrEqual(19)
 })
 
 test('HN comment mutation coverage runs against the text layout verifier', async () => {
@@ -91,7 +94,7 @@ test('HN comment mutation coverage runs against the text layout verifier', async
   console.log(`\nHN comment mutation coverage: ${report.caught}/${report.caught + report.missed} caught (${((report.caught / (report.caught + report.missed)) * 100).toFixed(1)}%), ${report.crashed} crashed, ${report.totalSites} sites`)
 
   expect(report.totalMutations).toBeGreaterThan(0)
-  expect(report.caught).toBeGreaterThan(0)
+  expect(report.caught).toBeGreaterThanOrEqual(86)
 })
 
 test('life-calendar mutation coverage runs against the grid sizing verifier', async () => {
@@ -103,7 +106,7 @@ test('life-calendar mutation coverage runs against the grid sizing verifier', as
   console.log(`\nLife-calendar mutation coverage: ${report.caught}/${report.caught + report.missed} caught (${((report.caught / (report.caught + report.missed)) * 100).toFixed(1)}%), ${report.crashed} crashed, ${report.totalSites} sites`)
 
   expect(report.totalMutations).toBeGreaterThan(0)
-  expect(report.caught).toBeGreaterThan(0)
+  expect(report.caught).toBeGreaterThanOrEqual(37)
 })
 
 test('SVG diff renderer produces valid output for missed mutations', async () => {
