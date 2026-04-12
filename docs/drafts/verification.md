@@ -223,7 +223,7 @@ Good:
 - `cellSize ** 2` is proven equal to the same `cellSize ** 2` by structural equality
 - `x * y = y * x` reports `unknown` until the verifier has a stronger symbolic domain or solver
 
-Keep non-linear expression shape before reaching for a solver. `cellSize ** 2 = cellSize * cellSize` should still report `unknown` until the verifier has earned that rewrite.
+For non-linear math, keep the expression shape before reaching for a solver. `squareSize = cellSize ** 2` can be proven against the same `cellSize ** 2` expression by structural equality. But `cellSize ** 2 = cellSize * cellSize` should still report `unknown` until the verifier has earned that rewrite.
 
 Bad:
 
@@ -236,19 +236,17 @@ A ready static report should have no `fail` and no `unknown`.
 
 If a grid uses `Math.floor(i / cols)` and `i % cols`, don't stop at "the remainder stays in `0..cols-1`".
 
-Tie that math to something visible.
-
 Good:
 
 - the card at index `i` is centered in the column slot implied by `i % cols`
-- two same-row neighbors only overlap if their slot math is wrong
 - the row top used for index `i` matches the row implied by `Math.floor(i / cols)`
+- same-row overlap bugs report `row`, `column`, and the two x positions that crossed
 
 Bad:
 
 - proving `%` facts in isolation and never checking whether the placed rect actually lands in the expected slot
 
-The point of quotient / remainder reasoning is not number trivia. It is to catch wrong row / column placement.
+The point is row / column placement, not number trivia. See `layout-geometry.md`.
 
 ## Lower Natural Code Once
 
@@ -506,27 +504,16 @@ Treat this like a trust ledger. If a report used `measurePromptLayout` by contra
 
 ## Reports Should Say What Proved What
 
-A static verifier report should not just be a list of green law names.
+A static verifier report should not just be a list of green law names. For each law, keep:
 
-For each law, keep:
-
-- the kind: symbolic, range, concrete fixture, or concrete sweep
+- the kind: `symbolic`, `range`, `concrete fixture`, or `concrete sweep`
 - the proof mechanism: manual check, range non-negative, range integer, symbolic equality, etc.
 - the output target, such as `getGridLayout.return.contentHeight`
 - the first failure, or the first unknown when the verifier could not prove it
 
-Then flip that view around into coverage:
+Then flip that view around into coverage. E.g. `getGridLayout.return.contentHeight` was checked by three laws; `prompt.box.sizeX` was only sampled by one fixture. Keep "unknown" separate from "fail": a failed fact means the code violated the law; an unknown fact means the verifier's current precision did not prove it.
 
-- `getGridLayout.return.contentHeight` was checked by these laws
-- `colsBoxMaxSizeXF.return.cols` was checked by these range facts
-
-This turns the report into a small heatmap. If `contentHeight` has three laws and `prompt.box.sizeX` has one fixture, you can see where the verifier is strong and where it is only sampling.
-
-Keep "unknown" separate from "fail". A failed fact means the code violated the law. An unknown fact means the verifier's current precision did not prove it.
-
-## Name Repeated Proof Shapes As Facts
-
-Once a verifier repeats the same boolean shape, name the fact.
+Once the same boolean shape repeats, name the fact:
 
 Good:
 
@@ -541,45 +528,23 @@ Bad:
 - `secondTop.min === firstBottom.min && secondTop.max === firstBottom.max`
 - a generic `ok` flag with no proof shape
 
-This keeps laws about behavior while proof mechanics stay shared.
-
-## State Geometry Facts In Geometry Words
-
-When a fact is spatial, report it as geometry.
+When a fact is spatial, report it as geometry:
 
 Good:
 
 - `rectLeft`, `rectRight`, `boundsLeft`, `boundsRight`
 - `leftOverflowBy`, `rightOverflowBy`
 - `leftRectRight`, `rightRectLeft`, `overlapBy`
+- a small SVG showing the two intervals or rectangles
 
 Bad:
 
 - `{actual, expected}` for every failure
 - `within: false` with no edge numbers
 - full rectangle containment when the law only checks one axis
-
-Name the axis when the fact is axis-specific. If a text rect only has to fit horizontally, call it horizontal containment. Do not imply the vertical geometry was checked too.
-
-## Geometry Failures Should Draw Themselves
-
-When a geometry law fails, include the computed edges and a tiny visual packet in the report.
-
-Good:
-
-- the geometry address: `itemIndex`, `row`, `column`, or `scenario`
-- the expected span and actual rect
-- the overflowing edge and `overflowBy`
-- a small SVG showing the two intervals or rectangles
-
-Bad:
-
-- only saying `row geometry failed`
-- only saying `centered: false`
-- making the human recompute `left + width` from scattered fields
 - treating the SVG as the oracle
 
-The numbers are the oracle. The picture just makes the bug obvious fast.
+Name the axis when the fact is axis-specific. The numbers are the oracle; the picture just makes the bug obvious fast.
 
 ## Mined Laws Stay Suggestions
 
@@ -766,116 +731,24 @@ This catches bugs like:
 - "the anchored image starts at `40px`, dives offscreen, then comes back to `40px`"
 - "the first row keeps the same items but they pop to final size on frame `1`"
 
-## Semantic Snapshots
+## Keep Browser Reports Semantic
 
-When you snapshot behavior, snapshot the semantics that matter.
+When a browser seam is involved, let the page report the semantics that matter.
 
 Good:
 
-- line count
-- note height
-- arrays like `['body:Ship', 'chip:@maya']`
+- selected text
 - visible item ids
+- line count and widest rendered line
 - a compact positioned-card summary
 
 Bad:
 
 - giant DOM dumps
-- raw screenshots as the only oracle
-- text-only snapshots that throw away distinctions the UI actually cares about
+- screenshots as the only oracle
+- prose counts that can drift from the checked JSON
 
-A good semantic snapshot is small, readable, and obviously tied to user-visible behavior.
-
-Also add at least one sensitivity check. Change one meaningful input and make sure the snapshot changes too. Otherwise the snapshot may just be too weak.
-
-If the snapshot is meant to be consulted by machines, check in the machine-readable file directly.
-
-Good:
-
-- `chrome-step10.json`
-- `status/dashboard.json`
-- one compact per-scenario report
-
-Bad:
-
-- hand-copied markdown tables
-- prose counts that can drift from the real sweep
-
-If you still want a human summary, derive it from the checked-in JSON. Don't make humans keep two truths aligned by hand.
-
-## Batch The Cheap Homogeneous Cases
-
-If the cases only differ by one boring dimension such as width, locale, or one seeded scenario id, batch them inside one opened page.
-
-Good:
-
-- one corpus page load that measures widths `300..900 step=10`
-- one note-layout page load that reports visible row ranges for several fixed scroll positions
-
-Bad:
-
-- relaunching the browser for every width
-- rebuilding the same text state 61 times just to collect 61 heights
-
-Keep the batch homogeneous. If the shape of the work changes, start a new page run.
-
-## Model Geometry Must Match Render Geometry
-
-Some bugs are not really "the line breaker is wrong". They are "the model measured against one width, then the DOM rendered at another width."
-
-Common shape:
-
-- measure a bubble, card, or text block against width A
-- then CSS or a later projection step clamps it to width B
-- now the wrapping looks wrong even if the layout policy itself is fine
-
-Treat this as its own verification class.
-
-Good browser-backed probe:
-
-- model width
-- rendered container width
-- widest rendered row or fragment edge
-- a simple assertion like `widestRow <= renderedInnerWidth`
-
-This is often much better than a screenshot diff.
-
-Screenshots are still great for discovery and debugging. But the durable oracle should usually be a small geometry report the page computes itself.
-
-If the system does "measure first, then shrink/clamp in CSS", assume that is a verification smell until proven otherwise.
-
-## If JS Owns Text Geometry, Let One Proof Path Own It
-
-If JS layout computes line count or comment height, don't stop there. Also check the painted line fragments.
-
-Good proof path:
-
-- one pure layout helper returns `rowRect`, `commentRect`, `blockRects`, `lineRects`, `fragmentRects`
-- render projects those packets
-- hit testing and search highlight consume those same packets
-
-This does _not_ mean every subsystem shares one identical rect. It means there is one base geometry model.
-
-It is still fine to leave explicit browser seams for things like:
-
-- native selection and copy
-- caret placement from live DOM
-- link opening
-
-Good:
-
-- `lineCount`
-- `commentHeight`
-- `commentInnerWidth`
-- `widestRenderedLine`
-- one assertion like `widestRenderedLine <= commentInnerWidth`
-
-Bad:
-
-- only checking the container height
-- assuming the DOM text flow must match the layout helper because "the text is easy"
-
-This is how you catch "the comment height says `1` line but the last word wrapped anyway."
+Add one sensitivity check: change a meaningful input and make sure the report changes too. Batch homogeneous cases inside one page run when they only differ by width, locale, or seed. For transport details, request ids, and headless/headed parity, see `automating-browsers.md`.
 
 ## Measurement Bug vs Policy Bug
 
@@ -916,27 +789,9 @@ But only keep laws you've earned.
 
 If a plausible law fails, demote the law. Don't contort the code to satisfy a fake theorem.
 
-## Local Seams, Not Mandatory Architecture
-
-Sometimes a local pure helper or model makes verification much easier. That's good.
-
-Examples:
-
-- a helper that turns rich inline specs into line fragments
-- a layout function that returns item positions and total height
-
-Use those seams when they buy leverage:
-
-- deterministic measurement
-- semantic snapshots
-- mutation checks
-- cheap-vs-rich comparisons
-
-Don't turn that into a repo-wide rule that every demo needs a shared verifier interface.
-
 ## Extract Pure Geometry At The Demo Boundary
 
-When the demo already has a layout model worth checking, put that pure function in the demo folder.
+When the demo already has a layout model worth checking, put that pure helper in the demo folder.
 
 Good:
 
@@ -949,23 +804,17 @@ Bad:
 - one copy of the layout math in the demo
 - another verifier-shaped copy in `layout-verifier/`
 - a third copy in a browser runner that tries to reconstruct the same boxes
+- moving the seam into shared utils before a second demo needs it
 
 This is a local seam, not mandatory architecture. Extract the pure helper when it already names real geometry, such as `visible row range`, `image boxes`, or `selected cell`. Don't split a demo just to satisfy a checker.
 
-If the helper updates state during the layout pass, return the updated state too. A scroll helper can return both `adjustedScrollTop` and `anchorAfter`; then the law can check `anchorAfter.prevY - adjustedScrollTop`, not just that scroll moved.
+If the helper preserves state across a layout pass, return the updated state field too. A scroll helper can return both `adjustedScrollTop` and `anchorAfter`; then the law can check `anchorAfter.prevY - adjustedScrollTop`, not just that scroll moved.
 
 ## Bring In A Different Shape Early
 
 Once one regular case is proven, bring in a second shape early.
 
-Example:
-
-- first demo: a regular image grid
-- second demo: an indented row stack with visible-row bookkeeping
-
-Do _not_ wait until the first demo is "fully solved". That is how the verifier quietly overfits to one style of geometry.
-
-Keep the second proof perimeter narrow.
+Do _not_ wait until the first demo is "fully solved". That is how the verifier quietly overfits to one style of geometry. Keep the second proof perimeter narrow.
 
 Good:
 
@@ -977,7 +826,7 @@ Bad:
 
 - insisting the second demo also proves native selection, caret placement, and browser range geometry on day one
 
-The point of the second shape is to test whether the verifier architecture generalizes, not to drag every browser seam into the static core immediately.
+The point is to test whether the verifier architecture generalizes, not to drag every browser seam into the static core.
 
 ## Randomized Checks
 
@@ -990,107 +839,28 @@ Guidelines:
 - reduce the failing case into a small permanent fixture when possible
 - prefer domain-shaped generation over arbitrary noise
 
-## Temporary Refactor Oracles
-
-If the question is "did this refactor preserve the old layout?", let the old code be the oracle for a bit.
-
-Generate a one-off report from the old code right before the refactor, then diff the new code against it on the same machine and browser.
+## Temporary Oracles Should Retire
 
 Good:
 
-- item `x/y/width/height`
-- per-line rects
-- per-token rects when wrapped text must stay exact
-- a few representative widths in one run
+- before a refactor, dump item rects, line rects, or token rects from the old code
+- diff the new code against that report on the same machine and browser
+- keep the bulky oracle just long enough to earn confidence
+- replace it with small permanent canaries
 
 Bad:
 
 - keeping the giant dump forever as the official test suite
 - comparing exact geometry across different browsers or machines
-- using screenshots when a small geometry dump would say the same thing more directly
-
-This is great for questions like "did this refactor move any text at all?" Keep the bulky oracle just long enough to earn confidence, then throw it away and keep the small permanent canaries.
-
-## Differential Checks
-
-Differential checks are high leverage, but only when the compared systems are actually semantically equivalent.
-
-Good:
-
-- "all items use the same font, have no extra chrome, and only differ by whitespace-only chunking"
-
-Bad:
-
-- "mixed-script boundaries, arbitrary rechunking, and different inline policies should match a plain-text path exactly"
+- using a differential oracle when the compared paths are not semantically equivalent
 
 If a differential oracle keeps failing for honest cases, narrow it until it becomes true.
 
-## Switch Verifiers By Mechanical Diff
+## Keep Transport Details Out Of Demo Specs
 
-If you want to replace one verifier transport or browser driver with another, prove they agree before switching.
+A demo spec should say what the demo does, what the fragile seams are, and which scenarios must be proven.
 
-Good:
-
-- generate a temporary Chrome corpus sweep JSON with Playwright
-- mechanically diff it against the checked-in Chrome sweep JSON
-- only switch once the diff is empty
-
-Bad:
-
-- "the numbers seem close"
-- eyeballing a few rows
-- silently writing a new baseline just because the transport changed
-
-This is especially important when swapping:
-
-- headed vs headless browser modes
-- AppleScript vs Playwright vs CDP
-- one snapshot format vs another
-
-## Timeout Budget Is Part Of The Verifier
-
-If the only failure is "the browser-backed check needed longer than Bun's default timeout", that is a verifier problem, not automatically a product problem.
-
-Set an explicit timeout budget for slower but still trustworthy checks.
-
-Examples:
-
-- `30_000ms` browser-backed semantic flow for a drag demo
-- `35_000ms` browser-backed semantic flow for a heavier gallery
-- one broader corpus pass that is only run manually before compressing back down
-
-Don't confuse "slow oracle" with "wrong behavior".
-
-## Strip Transport Noise
-
-Keep transport correctness in the report, but don't make it part of the checked behavior.
-
-Good:
-
-- keep `requestId` while transporting the report
-- assert on `orderedCardIds`, `selectedText`, `visibleRowRange`, or `topItemId`
-
-Bad:
-
-- snapshotting a transport nonce as if it were product behavior
-- treating "Chrome exited" as the semantic answer
-
-## What Belongs In A Demo Spec
-
-A demo spec should mostly say:
-
-- what the demo does
-- what the fragile seams are
-- which scenarios must be proven
-
-It should not keep re-explaining:
-
-- how `requestId` works
-- which browser transport is acceptable
-- why phase markers help
-- why the runner should stay dumb
-
-Keep that shared machinery in the docs so every new spec does not fork the repo's verification style.
+It should not re-explain `requestId`, phase markers, browser transport, timeout budgets, or why the runner should stay dumb. Keep that shared machinery in `automating-browsers.md` so every new spec does not fork the repo's verification style.
 
 For how to run this workflow end to end, see `../../todos/demo-reconstruction.md`.
 For how to shape the demo packet itself, see `../../todos/minimum-viable-demo-spec.md` and `../../todos/spec-writing-for-demos.md`.

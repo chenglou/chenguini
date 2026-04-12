@@ -108,22 +108,23 @@ Possible operations if this becomes real later:
 
 But this should not be treated as canon yet. The operations may be real, while the exact helper surface and naming are still too easy to bikeshed.
 
-## Third Static Verifier Demo: Life Calendar
+## Third Demo Retrospective
 
-`life-calendar` was a good third verifier target because it changed the arithmetic shape without changing the verifier architecture.
+`life-calendar` was a good third verifier demo because it asked for different arithmetic without asking for different architecture.
 
-It forced:
+What it forced:
 
-- `**`, `Math.sqrt(...)`, and `Math.ceil(...)` in the numeric evaluator
+- `**` in real layout math rather than toy algebra
+- `Math.sqrt(...)` and `Math.ceil(...)` in the sizing kernel
 - integer facts after `ceil(life / countX)`
-- direct half-open hit testing on a grid seam
+- direct half-open hit testing on a grid seam, not just box layout
 - the extraction pattern where the pure helper lives in the demo folder, the demo imports it, and the verifier reads that same file
 
-It did not force:
+What it did not force:
 
 - callback contracts
 - richer callback effects in range mode
 - append-only array reasoning
 - browser-seam modeling
 
-That was useful. The first two demos had already earned the verifier shape; the third mostly checked that the same shape still held once the math stopped looking like stacked cards and rows.
+That was useful. It means the first two demos had already earned the verifier shape, and the third demo mostly checked that the same shape still held once the math stopped looking like stacked cards and rows.

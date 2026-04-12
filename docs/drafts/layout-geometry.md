@@ -58,6 +58,19 @@ Good:
 
 This is especially important when the layout is exact enough to shrink a `1`-line caption down to its tight width.
 
+## Check The Rendered Projection
+
+Some bugs are not "the line breaker is wrong". They are "the model measured against one width, then the DOM rendered at another width."
+
+Good browser-backed probe:
+
+- model width
+- rendered inner width
+- widest rendered row or fragment edge
+- `widestRenderedLine <= renderedInnerWidth`
+
+This is better than a screenshot diff when the bug is a model/render mismatch. Screenshots are still good for discovery; the durable oracle should usually be a small geometry report the page computes itself.
+
 ## Opaque Geometry Helpers Want Contracts
 
 Sometimes one layout layer has to trust another.
@@ -83,6 +96,8 @@ Bad:
 - measuring against one width, then letting CSS margins or wrapping silently change the same geometry later
 
 The outer layout should trust one contract. It should not maintain a second approximate geometry algorithm for the same thing.
+
+This is a static helper boundary, not a browser seam. Browser seams should still be verified with a page-owned geometry report.
 
 If you're using this repo's static verifier, the current sidecar API is in `../../layout-verifier/contracts.md`.
 

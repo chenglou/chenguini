@@ -280,9 +280,11 @@ Do heavily borrow from shader/pytorch/vector primitives, e.g. vec2/3/4 (either a
 
 For JIT DOM creation with variable-height content: **never** use estimated heights for unmeasured rows. Use a tight **lower bound** bigger than 0. This guarantees you never miss rendering a visible row.
 
-JS-based layout & positioning isn't as scary as you'd think. It enables JS animations, easy occlusion culling (virtualization in web speak), cooler layouts, etc. When you do so, be careful about interleaving JS and CSS layout logic; don't have JS decide placement or fit of, say, a label pill's text width and height, while CSS quietly adds margins, padding, or other spacing that changes the result. That either gives you wrong layout, or forces you to crawl dimensions back out of the DOM/CSS later, which violates our data flow principles.
+JS-based layout & positioning isn't as scary as you'd think. It enables JS animations, easy occlusion culling (virtualization in web speak), cooler layouts, etc.
 
-Since we encourage JS-based layout, text measurement is a bottleneck that is solved through `@chenglou/pretext` npm package. Use it to bypass DOM measurements for text
+When JS owns layout, be careful about interleaving JS and CSS layout logic. Don't have JS decide placement or fit of, say, a label pill's text width and height, while CSS quietly adds margins, padding, or other spacing that changes the result. That either gives you wrong layout, or forces you to crawl dimensions back out of the DOM/CSS later, which violates our data flow principles.
+
+Text measurement is one common bottleneck. Use `@chenglou/pretext` to bypass DOM measurements for text.
 
 Use the minimum number amount of DOM nodes you can get away with. Absolute positioning is the best way to accomplish this since there's no extra wrappers for CSS layout needs
 

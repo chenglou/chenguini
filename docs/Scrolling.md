@@ -46,7 +46,7 @@ The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scr
 
 1. Read `scrollTop` once at the start of each render/frame.
 2. Compare to the stored value from last frame. If different → user scrolled → pick a new anchor (first item below `scrollTop`). If same → data changed → keep the old anchor and compute the delta.
-3. Compute layout. When the anchor item is encountered, `adjustedScrollTop = scrollTop + (currentY - anchor.prevY)`.
+3. Compute layout. When the anchor item is encountered, `adjustedScrollTop = scrollTop + (currentY - anchor.prevY)`. Return the next anchor state too, e.g. `{id, prevY: currentY}`.
 4. After all DOM writes, `scrollTo(adjustedScrollTop)` if it changed. Make sure to use `behavior: 'instant'` to avoid wrong smooth scrolling
 5. **Read back** `container.scrollTop` and store _that_ value (not the requested value). Browser truncation (point 3 above) would otherwise cause a false "user scrolled" detection next frame.
 
