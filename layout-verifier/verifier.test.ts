@@ -8,6 +8,7 @@ import {
   concreteNull,
   concreteNumber,
   concreteObject,
+  constExpr,
   expectArray,
   expectConcreteNumber,
   expectObject,
@@ -21,6 +22,7 @@ import {
   joinRangeCases,
   LoweredProgramAnalyzer,
   mulExpr,
+  powExpr,
   rangeArray,
   rangeNumber,
   rangeObject,
@@ -29,6 +31,7 @@ import {
   type StaticLayoutFunctionSummary,
   type StaticLayoutLawSummary,
   type StaticLayoutVerificationReport,
+  symbolicExprEquals,
   symbolicNumber,
 } from './core.ts'
 import {
@@ -112,6 +115,24 @@ test('law reports keep unknown separate from failures', () => {
   const unknown = getFirstUnknown(law)
   expect(unknown.reason).toBe('symbolic equality is not linear')
   expect(unknown.witness?.['left']).toBe('x * y')
+})
+
+test('symbolic mode keeps exponentiation expression shape', () => {
+  const source = `
+function demo(size: number) {
+  return size ** 2
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  const returns = analyzer.evaluateFunction('demo', [symbolicNumber('size')], 'symbolic')
+  expect(returns).toHaveLength(1)
+  const actual = expectSymbolicNumber(returns[0]!.value)
+  const expected = powExpr(expectSymbolicNumber(symbolicNumber('size')), constExpr(2))
+
+  expect(symbolicExprEquals(actual, expected)).toBe(true)
 })
 
 test('range facts compose under one law', () => {
@@ -278,10 +299,20 @@ test('photo-gallery static verifier keeps its current proof surface', async () =
 
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'getGridLayout row items do not overlap horizontally').status).toBe('pass')
+  expect(getLaw(report, 'rectContainsPoint uses half-open rect edges').status).toBe('pass')
+  expect(getLaw(report, 'clamp keeps symbolic branch guards aligned with min, value, and max').status).toBe('pass')
+  expect(getLaw(report, 'clamp keeps results inside bounds and preserves the interior interval').status).toBe('pass')
+  expect(getLaw(report, 'get1DItemSize derives image size from 1D bounds and scale').status).toBe('pass')
+  expect(getLaw(report, 'getLineLayout y position uses padded vertical centering').status).toBe('pass')
+  expect(getLaw(report, 'getLineLayout non-focused neighbors do not overlap horizontally').status).toBe('pass')
+  expect(getLaw(report, 'getLineLayout advances currentLeft through non-focused items').status).toBe('pass')
   expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation').status).toBe('pass')
   expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation').kind).toBe('range')
   expect(getLaw(report, 'getGridLayout keeps column centers across width partitions').status).toBe('pass')
   expect(getLaw(report, 'getGridLayout keeps column centers across width partitions').kind).toBe('range')
+  expect(getLaw(report, 'getGridLayout derives image sizes from aspect ratio caps').status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout spaces rowsTop by each row height plus vertical gap').status).toBe('pass')
+  expect(getLaw(report, 'getGridLayout vertically centers items inside row slots').status).toBe('pass')
   expect(getLaw(report, 'getGridLayout discovered cols bands stay monotone').status).toBe('pass')
   expect(getLaw(report, 'getGridLayout keeps row count across width partitions').status).toBe('pass')
   expect(getLaw(report, 'makeItemLayoutGeometry keeps prompt x aligned with the image').kind).toBe('symbolic')
@@ -463,6 +494,57 @@ test('photo-gallery verifier catches broken column-slot math', async () => {
   expect(failure['expectedCenterX']).toBeDefined()
   expect(getLaw(report, 'getGridLayout keeps column centers over range evaluation').status).toBe('fail')
   expect(getLaw(report, 'getGridLayout keeps column centers across width partitions').status).toBe('fail')
+})
+
+test('photo-gallery verifier catches broken half-open hit testing', async () => {
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'x < r.x + r.sizeX',
+    'x <= r.x + r.sizeX',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'rectContainsPoint uses half-open rect edges')
+
+  expect(report.phase).toBe('error')
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['scenario']).toBe('right_edge_excluded')
+})
+
+test('photo-gallery verifier catches broken 1D y centering', async () => {
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'const y = Math.max(windowPaddingTop, (windowSizeY - measurement.layoutHeight) / 2) + scrollY',
+    'const y = Math.max(windowPaddingTop, (windowSizeY + measurement.layoutHeight) / 2) + scrollY',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'getLineLayout y position uses padded vertical centering')
+
+  expect(report.phase).toBe('error')
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['actualY']).toBeDefined()
+})
+
+test('photo-gallery verifier catches broken grid row spacing', async () => {
+  const sourceFilePath = new URL('../demos/photo-gallery/layout-model.ts', import.meta.url).pathname
+  const source = await Bun.file(sourceFilePath).text()
+  const overrides = await loadStaticContractOverridesForSourceFile(sourceFilePath)
+  const buggySource = replaceOnce(
+    source,
+    'rowsTop.push(rowsTop.at(-1)! + rowHeight + boxesGapY)',
+    'rowsTop.push(rowsTop.at(-1)! + rowHeight - boxesGapY)',
+  )
+  const report = runPhotoGalleryStaticVerification(buggySource, overrides)
+  const law = getLaw(report, 'getGridLayout spaces rowsTop by each row height plus vertical gap')
+
+  expect(report.phase).toBe('error')
+  expect(law.status).toBe('fail')
+  expect(getFirstFailure(law)['actualSpacing']).toBeDefined()
 })
 
 test('photo-gallery verifier catches broken range content-height derivation', async () => {

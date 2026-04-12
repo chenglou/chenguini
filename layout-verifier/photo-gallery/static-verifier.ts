@@ -1,4 +1,11 @@
-import {prompt1DLineHeight, prompt2DLineHeight, prompt2DMaxLines, promptPaddingBottom} from '../../demos/photo-gallery/prompt-layout'
+import {
+  prompt1DLineHeight,
+  prompt1DMaxLines,
+  prompt2DLineHeight,
+  prompt2DMaxLines,
+  promptPaddingBottom,
+  promptPaddingTop,
+} from '../../demos/photo-gallery/prompt-layout'
 import {
   addExpr,
   buildStaticLayoutReport,
@@ -14,6 +21,7 @@ import {
   divExpr,
   epsilon,
   expectArray,
+  expectBoolean,
   expectConcreteNumber,
   expectObject,
   expectRangeArray,
@@ -32,8 +40,10 @@ import {
   rangeNumber,
   rangeObject,
   type FunctionOverride,
+  type BoolExpr,
   type RangeNumberValue,
   type RangeObjectValue,
+  type ScalarExpr,
   type StaticLayoutCandidateLaw,
   type StaticLayoutLawWitness,
   type StaticLayoutVerificationReport,
@@ -55,15 +65,13 @@ export function runPhotoGalleryStaticVerification(
   sourceText: string,
   autoContractOverrides: Record<string, FunctionOverride> = {},
 ): StaticLayoutVerificationReport {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {
-    prompt1DLineHeight,
-    prompt2DLineHeight,
-    prompt2DMaxLines,
-    promptPaddingBottom,
-  }, autoContractOverrides)
+  const analyzer = new LoweredProgramAnalyzer(sourceText, photoGalleryGlobals, autoContractOverrides)
   const laws = new Map<string, InternalLawSummary>()
 
+  verifyClampRange(analyzer, laws)
+  verifyRectContainsPointConcrete(analyzer, laws)
   verifyMakeItemLayoutGeometry(analyzer, laws)
+  verifyGet1DItemSizeConcrete(sourceText, autoContractOverrides, laws)
   verifyGetLineLayoutConcrete(sourceText, autoContractOverrides, laws)
   verifyGetGridLayoutConcrete(sourceText, autoContractOverrides, laws)
   verifyGetGridLayoutRange(sourceText, autoContractOverrides, laws)
@@ -79,17 +87,143 @@ export function runPhotoGalleryStaticVerification(
   })
 }
 
+const photoGalleryGlobals = {
+  prompt1DLineHeight,
+  prompt1DMaxLines,
+  prompt2DLineHeight,
+  prompt2DMaxLines,
+  promptPaddingBottom,
+  promptPaddingTop,
+}
+
+function verifyClampRange(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const min = symbolicNumber('min')
+  const value = symbolicNumber('v')
+  const max = symbolicNumber('max')
+  const minExpr = expectSymbolicNumber(min)
+  const valueExpr = expectSymbolicNumber(value)
+  const maxExpr = expectSymbolicNumber(max)
+  const symbolicReturns = analyzer.evaluateFunction('clamp', [min, value, max], 'symbolic')
+  const maxBranch = findSymbolicReturn(symbolicReturns, maxExpr)
+  const minBranch = findSymbolicReturn(symbolicReturns, minExpr)
+  const valueBranch = findSymbolicReturn(symbolicReturns, valueExpr)
+  const symbolicShapeMatches = (
+    symbolicReturns.length === 3 &&
+    maxBranch != null &&
+    minBranch != null &&
+    valueBranch != null &&
+    hasSymbolicConstraint(maxBranch.constraints, '>', valueExpr, maxExpr) &&
+    hasSymbolicConstraint(minBranch.constraints, '<=', valueExpr, maxExpr) &&
+    hasSymbolicConstraint(minBranch.constraints, '<', valueExpr, minExpr) &&
+    hasSymbolicConstraint(valueBranch.constraints, '<=', valueExpr, maxExpr) &&
+    hasSymbolicConstraint(valueBranch.constraints, '>=', valueExpr, minExpr)
+  )
+  check(laws, 'clamp keeps symbolic branch guards aligned with min, value, and max', symbolicShapeMatches, () => ({
+    branches: describeSymbolicReturns(symbolicReturns),
+  }), {kind: 'symbolic', targets: ['clamp.return']})
+
+  const scenarios = [
+    {label: 'below_min', min: rangeNumber(10, 10, true), value: rangeNumber(0, 5, true), max: rangeNumber(20, 20, true), expected: rangeNumber(10, 10, true)},
+    {label: 'inside', min: rangeNumber(10, 10, true), value: rangeNumber(10, 20, true), max: rangeNumber(20, 20, true), expected: rangeNumber(10, 20, true)},
+    {label: 'above_max', min: rangeNumber(10, 10, true), value: rangeNumber(25, 30, true), max: rangeNumber(20, 20, true), expected: rangeNumber(20, 20, true)},
+    {label: 'crossing', min: rangeNumber(10, 10, true), value: rangeNumber(0, 30, true), max: rangeNumber(20, 20, true), expected: rangeNumber(10, 20, true)},
+  ]
+
+  for (const scenario of scenarios) {
+    const result = expectRangeNumber(joinRangeCases(analyzer.evaluateFunctionRange('clamp', [
+      scenario.min,
+      scenario.value,
+      scenario.max,
+    ])))
+    check(laws, 'clamp keeps results inside bounds and preserves the interior interval', rangesEqual(result, scenario.expected), () => ({
+      scenario: scenario.label,
+      actual: describeRange(result),
+      expected: describeRange(scenario.expected),
+    }), {kind: 'range', targets: ['clamp.return']})
+  }
+}
+
+function findSymbolicReturn(returns: Array<{constraints: BoolExpr[]; value: Value}>, expr: ScalarExpr) {
+  return returns.find(returned => (
+    returned.value.kind === 'number' &&
+    returned.value.mode === 'symbolic' &&
+    symbolicExprEquals(returned.value.expr, expr)
+  ))
+}
+
+function hasSymbolicConstraint(constraints: BoolExpr[], op: BoolExpr['op'], left: ScalarExpr, right: ScalarExpr) {
+  return constraints.some(constraint => (
+    constraint.op === op &&
+    symbolicExprEquals(constraint.left, left) &&
+    symbolicExprEquals(constraint.right, right)
+  ))
+}
+
+function describeSymbolicReturns(returns: Array<{constraints: BoolExpr[]; value: Value}>) {
+  return returns.map(returned => {
+    const value =
+      returned.value.kind === 'number' && returned.value.mode === 'symbolic'
+        ? formatScalarExpr(returned.value.expr)
+        : returned.value.kind
+    const joinedConstraints = returned.constraints.map(describeBoolExpr).join(' && ')
+    const constraints = joinedConstraints.length > 0 ? joinedConstraints : 'true'
+    return `${value} when ${constraints}`
+  }).join('; ')
+}
+
+function describeBoolExpr(expr: BoolExpr) {
+  return `${formatScalarExpr(expr.left)} ${expr.op} ${formatScalarExpr(expr.right)}`
+}
+
+function verifyRectContainsPointConcrete(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+  const rectValue = concreteObject({
+    x: concreteNumber(10),
+    y: concreteNumber(20),
+    sizeX: concreteNumber(100),
+    sizeY: concreteNumber(50),
+  })
+  const scenarios = [
+    {label: 'top_left_edge', x: 10, y: 20, expected: true},
+    {label: 'inside', x: 60, y: 45, expected: true},
+    {label: 'outside_left', x: 9, y: 45, expected: false},
+    {label: 'outside_top', x: 60, y: 19, expected: false},
+    {label: 'right_edge_excluded', x: 110, y: 45, expected: false},
+    {label: 'bottom_edge_excluded', x: 60, y: 70, expected: false},
+    {label: 'outside_right', x: 111, y: 45, expected: false},
+    {label: 'outside_bottom', x: 60, y: 71, expected: false},
+  ]
+
+  for (const scenario of scenarios) {
+    const returns = analyzer.evaluateFunction('rectContainsPoint', [
+      rectValue,
+      concreteNumber(scenario.x),
+      concreteNumber(scenario.y),
+    ], 'concrete')
+    check(laws, 'rectContainsPoint stays branch-free per concrete point', returns.length === 1, () => ({
+      scenario: scenario.label,
+      cases: returns.length,
+    }), 'concrete-fixture')
+    if (returns.length !== 1) continue
+
+    const result = expectBoolean(returns[0]!.value)
+    if (result.mode !== 'concrete') throw new Error('rectContainsPoint concrete proof expected a concrete boolean')
+    const actual = result.value
+    check(laws, 'rectContainsPoint uses half-open rect edges', actual === scenario.expected, () => ({
+      scenario: scenario.label,
+      x: scenario.x,
+      y: scenario.y,
+      actual: actual ? 'true' : 'false',
+      expected: scenario.expected ? 'true' : 'false',
+    }), {kind: 'concrete-fixture', targets: ['rectContainsPoint.return']})
+  }
+}
+
 function verifyGetGridLayoutRange(
   sourceText: string,
   autoContractOverrides: Record<string, FunctionOverride>,
   laws: Map<string, InternalLawSummary>,
 ) {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {
-    prompt1DLineHeight,
-    prompt2DLineHeight,
-    prompt2DMaxLines,
-    promptPaddingBottom,
-  }, autoContractOverrides)
+  const analyzer = new LoweredProgramAnalyzer(sourceText, photoGalleryGlobals, autoContractOverrides)
 
   const layoutSources = rangeArray([
     rangePhotoSource(1, 400),
@@ -174,12 +308,7 @@ function verifyGetGridLayoutRangeAcrossWidthPartitions(
   autoContractOverrides: Record<string, FunctionOverride>,
   laws: Map<string, InternalLawSummary>,
 ) {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {
-    prompt1DLineHeight,
-    prompt2DLineHeight,
-    prompt2DMaxLines,
-    promptPaddingBottom,
-  }, autoContractOverrides)
+  const analyzer = new LoweredProgramAnalyzer(sourceText, photoGalleryGlobals, autoContractOverrides)
 
   const layoutSources = rangeArray([
     rangePhotoSource(1, 400),
@@ -324,17 +453,87 @@ export async function runPhotoGalleryStaticVerificationForSourceFile(sourceFileP
   return runPhotoGalleryStaticVerification(sourceText, autoContractOverrides)
 }
 
+function verifyGet1DItemSizeConcrete(
+  sourceText: string,
+  autoContractOverrides: Record<string, FunctionOverride>,
+  laws: Map<string, InternalLawSummary>,
+) {
+  const analyzer = new LoweredProgramAnalyzer(sourceText, photoGalleryGlobals, autoContractOverrides)
+  const scenarios = [
+    {label: 'focused_square_height_limited', ar: 1, naturalSizeX: 400, box1DMaxSizeX: 520, box1DMaxSizeY: 360, scaleFactor: 1},
+    {label: 'neighbor_landscape_width_limited', ar: 1.5, naturalSizeX: 700, box1DMaxSizeX: 420, box1DMaxSizeY: 600, scaleFactor: 0.7},
+    {label: 'neighbor_portrait_height_limited', ar: 0.75, naturalSizeX: 480, box1DMaxSizeX: 700, box1DMaxSizeY: 300, scaleFactor: 0.7},
+    {label: 'tiny_height_uses_min_image_height', ar: 1.2, naturalSizeX: 480, box1DMaxSizeX: 700, box1DMaxSizeY: 10, scaleFactor: 1},
+  ]
+
+  for (const scenario of scenarios) {
+    const source = concreteObject({
+      ar: concreteNumber(scenario.ar),
+      naturalSizeX: concreteNumber(scenario.naturalSizeX),
+      preparedPrompt: concreteNull('concrete'),
+    })
+    const returns = analyzer.evaluateFunction('get1DItemSize', [
+      source,
+      concreteNumber(scenario.box1DMaxSizeX),
+      concreteNumber(scenario.box1DMaxSizeY),
+      concreteNumber(scenario.scaleFactor),
+    ], 'concrete')
+    check(laws, 'get1DItemSize stays branch-free per concrete size case', returns.length === 1, () => ({
+      scenario: scenario.label,
+      cases: returns.length,
+    }), 'concrete-fixture')
+    if (returns.length !== 1) continue
+
+    const result = expectObject(returns[0]!.value)
+    const promptLayout = expectObject(getProp(result, 'promptLayout'))
+    const actualImageSizeX = expectConcreteNumber(getProp(result, 'imageSizeX'))
+    const actualImageSizeY = expectConcreteNumber(getProp(result, 'imageSizeY'))
+    const actualLayoutHeight = expectConcreteNumber(getProp(result, 'layoutHeight'))
+    const actualPromptWidth = expectConcreteNumber(getProp(promptLayout, 'width'))
+    const actualPromptVisibleHeight = expectConcreteNumber(getProp(promptLayout, 'visibleHeight'))
+    const expected = expected1DMeasurement(
+      scenario.ar,
+      scenario.naturalSizeX,
+      scenario.box1DMaxSizeX,
+      scenario.box1DMaxSizeY,
+      scenario.scaleFactor,
+      prompt1DLineHeight * 2,
+    )
+
+    check(laws, 'get1DItemSize derives image size from 1D bounds and scale', (
+      Math.abs(actualImageSizeX - expected.imageSizeX) <= epsilon &&
+      Math.abs(actualImageSizeY - expected.imageSizeY) <= epsilon
+    ), () => ({
+      scenario: scenario.label,
+      imageSizeX: actualImageSizeX,
+      expectedImageSizeX: expected.imageSizeX,
+      imageSizeY: actualImageSizeY,
+      expectedImageSizeY: expected.imageSizeY,
+    }), {kind: 'concrete-fixture', targets: ['get1DItemSize.imageSizeX', 'get1DItemSize.imageSizeY']})
+    check(laws, 'get1DItemSize derives layout height from image and prompt heights', Math.abs(actualLayoutHeight - expected.layoutHeight) <= epsilon, () => ({
+      scenario: scenario.label,
+      layoutHeight: actualLayoutHeight,
+      expectedLayoutHeight: expected.layoutHeight,
+    }), {kind: 'concrete-fixture', targets: ['get1DItemSize.layoutHeight']})
+    check(laws, 'get1DItemSize keeps prompt layout tied to the final image width', (
+      Math.abs(actualPromptWidth - expected.imageSizeX) <= epsilon &&
+      Math.abs(actualPromptVisibleHeight - expected.promptVisibleHeight) <= epsilon
+    ), () => ({
+      scenario: scenario.label,
+      promptWidth: actualPromptWidth,
+      expectedPromptWidth: expected.imageSizeX,
+      promptVisibleHeight: actualPromptVisibleHeight,
+      expectedPromptVisibleHeight: expected.promptVisibleHeight,
+    }), {kind: 'concrete-fixture', targets: ['get1DItemSize.promptLayout']})
+  }
+}
+
 function verifyGetLineLayoutConcrete(
   sourceText: string,
   autoContractOverrides: Record<string, FunctionOverride>,
   laws: Map<string, InternalLawSummary>,
 ) {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {
-    prompt1DLineHeight,
-    prompt2DLineHeight,
-    prompt2DMaxLines,
-    promptPaddingBottom,
-  }, {
+  const analyzer = new LoweredProgramAnalyzer(sourceText, photoGalleryGlobals, {
     ...autoContractOverrides,
     // This proof path trusts the 1D prompt measurement contract here instead of
     // proving the iterative get1DItemSize prompt solver from source.
@@ -376,6 +575,7 @@ function verifyGetLineLayoutConcrete(
 
   const lineCases = [
     {focused: 0, label: 'first'},
+    {focused: 1, label: 'second'},
     {focused: 2, label: 'middle'},
     {focused: 3, label: 'last'},
   ]
@@ -383,6 +583,11 @@ function verifyGetLineLayoutConcrete(
   const windowSizeY = 700
   const scrollY = 123.5
   const hitArea1DSizeX = analyzer.getGlobalNumber('hitArea1DSizeX')
+  const boxes1DGapX = analyzer.getGlobalNumber('boxes1DGapX')
+  const boxes1DGapY = analyzer.getGlobalNumber('boxes1DGapY')
+  const windowPaddingTop = analyzer.getGlobalNumber('windowPaddingTop')
+  const box1DMaxSizeX = windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
+  const box1DMaxSizeY = windowSizeY - windowPaddingTop - boxes1DGapY
 
   for (const lineCase of lineCases) {
     const returns = analyzer.evaluateFunction('getLineLayout', [
@@ -402,12 +607,80 @@ function verifyGetLineLayoutConcrete(
     const items = expectArray(getProp(layout, 'items'))
     const leftHitArea = getProp(layout, 'leftHitArea')
     const rightHitArea = getProp(layout, 'rightHitArea')
+    const itemRects = items.items.map(itemValue => {
+      const item = expectObject(itemValue)
+      const layoutBox = expectObject(getProp(item, 'layoutBox'))
+      return {
+        left: expectConcreteNumber(getProp(layoutBox, 'x')),
+        top: expectConcreteNumber(getProp(layoutBox, 'y')),
+        width: expectConcreteNumber(getProp(layoutBox, 'sizeX')),
+        height: expectConcreteNumber(getProp(layoutBox, 'sizeY')),
+      }
+    })
 
     check(laws, 'getLineLayout preserves item count', items.items.length === layoutSources.items.length, () => ({
       scenario: lineCase.label,
       itemCount: items.items.length,
       expectedItemCount: layoutSources.items.length,
     }), 'concrete-fixture')
+
+    let yPositionsMatch = true
+    let yFailure: null | Record<string, number | string> = null
+    for (let i = 0; i < itemRects.length; i++) {
+      const itemRect = itemRects[i]!
+      const expectedY = Math.max(windowPaddingTop, (windowSizeY - itemRect.height) / 2) + scrollY
+      if (Math.abs(itemRect.top - expectedY) > epsilon) {
+        yPositionsMatch = false
+        yFailure ??= {
+          scenario: lineCase.label,
+          itemIndex: i,
+          actualY: itemRect.top,
+          expectedY,
+          layoutHeight: itemRect.height,
+        }
+      }
+    }
+    check(laws, 'getLineLayout y position uses padded vertical centering', yPositionsMatch, () => ({
+      scenario: lineCase.label,
+      focused: lineCase.focused,
+      ...(yFailure ?? {}),
+    }), {kind: 'concrete-fixture', targets: ['getLineLayout.items[].layoutBox.y']})
+
+    let itemSizesMatch = true
+    let sizeFailure: null | Record<string, number | string> = null
+    for (let i = 0; i < itemRects.length; i++) {
+      const source = expectObject(layoutSources.items[i]!)
+      const ar = expectConcreteNumber(getProp(source, 'ar'))
+      const naturalSizeX = expectConcreteNumber(getProp(source, 'naturalSizeX'))
+      const expected = expected1DOverrideMeasurement(
+        ar,
+        naturalSizeX,
+        box1DMaxSizeX,
+        box1DMaxSizeY,
+        i === lineCase.focused ? 1 : 0.7,
+      )
+      const itemRect = itemRects[i]!
+      if (
+        Math.abs(itemRect.width - expected.imageSizeX) > epsilon ||
+        Math.abs(itemRect.height - expected.layoutHeight) > epsilon
+      ) {
+        itemSizesMatch = false
+        sizeFailure ??= {
+          scenario: lineCase.label,
+          focused: lineCase.focused,
+          itemIndex: i,
+          actualWidth: itemRect.width,
+          expectedWidth: expected.imageSizeX,
+          actualHeight: itemRect.height,
+          expectedHeight: expected.layoutHeight,
+        }
+      }
+    }
+    check(laws, 'getLineLayout derives item sizes from 1D bounds and focus scale', itemSizesMatch, () => ({
+      scenario: lineCase.label,
+      focused: lineCase.focused,
+      ...(sizeFailure ?? {}),
+    }), {kind: 'concrete-fixture', targets: ['getLineLayout.items[].layoutBox.sizeX', 'getLineLayout.items[].layoutBox.sizeY']})
 
     const focusedItem = expectObject(items.items[lineCase.focused]!)
     const focusedImageBox = expectObject(getProp(focusedItem, 'imageBox'))
@@ -451,20 +724,84 @@ function verifyGetLineLayoutConcrete(
     }), 'concrete-fixture')
 
     let monotone = true
+    let nonFocusedNoOverlap = true
+    let currentLeftAdvances = true
+    let expectedLeft = hitArea1DSizeX + boxes1DGapX
+    for (let i = lineCase.focused - 1; i >= 0; i--) expectedLeft -= itemRects[i]!.width + boxes1DGapX
+    let monotoneFailure: null | Record<string, number | string> = null
+    let overlapFailure: null | Record<string, number | string> = null
+    let currentLeftFailure: null | Record<string, number | string> = null
     for (let i = 0; i < items.items.length - 1; i++) {
-      const left = expectObject(items.items[i]!)
-      const right = expectObject(items.items[i + 1]!)
-      const leftImageBox = expectObject(getProp(left, 'imageBox'))
-      const rightImageBox = expectObject(getProp(right, 'imageBox'))
-      if (expectConcreteNumber(getProp(leftImageBox, 'x')) > expectConcreteNumber(getProp(rightImageBox, 'x')) + epsilon) {
+      const leftRect = itemRects[i]!
+      const rightRect = itemRects[i + 1]!
+      if (leftRect.left > rightRect.left + epsilon) {
         monotone = false
-        break
+        monotoneFailure ??= {
+          scenario: lineCase.label,
+          focused: lineCase.focused,
+          leftItemIndex: i,
+          rightItemIndex: i + 1,
+          leftX: leftRect.left,
+          rightX: rightRect.left,
+        }
+      }
+      if (i !== lineCase.focused && i + 1 !== lineCase.focused) {
+        checkFact(laws, 'getLineLayout non-focused neighbors do not overlap horizontally as geometry facts', {
+          kind: 'concrete-rects-do-not-overlap-x',
+          left: leftRect,
+          right: rightRect,
+          tolerance: epsilon,
+        }, () => ({
+          scenario: lineCase.label,
+          focused: lineCase.focused,
+          leftItemIndex: i,
+          rightItemIndex: i + 1,
+        }), {targets: [`getLineLayout.items.${i}.layoutBox`, `getLineLayout.items.${i + 1}.layoutBox`]})
+        if (leftRect.left + leftRect.width > rightRect.left + epsilon) {
+          nonFocusedNoOverlap = false
+          overlapFailure ??= {
+            scenario: lineCase.label,
+            focused: lineCase.focused,
+            leftItemIndex: i,
+            rightItemIndex: i + 1,
+            leftRight: leftRect.left + leftRect.width,
+            rightLeft: rightRect.left,
+            overlapBy: leftRect.left + leftRect.width - rightRect.left,
+          }
+        }
       }
     }
     check(laws, 'getLineLayout keeps item x order monotone', monotone, () => ({
       scenario: lineCase.label,
       focused: lineCase.focused,
+      ...(monotoneFailure ?? {}),
     }), 'concrete-fixture')
+    check(laws, 'getLineLayout non-focused neighbors do not overlap horizontally', nonFocusedNoOverlap, () => ({
+      scenario: lineCase.label,
+      focused: lineCase.focused,
+      ...(overlapFailure ?? {}),
+    }), 'concrete-fixture')
+
+    for (let i = 0; i < itemRects.length; i++) {
+      const itemRect = itemRects[i]!
+      const expectedX = i === lineCase.focused ? (windowSizeX - itemRect.width) / 2 : expectedLeft
+      if (Math.abs(itemRect.left - expectedX) > epsilon) {
+        currentLeftAdvances = false
+        currentLeftFailure ??= {
+          scenario: lineCase.label,
+          focused: lineCase.focused,
+          itemIndex: i,
+          actualX: itemRect.left,
+          expectedX,
+        }
+      }
+      expectedLeft = i === lineCase.focused ? windowSizeX - hitArea1DSizeX : expectedLeft + itemRect.width + boxes1DGapX
+    }
+    check(laws, 'getLineLayout advances currentLeft through non-focused items', currentLeftAdvances, () => ({
+      scenario: lineCase.label,
+      focused: lineCase.focused,
+      ...(currentLeftFailure ?? {}),
+    }), {kind: 'concrete-fixture', targets: ['getLineLayout.items[].layoutBox.x']})
   }
 }
 
@@ -473,12 +810,7 @@ function verifyGetGridLayoutConcrete(
   autoContractOverrides: Record<string, FunctionOverride>,
   laws: Map<string, InternalLawSummary>,
 ) {
-  const analyzer = new LoweredProgramAnalyzer(sourceText, {
-    prompt1DLineHeight,
-    prompt2DLineHeight,
-    prompt2DMaxLines,
-    promptPaddingBottom,
-  }, autoContractOverrides)
+  const analyzer = new LoweredProgramAnalyzer(sourceText, photoGalleryGlobals, autoContractOverrides)
 
   const layoutSources = concreteArray([
     concreteObject({ar: concreteNumber(1), naturalSizeX: concreteNumber(400), preparedPrompt: concreteNull('concrete')}),
@@ -522,6 +854,7 @@ function verifyGetGridLayoutConcrete(
     }), 'concrete-fixture')
 
     const rowCount = Math.ceil(items.items.length / cols)
+    const rowsTopValues = rowsTop.items.map(value => expectConcreteNumber(value))
     check(laws, 'getGridLayout rowsTop count matches the row count plus trailing bottom', rowsTop.items.length === rowCount + 1, () => ({
       windowWidth,
       cols,
@@ -533,12 +866,23 @@ function verifyGetGridLayoutConcrete(
     let withinViewport = true
     let horizontalNonOverlap = true
     let columnCentering = true
+    let imageSizing = true
     let viewportFailure: null | Record<string, number | string> = null
     let overlapFailure: null | Record<string, number | string> = null
     let columnCenterFailure: null | Record<string, number | string> = null
+    let imageSizingFailure: null | Record<string, number | string> = null
+    const rowHeights = Array.from({length: rowCount}, () => 0)
+    const itemRects: Array<{
+      itemIndex: number
+      row: number
+      column: number
+      rect: {left: number; top: number; width: number; height: number}
+    }> = []
     for (let i = 0; i < items.items.length; i++) {
       const item = expectObject(items.items[i]!)
+      const source = expectObject(layoutSources.items[i]!)
       const layoutBox = expectObject(getProp(item, 'layoutBox'))
+      const imageBox = expectObject(getProp(item, 'imageBox'))
       const prompt = expectObject(getProp(item, 'prompt'))
       const promptBox = expectObject(getProp(prompt, 'box'))
       const left = expectConcreteNumber(getProp(layoutBox, 'x'))
@@ -549,6 +893,8 @@ function verifyGetGridLayoutConcrete(
       const {row, column} = gridSlot(i, cols)
       const bottom = layoutTop + layoutHeight
       const layoutRect = {left, top: layoutTop, width: layoutWidth, height: layoutHeight}
+      rowHeights[row] = Math.max(rowHeights[row] ?? 0, layoutHeight)
+      itemRects.push({itemIndex: i, row, column, rect: layoutRect})
       maxBottom = Math.max(maxBottom, bottom)
       checkFact(laws, 'getGridLayout keeps each layout box inside viewport width as geometry facts', {
         kind: 'concrete-rect-x-within',
@@ -581,6 +927,28 @@ function verifyGetGridLayoutConcrete(
           column,
           promptWidth: expectConcreteNumber(getProp(promptBox, 'sizeX')),
           layoutWidth,
+        }
+      }
+      const ar = expectConcreteNumber(getProp(source, 'ar'))
+      const naturalSizeX = expectConcreteNumber(getProp(source, 'naturalSizeX'))
+      const expectedImage = expectedGridMeasurement(ar, naturalSizeX, boxMaxSizeX)
+      const imageWidth = expectConcreteNumber(getProp(imageBox, 'sizeX'))
+      const imageHeight = expectConcreteNumber(getProp(imageBox, 'sizeY'))
+      if (
+        Math.abs(imageWidth - expectedImage.imageSizeX) > epsilon ||
+        Math.abs(imageHeight - expectedImage.imageSizeY) > epsilon
+      ) {
+        imageSizing = false
+        imageSizingFailure ??= {
+          windowWidth,
+          cols,
+          itemIndex: i,
+          row,
+          column,
+          imageWidth,
+          expectedImageWidth: expectedImage.imageSizeX,
+          imageHeight,
+          expectedImageHeight: expectedImage.imageSizeY,
         }
       }
 
@@ -632,6 +1000,59 @@ function verifyGetGridLayoutConcrete(
       }
     }
 
+    let rowSpacing = true
+    let verticalCentering = true
+    let rowSpacingFailure: null | Record<string, number | string> = null
+    let verticalCenteringFailure: null | Record<string, number | string> = null
+    for (let row = 0; row < rowCount; row++) {
+      const rowTop = rowsTopValues[row]
+      const nextRowTop = rowsTopValues[row + 1]
+      const rowHeight = rowHeights[row]
+      if (rowTop == null || nextRowTop == null || rowHeight == null) {
+        rowSpacing = false
+        rowSpacingFailure ??= {
+          windowWidth,
+          cols,
+          row,
+          reason: 'missing row top or row height',
+        }
+        continue
+      }
+      const actualSpacing = nextRowTop - rowTop
+      const expectedSpacing = rowHeight + boxesGapY
+      if (Math.abs(actualSpacing - expectedSpacing) > epsilon) {
+        rowSpacing = false
+        rowSpacingFailure ??= {
+          windowWidth,
+          cols,
+          row,
+          actualSpacing,
+          expectedSpacing,
+          rowHeight,
+        }
+      }
+    }
+    for (const item of itemRects) {
+      const rowTop = rowsTopValues[item.row]
+      const rowHeight = rowHeights[item.row]
+      if (rowTop == null || rowHeight == null) continue
+      const expectedTop = rowTop + (rowHeight - item.rect.height) / 2
+      if (Math.abs(item.rect.top - expectedTop) > epsilon) {
+        verticalCentering = false
+        verticalCenteringFailure ??= {
+          windowWidth,
+          cols,
+          itemIndex: item.itemIndex,
+          row: item.row,
+          column: item.column,
+          actualTop: item.rect.top,
+          expectedTop,
+          rowHeight,
+          itemHeight: item.rect.height,
+        }
+      }
+    }
+
     check(laws, 'getGridLayout keeps layout boxes within the viewport width', withinViewport, () => ({
       windowWidth,
       cols,
@@ -647,6 +1068,21 @@ function verifyGetGridLayoutConcrete(
       cols,
       ...(columnCenterFailure ?? {}),
     }), 'concrete-fixture')
+    check(laws, 'getGridLayout derives image sizes from aspect ratio caps', imageSizing, () => ({
+      windowWidth,
+      cols,
+      ...(imageSizingFailure ?? {}),
+    }), {kind: 'concrete-fixture', targets: ['getGridLayout.items[].imageBox.sizeX', 'getGridLayout.items[].imageBox.sizeY']})
+    check(laws, 'getGridLayout spaces rowsTop by each row height plus vertical gap', rowSpacing, () => ({
+      windowWidth,
+      cols,
+      ...(rowSpacingFailure ?? {}),
+    }), {kind: 'concrete-fixture', targets: ['getGridLayout.rowsTop', 'getGridLayout.items[].layoutBox.sizeY']})
+    check(laws, 'getGridLayout vertically centers items inside row slots', verticalCentering, () => ({
+      windowWidth,
+      cols,
+      ...(verticalCenteringFailure ?? {}),
+    }), {kind: 'concrete-fixture', targets: ['getGridLayout.items[].layoutBox.y', 'getGridLayout.rowsTop']})
     check(laws, 'getGridLayout content height matches the last row bottom plus bottom gap', Math.abs(contentHeight - (maxBottom + boxesGapY)) <= epsilon, () => ({
       windowWidth,
       contentHeight,
@@ -721,6 +1157,56 @@ function rangePhotoSource(ar: number, naturalSizeX: number) {
     naturalSizeX: rangeNumber(naturalSizeX, naturalSizeX, true),
     preparedPrompt: rangeObject({}),
   })
+}
+
+function expected1DMeasurement(
+  ar: number,
+  naturalSizeX: number,
+  box1DMaxSizeX: number,
+  box1DMaxSizeY: number,
+  scaleFactor: number,
+  promptVisibleHeight: number,
+) {
+  const promptAreaY = promptVisibleHeight + promptPaddingBottom
+  const imgMaxSizeY = Math.max(1, box1DMaxSizeY - promptAreaY)
+  const imageSizeX = Math.min(naturalSizeX, box1DMaxSizeX, imgMaxSizeY * ar) * scaleFactor
+  const imageSizeY = imageSizeX / ar
+  return {
+    imageSizeX,
+    imageSizeY,
+    promptVisibleHeight,
+    layoutHeight: imageSizeY + promptAreaY,
+  }
+}
+
+function expected1DOverrideMeasurement(
+  ar: number,
+  naturalSizeX: number,
+  box1DMaxSizeX: number,
+  box1DMaxSizeY: number,
+  scaleFactor: number,
+) {
+  const promptVisibleHeight = 24
+  const imageSizeX = Math.min(naturalSizeX, box1DMaxSizeX, box1DMaxSizeY * ar) * scaleFactor
+  const imageSizeY = imageSizeX / ar
+  return {
+    imageSizeX,
+    imageSizeY,
+    promptVisibleHeight,
+    layoutHeight: imageSizeY + promptVisibleHeight + promptPaddingBottom,
+  }
+}
+
+function expectedGridMeasurement(ar: number, naturalSizeX: number, boxMaxSizeX: number) {
+  const imgMaxSizeY =
+    ar === 1 ? boxMaxSizeX * 0.85
+    : ar < 1 ? boxMaxSizeX * 1.05
+    : boxMaxSizeX
+  const imageSizeX = Math.min(naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
+  return {
+    imageSizeX,
+    imageSizeY: imageSizeX / ar,
+  }
 }
 
 function getRangeObjectProp(object: RangeObjectValue, key: string) {

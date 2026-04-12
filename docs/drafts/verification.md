@@ -222,6 +222,8 @@ Good:
 - `cols in 1..7` is proven by a range fact
 - `x * y = y * x` reports `unknown` until the verifier has a stronger symbolic domain or solver
 
+For non-linear math, keep the expression shape before reaching for a solver. E.g. `squareSize = cellSize ** 2` can be proven against the same `cellSize ** 2` expression by structural equality. But `cellSize ** 2 = cellSize * cellSize` should still report `unknown` until the verifier has earned that rewrite.
+
 Bad:
 
 - treating "the current simplifier can't prove it" as a regression

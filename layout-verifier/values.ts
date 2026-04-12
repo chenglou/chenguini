@@ -19,6 +19,7 @@ export type ScalarExpr =
   | {kind: 'sub'; left: ScalarExpr; right: ScalarExpr}
   | {kind: 'mul'; left: ScalarExpr; right: ScalarExpr}
   | {kind: 'div'; left: ScalarExpr; right: ScalarExpr}
+  | {kind: 'pow'; left: ScalarExpr; right: ScalarExpr}
 
 export type BoolExpr = {
   kind: 'compare'
@@ -516,6 +517,8 @@ export function applyNumericOperator(left: NumberValue, right: NumberValue, oper
       return symbolicNumberFromExpr(mulExpr(leftExpr, rightExpr))
     case '/':
       return symbolicNumberFromExpr(divExpr(leftExpr, rightExpr))
+    case '**':
+      return symbolicNumberFromExpr(powExpr(leftExpr, rightExpr))
     default:
       throw new Error(`Unsupported symbolic operator: ${operator}`)
   }
@@ -1000,6 +1003,10 @@ export function divExpr(left: ScalarExpr, right: ScalarExpr): ScalarExpr {
   return {kind: 'div', left, right}
 }
 
+export function powExpr(left: ScalarExpr, right: ScalarExpr): ScalarExpr {
+  return {kind: 'pow', left, right}
+}
+
 export function negateBoolExpr(expr: BoolExpr): BoolExpr {
   return {
     kind: 'compare',
@@ -1025,6 +1032,7 @@ export type SymbolicEqualityProofResult =
   | {status: 'unknown'; reason: string}
 
 export function proveSymbolicExprEquality(left: ScalarExpr, right: ScalarExpr): SymbolicEqualityProofResult {
+  if (scalarExprStructurallyEquals(left, right)) return {status: 'pass'}
   const linear = toLinearExpr(subExpr(left, right))
   if (linear == null) return {status: 'unknown', reason: 'symbolic equality is not linear'}
   if (Math.abs(linear.constant) > epsilon) return {status: 'fail'}
@@ -1048,6 +1056,28 @@ export function formatScalarExpr(expr: ScalarExpr): string {
       return `(${formatScalarExpr(expr.left)} * ${formatScalarExpr(expr.right)})`
     case 'div':
       return `(${formatScalarExpr(expr.left)} / ${formatScalarExpr(expr.right)})`
+    case 'pow':
+      return `(${formatScalarExpr(expr.left)} ** ${formatScalarExpr(expr.right)})`
+  }
+}
+
+function scalarExprStructurallyEquals(left: ScalarExpr, right: ScalarExpr): boolean {
+  if (left.kind !== right.kind) return false
+  switch (left.kind) {
+    case 'const':
+      return right.kind === 'const' && Math.abs(left.value - right.value) <= epsilon
+    case 'var':
+      return right.kind === 'var' && left.name === right.name
+    case 'add':
+    case 'sub':
+    case 'mul':
+    case 'div':
+    case 'pow':
+      return (
+        (right.kind === 'add' || right.kind === 'sub' || right.kind === 'mul' || right.kind === 'div' || right.kind === 'pow') &&
+        scalarExprStructurallyEquals(left.left, right.left) &&
+        scalarExprStructurallyEquals(left.right, right.right)
+      )
   }
 }
 
@@ -1088,6 +1118,10 @@ function toLinearExpr(expr: ScalarExpr): LinearExpr | null {
       if (expr.right.kind !== 'const') return null
       const left = toLinearExpr(expr.left)
       return left == null ? null : scaleLinear(left, 1 / expr.right.value)
+    case 'pow':
+      if (expr.right.kind === 'const' && Math.abs(expr.right.value) <= epsilon) return {constant: 1, terms: {}}
+      if (expr.right.kind === 'const' && Math.abs(expr.right.value - 1) <= epsilon) return toLinearExpr(expr.left)
+      return null
   }
 }
 

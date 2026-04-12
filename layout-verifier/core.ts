@@ -134,6 +134,7 @@ export {
   getProp,
   getRangeProp,
   mulExpr,
+  powExpr,
   rangeArray,
   rangeNull,
   rangeNumber,
