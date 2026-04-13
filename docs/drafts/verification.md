@@ -313,6 +313,63 @@ That is enough to prove a lot of useful layout facts:
 
 Grow the array model around the append-only shapes the code actually uses.
 
+## Constraint Vectors Want Local Indexed Writes
+
+Some layout arrays are not append-only. They are small local vectors that get tightened in place.
+
+Good:
+
+```ts
+const columnWidths = [0, 0, 0]
+columnWidths[column] = Math.max(columnWidths[column]!, cellMinWidth)
+for (let column = startColumn; column < startColumn + span; column++) {
+  columnWidths[column] = columnWidths[column]! + extraPerColumn
+}
+```
+
+This is the natural shape for table columns, grid tracks, flex bases, and other negotiated widths. The verifier should understand exact local indexed writes when the array and index are bounded, both for concrete inputs and for range-mode inputs whose index is exact.
+
+Bad:
+
+- rebuilding the same vector through a verifier-shaped helper just because `columnWidths[column] = ...` was unsupported
+- flattening a three-column table into `leftWidth`, `middleWidth`, `rightWidth` when the real category is "N columns"
+- pretending a negotiated vector is append-only when constraints can tighten earlier columns
+
+Keep the boundary narrow. This is about local numeric vectors inside one layout pass, not arbitrary shared array mutation.
+
+## Range Mode Likes Structured Inputs
+
+Range proofs are not just "one number in, one number out".
+
+If a kernel takes records or arrays of records, the range evaluator can take the same shapes filled with range numbers, range strings, and range arrays. That keeps the proof tied to the real input boundary instead of flattening everything into per-field number intervals.
+
+Good:
+
+```ts
+analyzer.evaluateFunctionRange('layoutGeneratedList', [
+  rangeArray([
+    rangeObject({
+      level: rangeString('subsection'),
+      documentClass: rangeString('report'),
+      lineWidths: rangeArray([
+        rangeNumber(80, 120, true),
+        rangeNumber(30, 90, true),
+      ]),
+      pageNumberWidth: rangeNumber(8, 16, true),
+    }),
+  ]),
+])
+```
+
+Then assert exact ranges on output edges, e.g. `terminalLine.leaderFrom = [124, 184]`, `terminalLine.pageNumberX = [428, 436]`. That is a real proof over the whole input rectangle, not a concrete sweep.
+
+Bad:
+
+- falling back to a concrete sweep when the range evaluator already supports the input shape
+- range-checking only the leaf number arguments and dropping the surrounding records
+
+Use the same exact-range-equality check across all output edges so a regression points at the broken edge, not at a fuzzy bound.
+
 ## Verifier Changes Want Deliberate Red Tests
 
 When you teach the verifier a new proof surface, don't stop at "the report is still green".
@@ -827,6 +884,26 @@ Bad:
 - insisting the second demo also proves native selection, caret placement, and browser range geometry on day one
 
 The point is to test whether the verifier architecture generalizes, not to drag every browser seam into the static core.
+
+## Keep Extracted Specimens Domain-Shaped
+
+When broadening a verifier, add small kernels from real layout categories, not add/sub toys.
+
+Good:
+
+- generated-list rows with level indents, wrapped terminal metadata, and page-number lanes
+- page-break bundles that carry remaining page budget and may reorder a lookahead block
+- table columns where spans and single-column cells tighten the same width vector
+
+Bad:
+
+- `add(a, b)` and `sub(a, b)` helpers with layout-ish names
+- a table specimen that has `leftWidth`, `middleWidth`, and `rightWidth` only because the verifier cannot handle `columnWidths[column]`
+- a pagination specimen that returns only page numbers when the real policy is about order, top, bottom, and remaining budget
+
+A summary law is fine when the policy is sequence-shaped, e.g. sweep nearby block heights and assert every promoted bundle starts at the fresh page top before the overflowed block. Pair that with one exact fixture so the summary is grounded in a readable case.
+
+If the source came from a larger app, keep the category and delete the proper nouns. The specimen should say "this class of layout policy matters", not "this one parser branch matters".
 
 ## Randomized Checks
 

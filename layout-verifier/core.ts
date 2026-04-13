@@ -11,6 +11,7 @@ import {
   applyNumericOperator,
   applyRangeAssignmentOperator,
   applyRangeNumericOperator,
+  type ArrayValue,
   bindRangeValueToName,
   bindValueToName,
   type BoolExpr,
@@ -645,22 +646,7 @@ export class LoweredProgramAnalyzer {
       }
       case 'assign': {
         if (state.mode !== 'concrete') throw new Error('Assignments are only supported in concrete mode')
-        return this.evalExpression(state, expression.value).map(evaluated => {
-          const env = new Map(evaluated.state.env)
-          const nextValue =
-            expression.operator === '='
-              ? evaluated.value
-              : applyAssignmentOperator(
-                  expectNumber(env.get(expression.target) ?? unsupported(`Unknown identifier ${expression.target}`)),
-                  expectNumber(evaluated.value),
-                  expression.operator,
-                )
-          env.set(expression.target, nextValue)
-          return {
-            state: {...evaluated.state, env},
-            value: nextValue,
-          }
-        })
+        return evaluateConcreteAssignment(this, state, expression)
       }
     }
   }
@@ -807,26 +793,134 @@ export class LoweredProgramAnalyzer {
             closure: new Map(state.env),
           },
         }]
-      case 'assign': {
-        return this.evalRangeExpression(state, expression.value).map(evaluated => {
-          const env = new Map(evaluated.state.env)
-          const nextValue =
-            expression.operator === '='
-              ? evaluated.value
-              : applyRangeAssignmentOperator(
-                  expectRangeNumber(env.get(expression.target) ?? unsupported(`Unknown identifier ${expression.target}`)),
-                  expectRangeNumber(evaluated.value),
-                  expression.operator,
-                )
-          env.set(expression.target, nextValue)
-          return {
-            state: {env},
-            value: nextValue,
-          }
-        })
-      }
+      case 'assign':
+        return evaluateRangeAssignment(this, state, expression)
     }
   }
+}
+
+function evaluateConcreteAssignment(
+  analyzer: LoweredProgramAnalyzer,
+  state: EvalState,
+  expression: Extract<IrExpression, {kind: 'assign'}>,
+): EvalCase[] {
+  if (expression.target.kind === 'identifier') {
+    const targetName = expression.target.name
+    return analyzer.evalExpression(state, expression.value).map(evaluated => {
+      const env = new Map(evaluated.state.env)
+      const nextValue =
+        expression.operator === '='
+          ? evaluated.value
+          : applyAssignmentOperator(
+              expectNumber(env.get(targetName) ?? unsupported(`Unknown identifier ${targetName}`)),
+              expectNumber(evaluated.value),
+              expression.operator,
+            )
+      env.set(targetName, nextValue)
+      return {
+        state: {...evaluated.state, env},
+        value: nextValue,
+      }
+    })
+  }
+
+  const indexCases = analyzer.evalExpression(state, expression.target.index)
+  const results: EvalCase[] = []
+  for (const indexCase of indexCases) {
+    const index = expectConcreteNumber(indexCase.value)
+    for (const evaluated of analyzer.evalExpression(indexCase.state, expression.value)) {
+      const currentArray = expectArray(evaluated.state.env.get(expression.target.objectName) ?? unsupported(`Unknown array identifier ${expression.target.objectName}`))
+      const currentValue = getArrayItem(currentArray, index)
+      const nextValue =
+        expression.operator === '='
+          ? evaluated.value
+          : applyAssignmentOperator(
+              expectNumber(currentValue),
+              expectNumber(evaluated.value),
+              expression.operator,
+            )
+      const env = new Map(evaluated.state.env)
+      env.set(expression.target.objectName, setConcreteArrayItem(currentArray, index, nextValue))
+      results.push({
+        state: {...evaluated.state, env},
+        value: nextValue,
+      })
+    }
+  }
+  return results
+}
+
+function evaluateRangeAssignment(
+  analyzer: LoweredProgramAnalyzer,
+  state: RangeState,
+  expression: Extract<IrExpression, {kind: 'assign'}>,
+): RangeEvalCase[] {
+  if (expression.target.kind === 'identifier') {
+    const targetName = expression.target.name
+    return analyzer.evalRangeExpression(state, expression.value).map(evaluated => {
+      const env = new Map(evaluated.state.env)
+      const nextValue =
+        expression.operator === '='
+          ? evaluated.value
+          : applyRangeAssignmentOperator(
+              expectRangeNumber(env.get(targetName) ?? unsupported(`Unknown identifier ${targetName}`)),
+              expectRangeNumber(evaluated.value),
+              expression.operator,
+            )
+      env.set(targetName, nextValue)
+      return {
+        state: {env},
+        value: nextValue,
+      }
+    })
+  }
+
+  const indexCases = analyzer.evalRangeExpression(state, expression.target.index)
+  const results: RangeEvalCase[] = []
+  for (const indexCase of indexCases) {
+    const index = expectRangeNumber(indexCase.value)
+    for (const evaluated of analyzer.evalRangeExpression(indexCase.state, expression.value)) {
+      const currentArray = expectRangeArray(evaluated.state.env.get(expression.target.objectName) ?? unsupported(`Unknown range array identifier ${expression.target.objectName}`))
+      const currentValue = getRangeArrayItemAt(currentArray, index)
+      const nextValue =
+        expression.operator === '='
+          ? evaluated.value
+          : applyRangeAssignmentOperator(
+              expectRangeNumber(currentValue),
+              expectRangeNumber(evaluated.value),
+              expression.operator,
+            )
+      const env = new Map(evaluated.state.env)
+      env.set(expression.target.objectName, setRangeArrayItemAt(currentArray, index, nextValue))
+      results.push({
+        state: {env},
+        value: nextValue,
+      })
+    }
+  }
+  return results
+}
+
+function setConcreteArrayItem(array: ArrayValue, index: number, nextValue: Value): ArrayValue {
+  if (!Number.isInteger(index) || index < 0 || index >= array.items.length) {
+    throw new Error(`Array assignment index ${index} is out of bounds`)
+  }
+  const items = [...array.items]
+  items[index] = nextValue
+  return concreteArray(items)
+}
+
+function setRangeArrayItemAt(array: RangeArrayValue, index: RangeNumberValue, nextValue: RangeValue): RangeArrayValue {
+  if (!index.isInteger || Math.abs(index.min - index.max) > epsilon || array.items == null) {
+    throw new Error('Range array assignment expects an exact in-bounds index')
+  }
+  const rawIndex = index.min < 0 ? array.lengthMin + index.min : index.min
+  if (!Number.isInteger(rawIndex) || rawIndex < 0 || rawIndex >= array.items.length) {
+    throw new Error(`Range array assignment index ${rawIndex} is out of bounds`)
+  }
+  const items = [...array.items]
+  items[rawIndex] = nextValue
+  return rangeArray(items)
 }
 
 // Reporting

@@ -61,7 +61,11 @@ export type IrExpression =
   | {kind: 'object'; properties: IrObjectProperty[]}
   | {kind: 'call'; callee: IrCallee; args: IrExpression[]}
   | {kind: 'arrow'; fn: InlineFunction}
-  | {kind: 'assign'; target: string; operator: '=' | '+=' | '-='; value: IrExpression}
+  | {kind: 'assign'; target: IrAssignmentTarget; operator: '=' | '+=' | '-='; value: IrExpression}
+
+export type IrAssignmentTarget =
+  | {kind: 'identifier'; name: string}
+  | {kind: 'index'; objectName: string; index: IrExpression}
 
 export type IrBinaryOperator =
   | '+'
@@ -494,10 +498,9 @@ function lowerExpression(expression: ts.Expression): IrExpression {
   }
   if (ts.isBinaryExpression(expression)) {
     if (isAssignmentToken(expression.operatorToken.kind)) {
-      if (!ts.isIdentifier(expression.left)) throw new Error('Only identifier assignments are supported')
       return {
         kind: 'assign',
-        target: expression.left.text,
+        target: lowerAssignmentTarget(expression.left),
         operator: assignmentTokenToOperator(expression.operatorToken.kind),
         value: lowerExpression(expression.right),
       }
@@ -554,6 +557,19 @@ function lowerExpression(expression: ts.Expression): IrExpression {
     }
   }
   throw new Error(`Unsupported expression kind while lowering: ${ts.SyntaxKind[expression.kind]}`)
+}
+
+function lowerAssignmentTarget(expression: ts.Expression): IrAssignmentTarget {
+  if (ts.isIdentifier(expression)) return {kind: 'identifier', name: expression.text}
+  if (ts.isElementAccessExpression(expression)) {
+    if (!ts.isIdentifier(expression.expression)) throw new Error('Only identifier[index] assignments are supported')
+    return {
+      kind: 'index',
+      objectName: expression.expression.text,
+      index: lowerExpression(expression.argumentExpression),
+    }
+  }
+  throw new Error('Only identifier and identifier[index] assignments are supported')
 }
 
 function lowerCallee(expression: ts.LeftHandSideExpression): IrCallee {

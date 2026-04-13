@@ -59,6 +59,9 @@ import {runLifeCalendarStaticVerification} from './life-calendar/static-verifier
 import {runDraggableCardsStaticVerification} from './draggable-cards/static-verifier.ts'
 import {runGestureFlickStaticVerification} from './gesture-flick-snap-target/static-verifier.ts'
 import {runScrollAnchorStaticVerification} from './scroll-anchor/static-verifier.ts'
+import {runGeneratedListStaticVerification} from './layout-kernels/generated-list-static-verifier.ts'
+import {runPageBreakStaticVerification} from './layout-kernels/page-break-static-verifier.ts'
+import {runTableColumnNegotiationStaticVerification} from './layout-kernels/table-column-negotiation-static-verifier.ts'
 import {
   prompt1DLineHeight,
   prompt2DLineHeight,
@@ -1285,4 +1288,142 @@ function demo(value: number) {
   ])))
 
   expect(value).toEqual(rangeNumber(0, 19, true))
+})
+
+test('range mode tracks exact local indexed array assignments', () => {
+  const source = `
+function demo(value: number) {
+  const widths = [0, 0, 0]
+  widths[1] = value
+  widths[2] += widths[1]! / 2
+  return widths
+}
+`
+  const analyzer = new LoweredProgramAnalyzer(source, {}, {}, {
+    includeFunctions: ['demo'],
+  })
+
+  const concrete = expectArray(analyzer.evaluateFunction('demo', [concreteNumber(80)], 'concrete')[0]!.value)
+  expect(concrete.items.map(item => expectConcreteNumber(item))).toEqual([0, 80, 40])
+
+  const ranged = expectRangeArray(joinRangeCases(analyzer.evaluateFunctionRange('demo', [
+    rangeNumber(40, 80, true),
+  ])))
+  if (ranged.items == null) throw new Error('Expected exact assigned width vector')
+  expect(expectRangeNumber(ranged.items[0]!)).toEqual(rangeNumber(0, 0, true))
+  expect(expectRangeNumber(ranged.items[1]!)).toEqual(rangeNumber(40, 80, true))
+  const half = expectRangeNumber(ranged.items[2]!)
+  expect(half.min).toBe(20)
+  expect(half.max).toBe(40)
+})
+
+test('generated-list verifier keeps the extracted geometry kernel ready', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/generated-list-geometry.ts', import.meta.url)).text()
+  const report = runGeneratedListStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'generated-list layout keeps level-specific indents exact in concrete cases').status).toBe('pass')
+  expect(getLaw(report, 'generated-list layout keeps terminal-line leader and page slot geometry exact over intervals').status).toBe('pass')
+  expect(getLaw(report, 'generated-list layout keeps entry tops contiguous across spacing and wrapped-line counts').status).toBe('pass')
+})
+
+test('page-break verifier keeps the extracted bundle kernel ready', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/page-break-bundles.ts', import.meta.url)).text()
+  const report = runPageBreakStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'page-break flow reorders promoted top floats ahead of their heading').status).toBe('pass')
+  expect(getLaw(report, 'page-break flow honors keep-with-next pairs when the pair only fits on the next page').status).toBe('pass')
+  expect(getLaw(report, 'page-break flow promotion sweep flips once remaining budget drops below the bundle height').status).toBe('pass')
+  expect(getLaw(report, 'page-break bundle keeps float count, fit, and total height exact over intervals').status).toBe('pass')
+})
+
+test('table-column verifier keeps the extracted negotiation kernel ready', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/table-column-negotiation.ts', import.meta.url)).text()
+  const report = runTableColumnNegotiationStaticVerification(source)
+
+  expect(report.phase).toBe('ready')
+  expect(getLaw(report, 'negotiateTableColumns returns the expected negotiated width vector').status).toBe('pass')
+  expect(getLaw(report, 'negotiateTableColumns derives total width from the negotiated vector and gaps').status).toBe('pass')
+  expect(getLaw(report, 'negotiateTableColumns lets a later single-column constraint dominate after a span').status).toBe('pass')
+  expect(getLaw(report, 'negotiateTableColumns keeps lower bounds stable over min-width intervals').status).toBe('pass')
+})
+
+test('generated-list verifier catches a broken terminal leader boundary', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/generated-list-geometry.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'const isTerminal = lineIndex === entry.lineWidths.length - 1',
+    'const isTerminal = lineIndex === 0',
+  )
+  const report = runGeneratedListStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'generated-list layout keeps leaders and page numbers on the terminal wrapped line only').status).toBe('fail')
+})
+
+test('generated-list verifier catches a broken indent ladder for one document class', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/generated-list-geometry.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'textIndent: 1.5 * BODY_EM_PX',
+    'textIndent: 1.7 * BODY_EM_PX',
+  )
+  const report = runGeneratedListStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'generated-list layout keeps level-specific indents exact in concrete cases').status).toBe('fail')
+})
+
+test('page-break verifier catches disabled lookahead promotion', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/page-break-bundles.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'bundle.totalHeight > current.remainingHeight',
+    'false',
+  )
+  const report = runPageBreakStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'page-break flow reorders promoted top floats ahead of their heading').status).toBe('fail')
+  expect(getLaw(report, 'page-break flow promotion sweep flips once remaining budget drops below the bundle height').status).toBe('fail')
+})
+
+test('page-break verifier catches broken promoted-bundle summary arithmetic', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/page-break-bundles.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'totalHeight += floatHeights[floatIndex]!',
+    'totalHeight += 0',
+  )
+  const report = runPageBreakStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'page-break bundle keeps float count, fit, and total height exact over intervals').status).toBe('fail')
+})
+
+test('table-column verifier catches broken span distribution', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/table-column-negotiation.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'widths[column] = widths[column]! + extraPerColumn',
+    'widths[column] = widths[column]! - extraPerColumn',
+  )
+  const report = runTableColumnNegotiationStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'negotiateTableColumns returns the expected negotiated width vector').status).toBe('fail')
+})
+
+test('table-column verifier catches a missing later-single-column override', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/table-column-negotiation.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'widths[column] = Math.max(widths[column]!, cell.minWidth)',
+    'widths[column] = widths[column]!',
+  )
+  const report = runTableColumnNegotiationStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'negotiateTableColumns lets a later single-column constraint dominate after a span').status).toBe('fail')
 })

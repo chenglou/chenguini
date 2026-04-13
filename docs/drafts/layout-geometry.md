@@ -101,6 +101,32 @@ This is a static helper boundary, not a browser seam. Browser seams should still
 
 If you're using this repo's static verifier, the current sidecar API is in `../../layout-verifier/contracts.md`.
 
+## Negotiated Tracks Are Still Ordinary Geometry
+
+If a table or grid negotiates widths, keep the width vector as the thing being negotiated.
+
+Good:
+
+```ts
+const columnWidths = [0, 0, 0]
+columnWidths[nameColumn] = Math.max(columnWidths[nameColumn]!, nameMinWidth)
+const missing = headerSpanMinWidth - (columnWidths[nameColumn]! + columnWidths[valueColumn]!)
+if (missing > 0) {
+  columnWidths[nameColumn] = columnWidths[nameColumn]! + missing / 2
+  columnWidths[valueColumn] = columnWidths[valueColumn]! + missing / 2
+}
+```
+
+The total width should then come from the negotiated vector plus gaps, not from a parallel formula.
+
+Bad:
+
+- one formula for total table width and a separate formula for each cell
+- treating a spanning cell as if it only belonged to its first column
+- expanding three columns into three named locals when the same code really applies to `columnWidths[column]`
+
+This applies to anything whose lower bound is the join of several constraints, e.g. table columns, CSS grid tracks, flex bases, or wizard-step minimums. The vector is the geometry. Hit testing, total width, and overflow checks should all read it.
+
 ## Hit Testing Should Read The Same Geometry
 
 If JS owns text boxes or card boxes, let hit testing read those same boxes.

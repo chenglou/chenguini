@@ -33,6 +33,7 @@ For the broader doctrine, read:
 - `draggable-cards/`: the draggable-cards swap-layout verifier
 - `gesture-flick-snap-target/`: the flick-target geometry verifier
 - `scroll-anchor/`: the scroll-anchor layout verifier
+- `layout-kernels/`: extracted generated-list, page-break bundle, and table-column negotiation verifiers
 
 The demo source being analyzed still lives in:
 
@@ -42,8 +43,9 @@ The demo source being analyzed still lives in:
 - `demos/draggable-cards/`
 - `demos/gesture-flick-snap-target/`
 - `demos/scroll-anchor/`
+- `demos/layout-kernels/`
 
-Tiny shim files stay in those demo folders so source-relative contract autodiscovery still works and old paths do not break.
+Tiny shim files stay in the larger demo folders so source-relative contract autodiscovery still works and old paths do not break. The extracted kernels live directly under `demos/layout-kernels/` because they are already pure source files with no app wrapper around them.
 
 ## How A Suite Works
 
@@ -140,6 +142,10 @@ Useful commands:
 - `bun layout-verifier/draggable-cards/verify-static-layout.ts`
 - `bun layout-verifier/gesture-flick-snap-target/verify-static-layout.ts`
 - `bun layout-verifier/scroll-anchor/verify-static-layout.ts`
+- `bun layout-verifier/layout-kernels/verify-static-layout.ts`
+- `bun layout-verifier/layout-kernels/verify-generated-list-geometry.ts`
+- `bun layout-verifier/layout-kernels/verify-page-break-bundles.ts`
+- `bun layout-verifier/layout-kernels/verify-table-column-negotiation.ts`
 
 ## When To Use Contracts
 
