@@ -322,8 +322,16 @@ Good:
 ```ts
 const columnWidths = [0, 0, 0]
 columnWidths[column] = Math.max(columnWidths[column]!, cellMinWidth)
+let currentSpanWidth = Math.max(0, span - 1) * columnGap
 for (let column = startColumn; column < startColumn + span; column++) {
-  columnWidths[column] = columnWidths[column]! + extraPerColumn
+  currentSpanWidth += columnWidths[column]!
+}
+const missing = spanMinWidth - currentSpanWidth
+if (missing > 0) {
+  const extraPerColumn = missing / span
+  for (let column = startColumn; column < startColumn + span; column++) {
+    columnWidths[column] += extraPerColumn
+  }
 }
 ```
 
@@ -355,6 +363,7 @@ analyzer.evaluateFunctionRange('layoutGeneratedList', [
         rangeNumber(80, 120, true),
         rangeNumber(30, 90, true),
       ]),
+      numberWidth: rangeNumber(20, 28, true),
       pageNumberWidth: rangeNumber(8, 16, true),
     }),
   ]),
@@ -369,6 +378,22 @@ Bad:
 - range-checking only the leaf number arguments and dropping the surrounding records
 
 Use the same exact-range-equality check across all output edges so a regression points at the broken edge, not at a fuzzy bound.
+
+## Sentinel Geometry Needs An Absence Fixture
+
+If a layout return uses a sentinel like `-1` to mean "this slot is absent", test the absent case directly.
+
+Good:
+
+- a generated-list row with `pageNumberWidth: -1` has `leaderFrom`, `leaderTo`, `pageNumberX`, and `pageNumberWidth` all set to `-1`
+- a row with no icon reports both `iconLeft` and `iconWidth` as absent
+
+Bad:
+
+- only checking the present page-number row, so `pageNumberX = right - (-1)` slips through
+- checking `isTerminal` but never checking whether the terminal optional slot exists
+
+Optional geometry is still geometry. The proof should cover both branches that paint code will read.
 
 ## Verifier Changes Want Deliberate Red Tests
 
@@ -891,7 +916,7 @@ When broadening a verifier, add small kernels from real layout categories, not a
 
 Good:
 
-- generated-list rows with level indents, wrapped terminal metadata, and page-number lanes
+- generated-list rows with level indents, wrapped terminal metadata, and both present and absent page-number lanes
 - page-break bundles that carry remaining page budget and may reorder a lookahead block
 - table columns where spans and single-column cells tighten the same width vector
 

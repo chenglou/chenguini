@@ -110,10 +110,11 @@ Good:
 ```ts
 const columnWidths = [0, 0, 0]
 columnWidths[nameColumn] = Math.max(columnWidths[nameColumn]!, nameMinWidth)
-const missing = headerSpanMinWidth - (columnWidths[nameColumn]! + columnWidths[valueColumn]!)
+const currentHeaderWidth = columnWidths[nameColumn]! + columnWidths[valueColumn]! + columnGap
+const missing = headerSpanMinWidth - currentHeaderWidth
 if (missing > 0) {
-  columnWidths[nameColumn] = columnWidths[nameColumn]! + missing / 2
-  columnWidths[valueColumn] = columnWidths[valueColumn]! + missing / 2
+  columnWidths[nameColumn] += missing / 2
+  columnWidths[valueColumn] += missing / 2
 }
 ```
 

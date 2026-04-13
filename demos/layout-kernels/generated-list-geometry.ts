@@ -9,6 +9,7 @@ export type GeneratedListEntryInput = {
   documentClass: GeneratedListDocumentClass
   lineWidths: number[]
   numberWidth: number
+  // -1 means this entry has no trailing page-number slot, so it has no leader either.
   pageNumberWidth: number
 }
 
@@ -134,6 +135,7 @@ export function layoutGeneratedList(entries: GeneratedListEntryInput[]): Generat
     const metrics = generatedListLevelMetrics(entry.level, entry.documentClass)
     const textX = CONTENT_LEFT + metrics.textIndent
     const hasNumber = entry.numberWidth >= 0
+    const hasPageNumber = entry.pageNumberWidth >= 0
     const numberX = hasNumber ? CONTENT_LEFT + metrics.numberIndent : -1
     const textMaxWidth = Math.max(
       40,
@@ -148,6 +150,8 @@ export function layoutGeneratedList(entries: GeneratedListEntryInput[]): Generat
     for (let lineIndex = 0; lineIndex < entry.lineWidths.length; lineIndex++) {
       const lineWidth = entry.lineWidths[lineIndex]!
       const isTerminal = lineIndex === entry.lineWidths.length - 1
+      const showsLeader = metrics.dotted && isTerminal && hasPageNumber
+      const showsPageNumber = isTerminal && hasPageNumber
       const lineTop = top + lineIndex * ENTRY_LINE_HEIGHT
       lines.push({
         lineIndex,
@@ -157,10 +161,10 @@ export function layoutGeneratedList(entries: GeneratedListEntryInput[]): Generat
         numberWidth: lineIndex === 0 ? (hasNumber ? entry.numberWidth : -1) : -1,
         textX,
         textWidth: lineWidth,
-        leaderFrom: metrics.dotted && isTerminal ? textX + lineWidth : -1,
-        leaderTo: metrics.dotted && isTerminal ? pageBoxLeft : -1,
-        pageNumberX: isTerminal ? pageRight - entry.pageNumberWidth : -1,
-        pageNumberWidth: isTerminal ? entry.pageNumberWidth : -1,
+        leaderFrom: showsLeader ? textX + lineWidth : -1,
+        leaderTo: showsLeader ? pageBoxLeft : -1,
+        pageNumberX: showsPageNumber ? pageRight - entry.pageNumberWidth : -1,
+        pageNumberWidth: showsPageNumber ? entry.pageNumberWidth : -1,
         isTerminal: isTerminal ? 1 : 0,
       })
     }

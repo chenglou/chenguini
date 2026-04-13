@@ -143,6 +143,41 @@ function verifyGeneratedListConcrete(
     'layoutGeneratedList.entries[].bottom',
     'layoutGeneratedList.contentHeight',
   ]})
+
+  const absentPageSlotReturns = analyzer.evaluateFunction('layoutGeneratedList', [concreteArray([
+    concreteObject({
+      level: concreteString('section'),
+      documentClass: concreteString('article'),
+      lineWidths: concreteArray([concreteNumber(50)]),
+      numberWidth: concreteNumber(10),
+      pageNumberWidth: concreteNumber(-1),
+    }),
+  ])], 'concrete')
+  if (absentPageSlotReturns.length !== 1) {
+    check(laws, 'generated-list layout suppresses leader and page-number slots when no page number exists', false, () => ({
+      cases: absentPageSlotReturns.length,
+    }), 'concrete-fixture')
+    return
+  }
+  const absentPageSlotLayout = expectObject(absentPageSlotReturns[0]!.value)
+  const absentPageSlotEntries = expectArray(getProp(absentPageSlotLayout, 'entries'))
+  const absentPageSlotLine = expectObject(expectArray(getProp(expectObject(absentPageSlotEntries.items[0]!), 'lines')).items[0]!)
+
+  check(laws, 'generated-list layout suppresses leader and page-number slots when no page number exists', (
+    expectConcreteNumber(getProp(absentPageSlotLine, 'leaderFrom')) === -1 &&
+    expectConcreteNumber(getProp(absentPageSlotLine, 'leaderTo')) === -1 &&
+    expectConcreteNumber(getProp(absentPageSlotLine, 'pageNumberX')) === -1 &&
+    expectConcreteNumber(getProp(absentPageSlotLine, 'pageNumberWidth')) === -1
+  ), () => ({
+    leaderFrom: expectConcreteNumber(getProp(absentPageSlotLine, 'leaderFrom')),
+    leaderTo: expectConcreteNumber(getProp(absentPageSlotLine, 'leaderTo')),
+    pageNumberX: expectConcreteNumber(getProp(absentPageSlotLine, 'pageNumberX')),
+    pageNumberWidth: expectConcreteNumber(getProp(absentPageSlotLine, 'pageNumberWidth')),
+  }), {kind: 'concrete-fixture', targets: [
+    'layoutGeneratedList.entries[].lines[].leaderFrom',
+    'layoutGeneratedList.entries[].lines[].pageNumberX',
+    'layoutGeneratedList.entries[].lines[].pageNumberWidth',
+  ]})
 }
 
 function verifyGeneratedListRange(

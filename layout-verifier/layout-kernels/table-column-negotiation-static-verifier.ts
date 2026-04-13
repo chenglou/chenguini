@@ -19,6 +19,7 @@ import {
   rangeArray,
   rangeNumber,
   rangeObject,
+  type RangeNumberValue,
   type StaticLayoutVerificationReport,
   type Value,
 } from '../core'
@@ -30,7 +31,7 @@ export function runTableColumnNegotiationStaticVerification(sourceText: string):
   verifyNegotiatedVector(analyzer, laws)
   verifyTotalWidth(analyzer, laws)
   verifyLaterSingleColumnDominates(analyzer, laws)
-  verifyRangeLowerBounds(analyzer, laws)
+  verifyRangeExactBounds(analyzer, laws)
 
   return buildStaticLayoutReport(
     'layout-kernels-table-column-negotiation-static-layout',
@@ -98,19 +99,14 @@ function verifyLaterSingleColumnDominates(analyzer: LoweredProgramAnalyzer, laws
   }), {kind: 'concrete-fixture', targets: ['negotiateTableColumns.widths']})
 }
 
-function verifyRangeLowerBounds(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
+function verifyRangeExactBounds(analyzer: LoweredProgramAnalyzer, laws: Map<string, InternalLawSummary>) {
   const result = expectRangeObject(joinRangeCases(analyzer.evaluateFunctionRange('negotiateTableColumns', [
     rangeNumber(3, 3, true),
     rangeArray([
       rangeObject({
         start: rangeNumber(0, 0, true),
-        span: rangeNumber(1, 1, true),
-        minWidth: rangeNumber(50, 50, true),
-      }),
-      rangeObject({
-        start: rangeNumber(0, 0, true),
-        span: rangeNumber(3, 3, true),
-        minWidth: rangeNumber(150, 210, true),
+        span: rangeNumber(2, 2, true),
+        minWidth: rangeNumber(212, 252, true),
       }),
       rangeObject({
         start: rangeNumber(1, 1, true),
@@ -122,40 +118,27 @@ function verifyRangeLowerBounds(analyzer: LoweredProgramAnalyzer, laws: Map<stri
   ])))
   const widths = expectRangeArray(getRangeProp(result, 'widths'))
 
-  if (widths.items == null) {
-    check(laws, 'negotiateTableColumns keeps lower bounds stable over min-width intervals', false, () => ({
-      reason: 'width vector was not exact',
+  if (widths.items == null || widths.items.length !== 3) {
+    check(laws, 'negotiateTableColumns keeps exact per-column lower bounds over structured span inputs', false, () => ({
+      gotItems: widths.items?.length ?? null,
     }), {kind: 'range', targets: ['negotiateTableColumns.widths']})
     return
   }
 
-  const first = expectRangeNumber(widths.items[0]!)
-  const second = expectRangeNumber(widths.items[1]!)
-  const third = expectRangeNumber(widths.items[2]!)
-  const totalWidth = expectRangeNumber(getRangeProp(result, 'totalWidth'))
-  const expectedThirdMin = (150 - 50 - 2 * 10) / 3
-  const expectedFirstMin = 50 + expectedThirdMin
-  const expectedTotalMin = expectedFirstMin + 80 + expectedThirdMin + 2 * 10
-
-  check(laws, 'negotiateTableColumns keeps lower bounds stable over min-width intervals', first.min >= expectedFirstMin - epsilon, () => ({
-    column: 0,
-    min: first.min,
-    expectedMin: expectedFirstMin,
-  }), {kind: 'range', targets: ['negotiateTableColumns.widths']})
-  check(laws, 'negotiateTableColumns keeps lower bounds stable over min-width intervals', second.min >= 80 - epsilon, () => ({
-    column: 1,
-    min: second.min,
-    expectedMin: 80,
-  }), {kind: 'range', targets: ['negotiateTableColumns.widths']})
-  check(laws, 'negotiateTableColumns keeps lower bounds stable over min-width intervals', third.min >= expectedThirdMin - epsilon, () => ({
-    column: 2,
-    min: third.min,
-    expectedMin: expectedThirdMin,
-  }), {kind: 'range', targets: ['negotiateTableColumns.widths']})
-  check(laws, 'negotiateTableColumns keeps lower bounds stable over min-width intervals', totalWidth.min >= expectedTotalMin - epsilon, () => ({
-    totalMin: totalWidth.min,
-    expectedMin: expectedTotalMin,
-  }), {kind: 'range', targets: ['negotiateTableColumns.totalWidth']})
+  check(laws, 'negotiateTableColumns keeps exact per-column lower bounds over structured span inputs', (
+    rangesEqual(expectRangeNumber(widths.items[0]!), rangeNumber(101, 121, false)) &&
+    rangesEqual(expectRangeNumber(widths.items[1]!), rangeNumber(101, 121, false)) &&
+    rangesEqual(expectRangeNumber(widths.items[2]!), rangeNumber(0, 0, true)) &&
+    rangesEqual(expectRangeNumber(getRangeProp(result, 'totalWidth')), rangeNumber(222, 262, false))
+  ), () => ({
+    firstColumn: describeRange(expectRangeNumber(widths.items![0]!)),
+    secondColumn: describeRange(expectRangeNumber(widths.items![1]!)),
+    thirdColumn: describeRange(expectRangeNumber(widths.items![2]!)),
+    totalWidth: describeRange(expectRangeNumber(getRangeProp(result, 'totalWidth'))),
+  }), {kind: 'range', targets: [
+    'negotiateTableColumns.widths',
+    'negotiateTableColumns.totalWidth',
+  ]})
 }
 
 function concreteNegotiation(analyzer: LoweredProgramAnalyzer) {
@@ -179,4 +162,12 @@ function concreteCell(start: number, span: number, minWidth: number): Value {
     span: concreteNumber(span),
     minWidth: concreteNumber(minWidth),
   })
+}
+
+function rangesEqual(left: RangeNumberValue, right: RangeNumberValue) {
+  return left.min === right.min && left.max === right.max && left.isInteger === right.isInteger
+}
+
+function describeRange(value: RangeNumberValue) {
+  return `[${value.min},${value.max}]${value.isInteger ? ':int' : ''}`
 }

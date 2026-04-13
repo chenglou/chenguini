@@ -1324,6 +1324,7 @@ test('generated-list verifier keeps the extracted geometry kernel ready', async 
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'generated-list layout keeps level-specific indents exact in concrete cases').status).toBe('pass')
   expect(getLaw(report, 'generated-list layout keeps terminal-line leader and page slot geometry exact over intervals').status).toBe('pass')
+  expect(getLaw(report, 'generated-list layout suppresses leader and page-number slots when no page number exists').status).toBe('pass')
   expect(getLaw(report, 'generated-list layout keeps entry tops contiguous across spacing and wrapped-line counts').status).toBe('pass')
 })
 
@@ -1333,6 +1334,7 @@ test('page-break verifier keeps the extracted bundle kernel ready', async () => 
 
   expect(report.phase).toBe('ready')
   expect(getLaw(report, 'page-break flow reorders promoted top floats ahead of their heading').status).toBe('pass')
+  expect(getLaw(report, 'page-break flow keeps page budgets coherent for every placed block').status).toBe('pass')
   expect(getLaw(report, 'page-break flow honors keep-with-next pairs when the pair only fits on the next page').status).toBe('pass')
   expect(getLaw(report, 'page-break flow promotion sweep flips once remaining budget drops below the bundle height').status).toBe('pass')
   expect(getLaw(report, 'page-break bundle keeps float count, fit, and total height exact over intervals').status).toBe('pass')
@@ -1346,7 +1348,7 @@ test('table-column verifier keeps the extracted negotiation kernel ready', async
   expect(getLaw(report, 'negotiateTableColumns returns the expected negotiated width vector').status).toBe('pass')
   expect(getLaw(report, 'negotiateTableColumns derives total width from the negotiated vector and gaps').status).toBe('pass')
   expect(getLaw(report, 'negotiateTableColumns lets a later single-column constraint dominate after a span').status).toBe('pass')
-  expect(getLaw(report, 'negotiateTableColumns keeps lower bounds stable over min-width intervals').status).toBe('pass')
+  expect(getLaw(report, 'negotiateTableColumns keeps exact per-column lower bounds over structured span inputs').status).toBe('pass')
 })
 
 test('generated-list verifier catches a broken terminal leader boundary', async () => {
@@ -1373,6 +1375,19 @@ test('generated-list verifier catches a broken indent ladder for one document cl
 
   expect(report.phase).toBe('error')
   expect(getLaw(report, 'generated-list layout keeps level-specific indents exact in concrete cases').status).toBe('fail')
+})
+
+test('generated-list verifier catches a missing no-page-number sentinel branch', async () => {
+  const source = await Bun.file(new URL('../demos/layout-kernels/generated-list-geometry.ts', import.meta.url)).text()
+  const buggySource = replaceOnce(
+    source,
+    'const hasPageNumber = entry.pageNumberWidth >= 0',
+    'const hasPageNumber = true',
+  )
+  const report = runGeneratedListStaticVerification(buggySource)
+
+  expect(report.phase).toBe('error')
+  expect(getLaw(report, 'generated-list layout suppresses leader and page-number slots when no page number exists').status).toBe('fail')
 })
 
 test('page-break verifier catches disabled lookahead promotion', async () => {

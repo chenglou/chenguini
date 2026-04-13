@@ -5,6 +5,7 @@ import {
   concreteNumber,
   concreteObject,
   concreteString,
+  epsilon,
   expectArray,
   expectConcreteNumber,
   expectObject,
@@ -18,6 +19,7 @@ import {
   rangeArray,
   rangeNumber,
   type StaticLayoutVerificationReport,
+  type WitnessValue,
 } from '../core'
 
 export function runPageBreakStaticVerification(sourceText: string): StaticLayoutVerificationReport {
@@ -25,6 +27,7 @@ export function runPageBreakStaticVerification(sourceText: string): StaticLayout
   const laws = new Map<string, InternalLawSummary>()
 
   verifyPageBreakConcrete(analyzer, laws)
+  verifyBudgetCoherence(analyzer, laws)
   verifyPromotionSweep(analyzer, laws)
   verifyPromotedBundleRange(analyzer, laws)
 
@@ -108,6 +111,63 @@ function verifyPageBreakConcrete(
       'paginateBlockFlow.placements[].pageIndex',
       'paginateBlockFlow.placements[].top',
     ]})
+}
+
+function verifyBudgetCoherence(
+  analyzer: LoweredProgramAnalyzer,
+  laws: Map<string, InternalLawSummary>,
+) {
+  const pageHeight = 80
+  const layout = concretePagination(analyzer, [
+    flowBlock(0, 'body', 70, 0),
+    flowBlock(1, 'heading', 20, 0),
+    flowBlock(2, 'topFloat', 25, 0),
+    flowBlock(3, 'topFloat', 15, 0),
+    flowBlock(4, 'body', 10, 0),
+  ], pageHeight)
+
+  const pages = expectArray(getProp(layout, 'pages'))
+  const placements = expectArray(getProp(layout, 'placements'))
+  let coherent = true
+  let failure: Record<string, WitnessValue> | null = null
+
+  for (let pageIndex = 0; pageIndex < pages.items.length; pageIndex++) {
+    const page = expectObject(pages.items[pageIndex]!)
+    const usedHeight = expectConcreteNumber(getProp(page, 'usedHeight'))
+    const remainingHeight = expectConcreteNumber(getProp(page, 'remainingHeight'))
+    if (Math.abs(usedHeight + remainingHeight - pageHeight) > epsilon) {
+      coherent = false
+      failure ??= {pageIndex, usedHeight, remainingHeight, pageHeight}
+    }
+
+    const blocks = expectArray(getProp(page, 'blocks'))
+    let summedHeight = 0
+    for (let blockIndex = 0; blockIndex < blocks.items.length; blockIndex++) {
+      summedHeight += expectConcreteNumber(getProp(expectObject(blocks.items[blockIndex]!), 'totalHeight'))
+    }
+    if (Math.abs(summedHeight - usedHeight) > epsilon) {
+      coherent = false
+      failure ??= {pageIndex, summedHeight, usedHeight}
+    }
+  }
+
+  for (let placementIndex = 0; placementIndex < placements.items.length; placementIndex++) {
+    const placement = expectObject(placements.items[placementIndex]!)
+    const pageIndex = expectConcreteNumber(getProp(placement, 'pageIndex'))
+    const top = expectConcreteNumber(getProp(placement, 'top'))
+    const bottom = expectConcreteNumber(getProp(placement, 'bottom'))
+    if (top < -epsilon || bottom > pageHeight + epsilon || bottom < top - epsilon) {
+      coherent = false
+      failure ??= {pageIndex, top, bottom, pageHeight}
+    }
+  }
+
+  check(laws, 'page-break flow keeps page budgets coherent for every placed block', coherent, () => failure ?? {}, {kind: 'concrete-fixture', targets: [
+    'paginateBlockFlow.pages[].usedHeight',
+    'paginateBlockFlow.pages[].remainingHeight',
+    'paginateBlockFlow.placements[].top',
+    'paginateBlockFlow.placements[].bottom',
+  ]})
 }
 
 function verifyPromotionSweep(
