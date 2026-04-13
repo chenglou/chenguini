@@ -1,5 +1,7 @@
 # Verification
 
+This doc details ways to prioritize verifications & make them solid.
+
 Verification should feel like static typing for layout.
 
 The checker reads ordinary TS layout code plus strict `@layout` comments. It proves the annotated facts from source, or says `unknown`. It does not start browsers, record runtime traces, compare screenshots, run example cases, or sample "representative" inputs.
