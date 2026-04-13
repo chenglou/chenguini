@@ -5,10 +5,10 @@ Use `docs/` plus this packet only. Do not inspect `demos/` or other specs.
 Read first:
 
 1. `docs/drafts/verification.md`
-2. `docs/drafts/automating-browsers.md`
+2. `docs/drafts/layout-geometry.md`
 3. this file
 
-Write tests first, then implementation, then validate.
+State static layout facts where the helper is pure, then implement, then validate.
 
 Build only inside:
 
@@ -104,10 +104,10 @@ Use this exact layout math:
 [week pill][week pill][today week split into 7 cells][week pill][week pill]
 ```
 
-## Tests Must Prove
+## Static Facts To State
 
-- pure grid-metric math, including the `1200x900` geometry snapshot
+- pure grid-metric math, including the `1200x900` geometry fact
 - pure hit testing from pointer position to day index or `null`
-- browser-backed `hover-tooltips` scenario for age cell and final day tooltip behavior
-- browser-backed `custom-dot-cycle` scenario covering click, edit, reload, and toggle-off persistence
-- the report reaches `ready` for both browser-backed scenarios
+- product boundary: age cell and final day tooltip behavior
+- product boundary: custom-dot click, edit, reload, and toggle-off persistence
+- product boundary: storage restore uses the same selected custom dot and text

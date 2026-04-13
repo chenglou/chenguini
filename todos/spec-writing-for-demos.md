@@ -70,29 +70,29 @@ Good:
 
 But don't write the whole spec as a data model or pseudocode file. That nudges the agent into solving the wrong problem first, especially on visual demos.
 
-## Say What Tests Must Prove
+## Say What Static Facts Must Prove
 
 End with the fragile seams.
 
 Good:
 
-- browser-backed navigation should reach the right focused item and update the hash
-- dismissing line mode should bring the focused row back with roughly `40px` above it
-- clicking a caption should select the full text without changing mode
-- the released item should stay on top while it settles
+- `@layout` says grid columns stay in `int[1, 7]`
+- `@layout` says a centered item uses `(container - containee) / 2`
+- `@layout` says stacked row tops are contiguous once that atom exists
+- browser-boundary truths like hash, native selection, and storage stay product requirements, not verifier evidence
 
-This keeps the spec tied to user-visible truth instead of drifting into verifier transport details.
+This keeps the spec tied to source-owned geometry instead of drifting into verifier transport details.
 
 ## What To Leave Out
 
-Don't repeat repo-wide browser-verification machinery in every spec.
+Don't repeat repo-wide verifier machinery in every spec.
 
 That means the demo spec should not keep re-explaining:
 
-- `requestId`
-- phase markers
-- which browser transport is acceptable
-- why the runner should stay dumb
+- the `@layout` grammar
+- report statuses
+- why unsupported facts become `unknown`
+- why sampled inputs do not count
 
 That belongs in the shared docs.
 
@@ -106,10 +106,11 @@ After the baseline spec is in place, add one small overlay based on where the fr
 
 Good overlays:
 
-- `oracle contract` for browser-boundary truth like hash routing, text selection, scroll restore, and mounted-count semantics
-- `seed corpus` for deterministic helpers like midpoint reorder and release velocity
+- `static fact list` for source-owned layout truth like row tops, hit rects, and width budgets
+- `boundary contract` for product truth like hash routing, native selection, scroll restore, and mounted-count semantics
+- `seed corpus` as design data for deterministic helpers like midpoint reorder and release velocity, not as verifier evidence
 - `contrastive boundary pairs` when tiny target changes should cause different outcomes, such as image click vs caption click
-- `temporal trace tape` when the truth happens in the middle of an interaction, such as reorder before release or top-until-settle
+- `temporal trace tape` as product-spec language when the truth happens in the middle of an interaction, such as reorder before release or top-until-settle
 - `two-pass` when helper hints are useful but likely to bias reconstruction too early
 
 Good rule of thumb:
@@ -132,7 +133,7 @@ The last things to remove are:
 
 - exact numeric constants
 - the fragile user-visible seams
-- the concrete browser-backed scenarios that prove those seams
+- the static facts or product boundaries that own those seams
 
 Counterintuitive but important:
 

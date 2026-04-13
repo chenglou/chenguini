@@ -1,9 +1,14 @@
 // Pure swap and stack geometry for draggable-cards.
-// The demo imports it, and the verifier checks it.
+// The demo imports it; @layout comments state static geometry facts.
 
 export const rowSizeX = 320
 export const windowPaddingTop = 50
 
+/** @layout
+ * requires containee: number[0, 10000]
+ * requires container: number[0, 10000]
+ * ensures result == (container - containee) / 2
+ */
 export function center(containee: number, container: number) {
   return (container - containee) / 2
 }

@@ -18,6 +18,8 @@ The generated implementation folders were pruned once the experiments settled do
 - `spec-*-experiments/**`: the packet variants we tested
 - `*-experiments/RESULTS.md`: cross-demo summaries
 
+Older experiment notes may mention browser-backed checks or other retired verifier shapes. Treat those as historical evidence, not current guidance.
+
 ## Why This Folder Stays Separate
 
 Historical failures are evidence.

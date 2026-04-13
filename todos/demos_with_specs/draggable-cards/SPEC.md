@@ -5,10 +5,10 @@ Use `docs/` plus this packet only. Do not inspect `demos/` or other specs.
 Read first:
 
 1. `docs/drafts/verification.md`
-2. `docs/drafts/automating-browsers.md`
+2. `docs/drafts/layout-geometry.md`
 3. this file
 
-Write tests first, then implementation, then validate.
+State static layout facts where the helper is pure, then implement, then validate.
 
 Build only inside the target folder the main thread gives you.
 
@@ -71,9 +71,10 @@ next layer      just released item while settling
 base layers     all remaining items
 ```
 
-## Tests Must Prove
+## Static Facts To State
 
 - reorder threshold logic
 - release velocity estimation from recent pointer samples
-- browser-backed scripted drag reorders before release and lands on the expected final order
-- browser-backed release-depth scenario keeps the released card on top while settling
+- centered x uses `(windowWidth - rowSizeX) / 2`
+- product boundary: scripted drag reorders before release and lands on the expected final order
+- product boundary: release depth keeps the released card on top while settling

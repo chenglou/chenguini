@@ -7,6 +7,7 @@ The short version is:
 - docs are the doctrine
 - one thin demo packet carries the exact product truth
 - `todos/demo_templates/` is the architecture surface
+- static `@layout` facts live beside pure geometry helpers
 - extra prompt guidance is optional and mostly affects shape, not correctness
 
 For the exact default packet, see `../../todos/minimum-viable-demo-spec.md`.
@@ -16,8 +17,8 @@ For older packet variants and overlays, see `../../todos/spec-writing-for-demos.
 
 Use each layer for a different job:
 
-- `docs/drafts/verification.md`: what counts as a trustworthy oracle
-- `docs/drafts/automating-browsers.md`: how the browser runner should work
+- `docs/drafts/verification.md`: what counts as a static layout guarantee
+- `docs/drafts/layout-geometry.md`: where source-owned geometry should live
 - one demo packet: exact numbers, fragile seams, required scenarios
 - `todos/demo_templates/`: concrete code shape when a worker should copy and trim instead of improvising
 
@@ -31,10 +32,10 @@ That split held up better than either extreme:
 Use this order:
 
 1. read `docs/drafts/verification.md`
-2. read `docs/drafts/automating-browsers.md`
+2. read `docs/drafts/layout-geometry.md`
 3. read any one extra domain doc that really matters, e.g. `Scrolling.md` or `Input.md`
 4. read the demo packet
-5. write tests first
+5. add `@layout` facts for pure geometry seams when relevant
 6. implement the demo
 7. validate from the main thread
 
@@ -61,7 +62,7 @@ The last things to remove are still:
 
 - exact numbers like `32px`, `24px`, `40px`, `100px`
 - exact fragile seams like `caption click selects the full text`
-- exact browser-backed scenarios
+- exact static facts or product boundaries
 
 ## Name The Proof Path
 
@@ -138,7 +139,7 @@ But compressed prompts also have a real risk:
 
 - they preserve product truth better than repo-local delivery constraints
 
-We saw that on a compressed `photo-gallery` round that drifted into Playwright even though the repo-preferred Bun-native shape was good enough.
+We saw that on a compressed `photo-gallery` round that preserved product truth but weakened repo-local delivery constraints.
 
 So:
 
@@ -150,7 +151,7 @@ So:
 What feels solid now:
 
 - fresh stateless workers can recreate these demos from repo knowledge without reading `demos/`
-- page-owned browser semantics are the right default
+- layout guarantees should come from static `@layout` facts, not page-owned reports
 - the thin packet is the right default for `gpt-5.4 xhigh`
 - templates help architecture shape
 - extra prompt guidance helps architecture shape a bit more

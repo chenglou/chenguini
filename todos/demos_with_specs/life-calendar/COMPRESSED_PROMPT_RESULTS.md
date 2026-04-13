@@ -6,7 +6,7 @@ Each worker got:
 
 - the life-calendar packet inline
 - one short verification excerpt
-- one short browser-report excerpt
+- one short then-current semantic-report excerpt
 
 All 3 workers used fresh `gpt-5.4 xhigh` agents.
 
@@ -37,7 +37,7 @@ Read:
 - landed:
   - pure geometry helpers
   - canvas-first app
-  - browser-backed semantic report tests
+  - then-current semantic report tests
 
 Read:
 

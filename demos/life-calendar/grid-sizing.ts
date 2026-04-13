@@ -1,5 +1,5 @@
 // Pure grid sizing and hit testing extracted from the life-calendar demo.
-// The demo imports these; the verifier checks them.
+// The demo imports these; @layout comments can state static geometry facts.
 
 export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
   const blockSize_ = (life * Math.sqrt((4 * life * gridSizeX * gridSizeY + (7 * gridSizeY) ** 2) / (life ** 2)) + 7 * gridSizeY) / 2 / life

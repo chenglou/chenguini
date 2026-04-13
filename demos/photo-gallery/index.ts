@@ -33,7 +33,6 @@ For developers:
 */
 
 import {photoGalleryData} from './data'
-import {runPhotoGalleryLayoutVerification, type LayoutVerificationReport} from './layout-verifier'
 import {
   boxesGapY,
   gapTopPeek,
@@ -56,17 +55,9 @@ import {
   promptPaddingTop,
 } from './prompt-layout'
 
-const urlSearchParams = new URLSearchParams(window.location.search)
-const verifyMode = urlSearchParams.get('verify')
-const verifyRequestId = urlSearchParams.get('requestId') ?? ''
-
 // === generic scheduler & its debugger
 let scheduledRaf: number | null = null
 function scheduleRender() {
-  if (verifyRuntime != null) {
-    verifyRuntime.pendingRender = true
-    return
-  }
   if (scheduledRaf != null) return;
   scheduledRaf = requestAnimationFrame(function renderAndMaybeScheduleAnotherRender(now) { // eye-grabbing name. No "(anonymous)" function in the debugger & profiler
     scheduledRaf = null
@@ -109,91 +100,6 @@ function springGoToEnd(config: Spring) {
   config.v = 0
 }
 
-type ResizeScenario = {
-  name: string
-  startWidth: number
-  endWidth: number
-  height: number
-  anchorId?: string
-  trackedIds?: string[]
-  trackedKind?: 'firstRow'
-  scrollY?: number | 'anchor'
-  sampleTimesMs: number[]
-}
-
-type ResizeSampleItem = {
-  id: string
-  prompt: string
-  mounted: boolean
-  layoutBox: Rect | null
-  visualBox: Rect | null
-  promptBox: Rect | null
-  viewportY: number | null
-  row: number | null
-  col: number | null
-  lineCount: number | null
-  widestRenderedLine: number | null
-  promptInnerWidth: number | null
-}
-
-type ResizeSample = {
-  label: string
-  elapsedMs: number | null
-  cols: number
-  scrollY: number
-  contentHeight: number
-  anchor: ResizeSampleItem | null
-  items: ResizeSampleItem[]
-}
-
-type ResizeScenarioResult = {
-  name: string
-  startWidth: number
-  endWidth: number
-  anchorId: string | null
-  trackedIds: string[]
-  samples: ResizeSample[]
-}
-
-type ResizeReport = {
-  phase: 'loading' | 'running' | 'ready' | 'error'
-  requestId: string
-  scenario: 'resize'
-  results?: ResizeScenarioResult[]
-  message?: string
-}
-
-type LayoutLawSweepReport = {
-  phase: 'loading' | 'running' | 'ready' | 'error'
-  requestId: string
-  scenario: 'layout-laws'
-  result?: LayoutVerificationReport
-  message?: string
-}
-
-type VerifyReport = ResizeReport | LayoutLawSweepReport
-
-type PhotoGalleryVerify = {
-  report: VerifyReport
-  runBatch?: (scenarios: ResizeScenario[]) => Promise<ResizeReport>
-  runLayoutLawSweep?: () => Promise<LayoutLawSweepReport>
-}
-
-type VerifyRuntime = {
-  viewportSizeX: number
-  viewportSizeY: number
-  scrollX: number
-  scrollY: number
-  pendingRender: boolean
-  report: VerifyReport
-}
-
-declare global {
-  interface Window {
-    __photoGalleryVerify?: PhotoGalleryVerify
-  }
-}
-
 function layoutRectXPos(r: Rect, d: BoxData) {
   return r.x + d.xResidual.pos
 }
@@ -221,53 +127,29 @@ if (isSafari) {
   document.body.style.height = '100vh'
 }
 
-const verifyRuntime: VerifyRuntime | null =
-  verifyMode === 'resize' || verifyMode === 'layout-laws'
-    ? {
-        viewportSizeX: document.documentElement.clientWidth,
-        viewportSizeY: document.documentElement.clientHeight,
-        scrollX: isSafari ? document.body.scrollLeft : window.scrollX,
-        scrollY: isSafari ? document.body.scrollTop : window.scrollY,
-        pendingRender: false,
-        report: {
-          phase: 'loading',
-          requestId: verifyRequestId,
-          scenario: verifyMode === 'resize' ? 'resize' : 'layout-laws',
-        },
-      }
-    : null
-
 function readWindowSizeX() {
-  return verifyRuntime?.viewportSizeX ?? document.documentElement.clientWidth
+  return document.documentElement.clientWidth
 }
 
 function readWindowSizeY() {
-  return verifyRuntime?.viewportSizeY ?? document.documentElement.clientHeight
+  return document.documentElement.clientHeight
 }
 
 function readScrollY() {
-  return verifyRuntime?.scrollY ?? (isSafari ? document.body.scrollTop : window.scrollY)
+  return isSafari ? document.body.scrollTop : window.scrollY
 }
 
 function readScrollX() {
-  return verifyRuntime?.scrollX ?? (isSafari ? document.body.scrollLeft : window.scrollX)
+  return isSafari ? document.body.scrollLeft : window.scrollX
 }
 
 function applyScrollTop(top: number) {
-  if (verifyRuntime != null) {
-    verifyRuntime.scrollY = top
-    return
-  }
   ;(isSafari ? document.body : window).scrollTo({top})
 }
 
 function applyFocusedId(id: string | null) {
   const url = `${window.location.pathname}${window.location.search}${id == null ? '' : '#' + id}`
-  if (verifyRuntime != null) {
-    window.history.replaceState(null, '', url)
-  } else {
-    window.history.pushState(null, '', url)
-  }
+  window.history.pushState(null, '', url)
 }
 
 // === state. Plus one in the URL's hash
@@ -876,258 +758,6 @@ function render(now: number) {
   }
 
   return stillAnimating
-}
-
-function copyRect(r: Rect): Rect {
-  return rect(r.x, r.y, r.sizeX, r.sizeY)
-}
-
-function getFocusedIndexFromHash(data: BoxData[]) {
-  const hashImgId = window.location.hash.slice(1)
-  for (let i = 0; i < data.length; i++) if (data[i]!.id === hashImgId) return i
-  return null
-}
-
-function findItemIndexById(id: string) {
-  for (let i = 0; i < st.data.length; i++) if (st.data[i]!.id === id) return i
-  throw new Error(`Unknown photo id: ${id}`)
-}
-
-function getCurrentLayoutProjection() {
-  const windowSizeX = readWindowSizeX()
-  const windowSizeY = readWindowSizeY()
-  const scrollY = readScrollY()
-  const gridLayout = getGridLayout(layoutSources, windowSizeX)
-  const focused = getFocusedIndexFromHash(st.data)
-  const lineLayout = focused == null ? null : getLineLayout(layoutSources, focused, windowSizeX, windowSizeY, scrollY)
-  return {
-    focused,
-    scrollY,
-    gridLayout,
-    activeItems: lineLayout == null ? gridLayout.items : lineLayout.items,
-  }
-}
-
-function getResizeSampleItem(id: string, projection: ReturnType<typeof getCurrentLayoutProjection>): ResizeSampleItem {
-  const index = findItemIndexById(id)
-  const d = st.data[index]!
-  const activeGeometry = projection.activeItems[index]!
-  const visualBox = rect(
-    layoutRectXPos(activeGeometry.layoutBox, d),
-    layoutRectYPos(activeGeometry.layoutBox, d),
-    layoutRectSizeXPos(activeGeometry.layoutBox, d),
-    layoutRectSizeYPos(activeGeometry.layoutBox, d),
-  )
-  const node = domCache.get(id)
-  const promptNode = node == null ? null : node.children[1] as HTMLElement
-  const lineNodes = promptNode == null ? [] : (promptDOMStructureByNode.get(promptNode)?.lineNodes ?? [])
-  const widestRenderedLine =
-    lineNodes.length === 0 ? null : Math.max(...lineNodes.map(line => line.getBoundingClientRect().width))
-  const promptInnerWidth =
-    promptNode == null ? null : promptNode.getBoundingClientRect().width - promptPaddingX * 2
-  const visualPromptBox =
-    promptNode == null
-      ? rect(
-          visualBox.x + promptXPos(d),
-          visualBox.y + promptYPos(d),
-          promptSizeXPos(d),
-          promptSizeYPos(d),
-        )
-      : (() => {
-          const bounds = promptNode.getBoundingClientRect()
-          return rect(
-            bounds.left + (verifyRuntime == null ? readScrollX() : 0),
-            bounds.top + (verifyRuntime == null ? projection.scrollY : 0),
-            bounds.width,
-            bounds.height,
-          )
-        })()
-
-  return {
-    id,
-    prompt: d.prompt,
-    mounted: node?.parentNode != null,
-    layoutBox: copyRect(activeGeometry.layoutBox),
-    visualBox,
-    promptBox: visualPromptBox,
-    viewportY: visualBox.y - projection.scrollY,
-    row: Math.floor(index / projection.gridLayout.cols),
-    col: index % projection.gridLayout.cols,
-    lineCount: lineNodes.length === 0 ? null : lineNodes.length,
-    widestRenderedLine,
-    promptInnerWidth,
-  }
-}
-
-function getResizeSample(label: string, elapsedMs: number | null, anchorId: string | null, trackedIds: string[]): ResizeSample {
-  const projection = getCurrentLayoutProjection()
-  return {
-    label,
-    elapsedMs,
-    cols: projection.gridLayout.cols,
-    scrollY: projection.scrollY,
-    contentHeight: projection.gridLayout.contentHeight,
-    anchor: anchorId == null ? null : getResizeSampleItem(anchorId, projection),
-    items: trackedIds.map(id => getResizeSampleItem(id, projection)),
-  }
-}
-
-function resetVerifyState(viewportSizeX: number, viewportSizeY: number, scrollY: number) {
-  if (verifyRuntime == null) return
-  verifyRuntime.viewportSizeX = viewportSizeX
-  verifyRuntime.viewportSizeY = viewportSizeY
-  verifyRuntime.scrollX = 0
-  verifyRuntime.scrollY = scrollY
-  verifyRuntime.pendingRender = true
-  window.getSelection()?.removeAllRanges()
-  applyFocusedId(null)
-  for (const node of domCache.values()) {
-    if (node.parentNode != null) node.parentNode.removeChild(node)
-  }
-  domCache.clear()
-  st = createInitialState(viewportSizeX, viewportSizeY, scrollY, false)
-}
-
-function flushVerifyTo(now: number) {
-  if (verifyRuntime == null) return false
-  if (!verifyRuntime.pendingRender && st.animatedUntilTime == null) return false
-  verifyRuntime.pendingRender = false
-  const stillAnimating = render(now)
-  if (stillAnimating) verifyRuntime.pendingRender = true
-  return stillAnimating
-}
-
-function flushVerifyUntilSettled(startNow: number) {
-  if (verifyRuntime == null) return startNow
-  let now = startNow
-  let guard = 0
-  while (verifyRuntime.pendingRender || st.animatedUntilTime != null) {
-    flushVerifyTo(now)
-    now += 16
-    guard++
-    if (guard > 600) throw new Error('Resize verification did not settle')
-  }
-  return now
-}
-
-async function runResizeScenario(scenario: ResizeScenario): Promise<ResizeScenarioResult> {
-  if (verifyRuntime == null) throw new Error('Resize verification is not enabled')
-
-  resetVerifyState(scenario.startWidth, scenario.height, 0)
-  flushVerifyTo(0)
-
-  const anchorId = scenario.anchorId ?? null
-  if (anchorId != null) st.anchor = findItemIndexById(anchorId)
-  if (scenario.scrollY === 'anchor' && anchorId != null) {
-    const anchorLayoutBox = getGridLayout(layoutSources, scenario.startWidth).items[findItemIndexById(anchorId)]!.layoutBox
-    const anchoredScrollY = Math.max(0, anchorLayoutBox.y - gapTopPeek)
-    verifyRuntime.scrollY = anchoredScrollY
-    st.scrollY = anchoredScrollY
-    verifyRuntime.pendingRender = true
-    flushVerifyTo(0)
-  } else if (typeof scenario.scrollY === 'number') {
-    verifyRuntime.scrollY = scenario.scrollY
-    st.scrollY = scenario.scrollY
-    verifyRuntime.pendingRender = true
-    flushVerifyTo(0)
-  }
-
-  const trackedIds =
-    scenario.trackedIds ??
-    (
-      scenario.trackedKind === 'firstRow'
-        ? photoGalleryData.slice(0, getGridLayout(layoutSources, scenario.startWidth).cols).map(d => d.id)
-        : anchorId == null ? [] : [anchorId]
-    )
-
-  const samples: ResizeSample[] = [
-    getResizeSample('before', 0, anchorId, trackedIds),
-  ]
-
-  verifyRuntime.viewportSizeX = scenario.endWidth
-  verifyRuntime.viewportSizeY = scenario.height
-  verifyRuntime.pendingRender = true
-  for (const elapsedMs of scenario.sampleTimesMs) {
-    flushVerifyTo(elapsedMs)
-    samples.push(getResizeSample(`t=${elapsedMs}`, elapsedMs, anchorId, trackedIds))
-  }
-  const settledElapsedMs = flushVerifyUntilSettled((scenario.sampleTimesMs.at(-1) ?? 0) + 16)
-  samples.push(getResizeSample('settled', settledElapsedMs, anchorId, trackedIds))
-
-  return {
-    name: scenario.name,
-    startWidth: scenario.startWidth,
-    endWidth: scenario.endWidth,
-    anchorId,
-    trackedIds,
-    samples,
-  }
-}
-
-async function runResizeBatch(scenarios: ResizeScenario[]) {
-  if (verifyRuntime == null) throw new Error('Resize verification is not enabled')
-
-  verifyRuntime.report = {
-    phase: 'running',
-    requestId: verifyRequestId,
-    scenario: 'resize',
-  }
-  try {
-    await document.fonts.ready
-    const results: ResizeScenarioResult[] = []
-    for (const scenario of scenarios) results.push(await runResizeScenario(scenario))
-    verifyRuntime.report = {
-      phase: 'ready',
-      requestId: verifyRequestId,
-      scenario: 'resize',
-      results,
-    }
-  } catch (error) {
-    verifyRuntime.report = {
-      phase: 'error',
-      requestId: verifyRequestId,
-      scenario: 'resize',
-      message: error instanceof Error ? error.message : String(error),
-    }
-  }
-  return verifyRuntime.report
-}
-
-async function runLayoutLawSweep() {
-  if (verifyRuntime == null) throw new Error('Layout verification is not enabled')
-
-  verifyRuntime.report = {
-    phase: 'running',
-    requestId: verifyRequestId,
-    scenario: 'layout-laws',
-  }
-  try {
-    await document.fonts.ready
-    verifyRuntime.report = {
-      phase: 'ready',
-      requestId: verifyRequestId,
-      scenario: 'layout-laws',
-      result: runPhotoGalleryLayoutVerification(),
-    }
-  } catch (error) {
-    verifyRuntime.report = {
-      phase: 'error',
-      requestId: verifyRequestId,
-      scenario: 'layout-laws',
-      message: error instanceof Error ? error.message : String(error),
-    }
-  }
-  return verifyRuntime.report
-}
-
-if (verifyRuntime != null) {
-  window.__photoGalleryVerify = {
-    get report() {
-      return verifyRuntime.report
-    },
-    ...(verifyMode === 'resize' ? {runBatch: runResizeBatch} : {}),
-    ...(verifyMode === 'layout-laws' ? {runLayoutLawSweep} : {}),
-  }
 }
 
 scheduleRender()

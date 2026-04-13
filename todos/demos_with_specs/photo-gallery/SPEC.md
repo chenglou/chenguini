@@ -5,11 +5,11 @@ Use `docs/`, `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-ga
 Read first:
 
 1. `docs/drafts/verification.md`
-2. `docs/drafts/automating-browsers.md`
+2. `docs/drafts/layout-geometry.md`
 3. `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/DATA.md`
 4. this file
 
-Write tests first, then implementation, then validate.
+State static layout facts where the helper is pure, then implement, then validate.
 
 Build only inside the target folder the main thread gives you.
 
@@ -57,13 +57,14 @@ Build a photo gallery with:
  left nav strip        focused item in middle          right nav strip
 ```
 
-## Tests Must Prove
+## Static Facts To State
 
-- responsive grid layout math
-- line-mode hit-area routing
-- browser-backed navigation flow updates the hash and lands on the right focused item
-- browser-backed caption selection selects the full text and stays in grid mode
-- browser-backed dismiss restore brings the focused row back with roughly `40px` above it
-- browser-backed occlusion mounts fewer cards than the full photo count
+- grid helper returns `cols: int[1, 7]`
+- grid helper returns a non-negative max box width
+- line-mode hit-area routing is source-owned if it is extracted into a pure helper
+- product boundary: navigation flow updates the hash and lands on the right focused item
+- product boundary: caption selection selects the full text and stays in grid mode
+- product boundary: dismiss restore brings the focused row back with roughly `40px` above it
+- product boundary: occlusion mounts fewer cards than the full photo count
 
-If a browser check passes without proving those outcomes, it is too weak.
+Do not turn the product boundaries into verifier evidence unless the relevant geometry is source-owned.

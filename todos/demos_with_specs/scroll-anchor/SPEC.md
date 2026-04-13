@@ -5,11 +5,11 @@ Use `docs/` plus this packet only. Do not inspect `demos/` or other specs.
 Read first:
 
 1. `docs/drafts/verification.md`
-2. `docs/drafts/automating-browsers.md`
+2. `docs/drafts/layout-geometry.md`
 3. `docs/Scrolling.md`
 4. this file
 
-Write tests first, then implementation, then validate.
+State static layout facts where the helper is pure, then implement, then validate.
 
 Build only inside the target folder the main thread gives you.
 
@@ -88,12 +88,12 @@ scroll container
 info
 ```
 
-## Tests Must Prove
+## Static Facts To State
 
 - layout math for headers, item positions, and total height
 - anchor picking and anchor delta adjustment logic
-- browser-backed `scroll-to-700 then add-3-above` keeps the same item at the reference line
-- browser-backed `add-1 then 2 rapid` keeps the same item at the reference line
-- browser-backed user-scroll then prepend picks a new anchor from the new scroll position
+- product boundary: `scroll-to-700 then add-3-above` keeps the same item at the reference line
+- product boundary: `add-1 then 2 rapid` keeps the same item at the reference line
+- product boundary: user-scroll then prepend picks a new anchor from the new scroll position
 
-If a browser check passes without proving which item stayed at the reference line, it is too weak.
+Do not turn scroll read-back behavior into verifier evidence unless the relation is modeled in userland geometry.

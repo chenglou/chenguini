@@ -29,10 +29,10 @@ Use `docs/` plus this packet only. Do not inspect `demos/` or other specs.
 Read first:
 
 1. `docs/drafts/verification.md`
-2. `docs/drafts/automating-browsers.md`
+2. `docs/drafts/layout-geometry.md`
 3. this file
 
-Write tests first, then implementation, then validate.
+State static layout facts where the helper is pure, then implement, then validate.
 
 Build only inside:
 
@@ -64,14 +64,14 @@ Use this exact data:
 
 - <same gesture, different target -> different outcome>
 - <middle-of-interaction truth that must happen before settle>
-- <browser boundary truth like hash, selection, scroll restore, or mounted count>
+- <browser boundary truth like hash, selection, scroll restore, or mounted count, stated as product behavior>
 
-## Tests Must Prove
+## Static Facts To State
 
-- <one pure seam>
-- <one pure seam>
-- <one browser-backed semantic scenario>
-- <one browser-backed semantic scenario>
+- <one @layout fact for a pure geometry helper>
+- <one @layout fact for a hit rect, row, text, or sizing helper>
+- <one product boundary that is intentionally not verifier evidence>
+- <one product boundary that is intentionally not verifier evidence>
 ````
 
 ## Keep These Exact
@@ -80,15 +80,15 @@ Keep these exact unless you have a very good reason not to:
 
 - numeric layout constants like `32px`, `24px`, `40px`, `100px`
 - threshold rules like midpoint reorder
-- the exact browser-facing seam, e.g. `caption click selects the full text and stays in grid mode`
-- what each browser-backed scenario must prove
+- the exact product seam, e.g. `caption click selects the full text and stays in grid mode`
+- which pure helper or product boundary owns each fragile truth
 
 Leave these in shared docs, not the per-demo packet:
 
-- `requestId`
-- phase markers
-- acceptable browser transport
-- why the runner should stay dumb
+- the `@layout` grammar
+- report statuses
+- why unsupported facts become `unknown`
+- why sampled inputs do not count
 
 ## Add One Diagram Only If It Helps
 

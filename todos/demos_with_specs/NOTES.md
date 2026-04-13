@@ -11,6 +11,7 @@ The best split right now is:
 - docs are the doctrine
 - one thin demo packet carries the exact product truth
 - `todos/demo_templates/` is the architecture surface
+- static `@layout` facts live beside pure geometry helpers
 - extra extraction guidance stays in worker prompts
 
 If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
@@ -18,8 +19,8 @@ If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
 ## Current Conclusions
 
 - Fresh stateless workers can recreate these demos from repo knowledge without reading `demos/`.
-- The page-owned browser pattern in `docs/drafts/automating-browsers.md` held up.
-- The verifier shape in `docs/drafts/verification.md` held up.
+- The static verifier shape in `docs/drafts/verification.md` is now the active guarantee path.
+- Browser automation notes are research, not the default verifier path.
 - For `gpt-5.4 xhigh`, the thin default packet in `todos/minimum-viable-demo-spec.md` is the right default.
 - Templates help architecture shape more than they have proven pass-rate.
 - Extra extraction guidance is a shape nudge, not a correctness unlock.
@@ -31,7 +32,7 @@ If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
 
 - stable
 - docs plus thin spec are enough
-- the tiny Chrome CDP poller pattern held up well here
+- its geometry helpers are good candidates for small `@layout` facts
 
 ### `photo-gallery`
 
@@ -41,7 +42,7 @@ If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
   - full caption selection
   - exact grid width budget
   - explicit occlusion assertions
-  - a concrete browser-runner recipe
+  - clear ownership between static geometry and browser-boundary behavior
 - motion quality is still easier to underspec than basic behavior
 
 ### `scroll-anchor`

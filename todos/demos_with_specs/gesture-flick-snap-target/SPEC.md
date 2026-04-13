@@ -5,11 +5,11 @@ Use `docs/` plus this packet only. Do not inspect `demos/` or other specs.
 Read first:
 
 1. `docs/drafts/verification.md`
-2. `docs/drafts/automating-browsers.md`
+2. `docs/drafts/layout-geometry.md`
 3. `docs/Input.md`
 4. this file
 
-Write tests first, then implementation, then validate.
+State static layout facts where the helper is pure, then implement, then validate.
 
 Build only inside the target folder the main thread gives you.
 
@@ -58,13 +58,13 @@ corner dot                     corner dot
 corner dot                     corner dot
 ```
 
-## Tests Must Prove
+## Static Facts To State
 
 - corner positions and nearest-corner choice
 - decay rest position math
 - release velocity estimation from recent pointer samples
-- browser-backed drag keeps the PiP under the pointer before release
-- browser-backed flick toward the upper-right lands at the upper-right corner
-- browser-backed slower release toward the lower-right lands at the lower-right corner and reports a blue rest point
+- product boundary: drag keeps the PiP under the pointer before release
+- product boundary: flick toward the upper-right lands at the upper-right corner
+- product boundary: slower release toward the lower-right lands at the lower-right corner and reports a blue rest point
 
-If a browser check passes without proving the chosen corner or the rest point, it is too weak.
+Do not turn the product boundaries into verifier evidence unless the relevant geometry is source-owned.

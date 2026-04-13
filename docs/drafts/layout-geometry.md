@@ -2,250 +2,135 @@
 
 If JS owns layout, let one JS model own the answer.
 
-Don't have JS decide an image card's size, CSS decide its caption fit, then DOM reads recover the rest later. That path keeps creating fake bugs where the policy is fine but the ownership is split.
+The checker should prove facts about that model. It should not make the app code pretend to be a verifier DSL.
 
-## Keep Layout Arithmetic Natural
+## Natural Code First
 
-If JS owns layout, write normal JS layout.
+Write normal layout:
+
+```ts
+let y = top
+for (const row of rows) {
+  boxes.push({top: y, height: row.height})
+  y += row.height + gap
+}
+```
+
+Then state the intended geometry:
+
+```ts
+/** @layout
+ * requires rows[].height >= 0
+ * ensures contiguousY(result.boxes, gap)
+ */
+```
+
+If the checker cannot prove the loop yet, grow the checker. Do not rewrite the loop into proof-shaped runtime helpers.
+
+## Shared Geometry
+
+Paint, hit testing, selection, occlusion, and scroll anchoring should read the same boxes.
+
+Good facts to state:
+
+- `rectEquals(hitArea, layoutBox)`
+- `rectInside(promptBox, layoutBox)`
+- `sameLength(result.items, sources)`
+- `result.contentHeight == lastBottom(result.rows) + bottomGap`
+- `nonOverlapX(row.items.map(item => item.layoutBox))`
+
+Bad:
+
+- layout computes one box, hit testing recomputes another
+- selection remeasures sliced strings after text layout already produced fragments
+- occlusion uses a guessed height that paint does not use
+
+## Base Geometry Then Projection
+
+Keep stable layout separate from animation residuals.
 
 Good:
 
-- `const cols = clamp(1, Math.floor((width - gap) / (minCardWidth + gap)), 7)`
-- a `for` loop that pushes `rowsTop`
-- `Math.min` / `Math.max` when one size caps another
+- `layoutBox` is the base box
+- `promptBox` is derived from the same base geometry
+- `hitArea` says where pointer routing happens
+- visual projection adds residuals later
 
-Bad:
+Then proofs target the base geometry. Animation can have its own static facts later, but do not make the base layout depend on a moving projection.
 
-- rewriting the same math as `add(...)`, `sub(...)`, `mul(...)`, `when(...)` only because a verifier exists
-- forcing every layout helper through a special expression builder just to make proofs possible
+## Text Geometry
 
-If the verifier cannot understand some natural arithmetic yet, grow the verifier. Add a local contract only when the helper is genuinely opaque. Don't contort the app first.
+Pretext means text is a layout model, not an opaque browser guess.
 
-## Base Geometry First, Animated Geometry Second
+Useful facts:
 
-Compute the stable boxes once, then let animation add a visual residual on top.
+- line width fits the offered width
+- fragments are ordered by text offset
+- fragments cover the line text range
+- line ranges cover the rendered text range
+- selection rects read the same fragments used for paint
 
-Good:
+If a prefix, badge, quote mark, or icon changes wrapping, make it part of the measured stream.
 
-- `layoutBox` for the card's stable `x/y/width/height`
-- `promptBox` for the caption area
-- `hitArea` for pointer routing
-- `occlusionBounds` for virtualization
-- a separate `visualBox` or residual offset for the animated projection
+## Opaque Boundaries
 
-Bad:
+Prefer source. Use a boundary summary only when the helper is genuinely opaque to the checker.
 
-- using the animated box as the only source of truth
-- recomputing hit areas from whatever happened to be painted this frame
-- letting scroll anchoring, hit testing, and occlusion all read slightly different geometry
+Good summary:
 
-The useful split is "base geometry" vs "animated projection", not "CSS layout" vs "JS layout".
+```ts
+/** @layout
+ * ensures result.visibleHeight == result.lines.length * lineHeight
+ * ensures result.width <= offeredWidth
+ */
+function measureTextBlock(...) { ... }
+```
 
-## Text Geometry Wants One Owner
+Bad summary:
 
-If JS decides a caption's width, line count, or height, don't then hand the same string back to normal DOM flow and hope it breaks the same way.
+- a second approximate text measurement in the outer layout
+- a sampled page case that happens to match one string
+- a contract file that silently stands in for source without appearing in the report
 
-Bad:
+## Negotiated Vectors
 
-- `pretext` says the caption fits on `1` line
-- CSS `line-clamp` or a separate DOM structure does the actual wrapping
-- the last word wraps anyway and gets clipped
-
-Good:
-
-- one `rich-inline` layout path returns the visible lines
-- that same line list drives caption height, width shrink, and painted fragments
-
-This is especially important when the layout is exact enough to shrink a `1`-line caption down to its tight width.
-
-## Check The Rendered Projection
-
-Some bugs are not "the line breaker is wrong". They are "the model measured against one width, then the DOM rendered at another width."
-
-Good browser-backed probe:
-
-- model width
-- rendered inner width
-- widest rendered row or fragment edge
-- `widestRenderedLine <= renderedInnerWidth`
-
-This is better than a screenshot diff when the bug is a model/render mismatch. Screenshots are still good for discovery; the durable oracle should usually be a small geometry report the page computes itself.
-
-## Opaque Geometry Helpers Want Contracts
-
-Sometimes one layout layer has to trust another.
-
-Example:
-
-- a row layout helper asks a text layout helper for caption height
-- a comment thread layout asks a text engine for fragment boxes
-- an outer scroller asks an inner layout for content height
-
-When that happens, ask for small earned postconditions instead of recreating the inner layout badly downstream.
-
-Good contracts:
-
-- visible line width is `<= offeredWidth`
-- visible height is `lineCount * lineHeight`
-- fragment boxes stay ordered inside the line box
-- reported aggregate width really means `max(line.width)`
-
-Bad:
-
-- computing height with one helper, then remeasuring sliced substrings somewhere else to guess highlight rects
-- measuring against one width, then letting CSS margins or wrapping silently change the same geometry later
-
-The outer layout should trust one contract. It should not maintain a second approximate geometry algorithm for the same thing.
-
-This is a static helper boundary, not a browser seam. Browser seams should still be verified with a page-owned geometry report.
-
-If you're using this repo's static verifier, the current sidecar API is in `../../layout-verifier/contracts.md`.
-
-## Negotiated Tracks Are Still Ordinary Geometry
-
-If a table or grid negotiates widths, keep the width vector as the thing being negotiated.
+For tables, tracks, and flex-like constraints, keep the vector as the geometry.
 
 Good:
 
 ```ts
-const columnWidths = [0, 0, 0]
-columnWidths[nameColumn] = Math.max(columnWidths[nameColumn]!, nameMinWidth)
-const currentHeaderWidth = columnWidths[nameColumn]! + columnWidths[valueColumn]! + columnGap
-const missing = headerSpanMinWidth - currentHeaderWidth
-if (missing > 0) {
-  columnWidths[nameColumn] += missing / 2
-  columnWidths[valueColumn] += missing / 2
-}
+const widths = [0, 0, 0]
+widths[column] = Math.max(widths[column]!, minWidth)
+return {widths, totalWidth}
 ```
 
-The total width should then come from the negotiated vector plus gaps, not from a parallel formula.
+Good facts:
+
+- `trackVectorSatisfiesBounds(widths, cells)`
+- `totalWidth == sum(widths) + gap * max(0, widths.length - 1)`
 
 Bad:
 
-- one formula for total table width and a separate formula for each cell
-- treating a spanning cell as if it only belonged to its first column
-- expanding three columns into three named locals when the same code really applies to `columnWidths[column]`
+- one formula for total width and a separate guessed formula for cell widths
+- flattening an `N` column problem into named locals just because a checker is young
 
-This applies to anything whose lower bound is the join of several constraints, e.g. table columns, CSS grid tracks, flex bases, or wizard-step minimums. The vector is the geometry. Hit testing, total width, and overflow checks should all read it.
+## Hit Rects
 
-## Hit Testing Should Read The Same Geometry
+Hit testing should use half-open rectangles:
 
-If JS owns text boxes or card boxes, let hit testing read those same boxes.
+```ts
+x >= left && x < right
+y >= top && y < bottom
+```
 
-Good:
+The first pixel after the box belongs to the next box, not both boxes.
 
-- a selection highlighter walks the same line fragments the renderer used
-- clicking empty space in a comment returns the nearest text offset from the line tops and line widths you already computed
-- a grid hit area comes from the same `layoutBox` and `promptBox` that drive paint
+## Resize
 
-Bad:
+Continuous resize is not a mode transition. Recompute base geometry directly from current inputs. Use animation residuals only for real visual transitions.
 
-- layout comes from one JS model, then hit testing remeasures sliced substrings later
-- empty-space selection is guessed from DOM ranges even though line tops and text offsets are already in userland
-- one helper returns merged text rects while another helper recomputes almost-the-same boxes with slightly different gap rules
+Good fact:
 
-Once the geometry is in userland, selection and hit routing should usually become geometry queries, not DOM archaeology.
+- an anchored item's screen `y` is preserved by the scroll adjustment relation
 
-## Hit Test Rects Are Half-Open
-
-For box hit testing, include the left/top edge and exclude the right/bottom edge.
-
-Good:
-
-- `x >= left && x < right`
-- `y >= top && y < bottom`
-- a pointer exactly at `gridRight` returns no cell
-
-Bad:
-
-- letting both neighboring boxes own the shared edge
-- treating `x === right` as inside, then producing `col = countX`
-
-This matches array indexing. The first pixel belongs to the box; the first pixel after it does not.
-
-## Grid Index Math Should Show Up On Screen
-
-If a grid uses `Math.floor(i / cols)` and `i % cols`, make the verifier talk about the slot the item actually lands in.
-
-Good:
-
-- the item at index `i` is centered in the column slot implied by `i % cols`
-- the item's `y` uses the row implied by `Math.floor(i / cols)`
-- same-row overlap bugs report `row`, `column`, and the two x positions that crossed
-
-Bad:
-
-- proving `%` stays in bounds but never checking the placed box
-- debugging row / column bugs from a raw `i` with no slot context
-
-Quotient / remainder math is only interesting here because it decides visible placement.
-
-## Decorative Prefixes Count As Layout
-
-If an opening quote, badge, or icon steals width, make it part of the measured text stream.
-
-Good:
-
-- measure `❝ ` as a real prefix item
-- give it `break: 'never'` if it should stay attached
-- render that same prefix in the painted fragments
-
-Bad:
-
-- measure plain text, then paint the quote with `::before`
-- measure one text run, then render two inline boxes and expect identical wrapping
-- treat `::first-letter` like a paint-only effect when it changes inline fragmentation
-
-If the chrome changes wrapping, it is not just paint.
-
-## Some Layout Quantities Depend On Each Other
-
-Sometimes one size depends on another which depends back on the first.
-
-Example:
-
-- image height depends on how much vertical space the caption uses
-- caption height depends on the image width
-- image width depends on the image height and aspect ratio
-
-Don't force a fake one-way formula there. A tiny bounded solve is fine.
-
-Good:
-
-- start from a plausible caption budget
-- compute the image size
-- recompute the caption height at that width
-- do one more pass if needed
-
-If the state space is tiny, say `1`, `2`, or `3` caption lines, this is still ordinary app code, not "building a layout engine".
-
-## Resize Within One Mode Is Not A Mode Transition
-
-Continuous resize has a different feel from changing modes.
-
-If a grid stays a grid, don't keep kicking a spring residual every time the viewport changes by one pixel. That creates bowed motion where the item moves down then back up, or up then back down, even though its final slot is fine.
-
-Good:
-
-- recompute the anchored projection directly from the current layout and current scroll relation
-- keep residual catch-up for real mode changes, e.g. grid to focused view
-
-Bad:
-
-- base `y` changes from resize
-- anchored scroll correction changes too
-- a residual spring keeps trying to preserve the previous frame's position
-
-Repeated resize corrections and residual catch-up fight each other.
-
-## Discrete Line Breaks Need An Explicit Resize Policy
-
-Available width changes continuously. Line breaks do not.
-
-When a caption moves from `2` lines to `1`, decide what should happen:
-
-- snap to the new line layout immediately
-- freeze the old lines until resize settles
-- crossfade old and new line layouts
-
-Don't pretend this is "just measurement". The widths can be perfectly right and the UI can still feel wrong if the transition policy is implicit.
+State the relation in userland geometry and prove that helper.

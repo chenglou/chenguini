@@ -10,7 +10,7 @@ Why it stresses the verifier:
 
 - the indent ladder switches on both `level` and `documentClass`
 - terminal-line-only behavior needs a line-by-line check
-- optional slots need both a present-page-number fixture and an absent-page-number fixture
+- optional slots need facts for both present and absent page numbers
 
 ## `page-break-bundles.ts`
 
@@ -32,4 +32,4 @@ Why it stresses the verifier:
 - later single-column cells can still dominate after a span
 - range mode can take structured cell constraints and prove lower bounds on the resulting vector
 
-The paired verifier modules live under `layout-verifier/layout-kernels/`.
+When a kernel has stable static intent, put it in an `@layout` comment near the helper. The checker should prove that from source. Do not add paired example-case verifier modules for new kernels.
