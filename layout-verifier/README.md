@@ -28,7 +28,7 @@ For the current runnable pattern surface, see [patterns.ts](./patterns.ts).
 ## Run
 
 ```sh
-bun layout-verifier/verify.ts layout-verifier/patterns.ts demos/photo-gallery/layout-model.ts demos/draggable-cards/swap-layout.ts
+bun layout-verifier/verify.ts layout-verifier/patterns.ts
 ```
 
 The checker exits non-zero if any obligation fails or remains unknown.

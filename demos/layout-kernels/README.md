@@ -32,4 +32,4 @@ Why it stresses the verifier:
 - later single-column cells can still dominate after a span
 - range mode can take structured cell constraints and prove lower bounds on the resulting vector
 
-When a kernel has stable static intent, put it in an `@layout` comment near the helper. The checker should prove that from source. Do not add paired example-case verifier modules for new kernels.
+When a kernel suggests a general proof shape, add the smallest representative to `layout-verifier/patterns.ts`. Keep these kernels as readable demo code.

@@ -14,7 +14,7 @@ import {
 } from './prompt-layout'
 
 // This file is the pure geometry model for photo-gallery.
-// The demo renders it; @layout comments state static geometry facts.
+// The demo renders it.
 
 export type Rect = {
   x: number
@@ -85,11 +85,6 @@ export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[])
   }))
 }
 
-/** @layout
- * requires containerSizeX: int[320, 1600]
- * ensures result.cols: int[1, 7]
- * ensures result.boxMaxSizeX >= 0
- */
 export function colsBoxMaxSizeXF(containerSizeX: number) {
   const boxMinSizeX = 220
   const cols = clamp(1, Math.floor((containerSizeX - boxesGapX) / (boxMinSizeX + boxesGapX)), 7)

@@ -1,5 +1,5 @@
 // Pure snap geometry for gesture-flick-snap-target.
-// The demo imports it; @layout comments can state static geometry facts.
+// The demo imports it.
 
 export const pipW = 120
 export const pipH = 80
