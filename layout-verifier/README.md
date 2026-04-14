@@ -21,26 +21,12 @@ function colsBoxMaxSizeXF(width: number) {
 
 The comment is not prose. It is a tiny parsed language. Unknown names, unsupported operators, and unsupported lines are errors.
 
-## Current Subset
-
-This first pass intentionally starts narrow:
-
-- `requires name: int[min, max]`
-- `requires name: number[min, max]`
-- `ensures expression: int[min, max]`
-- `ensures expression: number[min, max]`
-- `ensures left == right`
-- `ensures left >= right`
-- `ensures left <= right`
-
-The expression evaluator supports numeric literals, identifiers, object returns, property access, local `const`/`let`, arithmetic, `?:`, pure calls in the same file, and a small `Math` subset.
-
-Unsupported proof paths become `unknown`. We do not fall back to concrete examples or sampled inputs.
+For the current runnable pattern surface, see [patterns.ts](./patterns.ts).
 
 ## Run
 
 ```sh
-bun layout-verifier/verify.ts demos/photo-gallery/layout-model.ts demos/draggable-cards/swap-layout.ts
+bun layout-verifier/verify.ts layout-verifier/patterns.ts demos/photo-gallery/layout-model.ts demos/draggable-cards/swap-layout.ts
 ```
 
 The checker exits non-zero if any obligation fails or remains unknown.
