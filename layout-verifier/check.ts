@@ -52,6 +52,7 @@ type Program = {
   sourceFile: ts.SourceFile
   globals: Map<string, NumberValue>
   functions: Map<string, ts.FunctionDeclaration>
+  specsByFunction: Map<string, LayoutSpec[]>
 }
 
 type Value = NumberValue | ObjectValue | UnknownValue
@@ -77,8 +78,10 @@ type UnknownValue = {
 
 type EvalContext = {
   program: Program
+  file: string
   env: Map<string, Value>
   stack: string[]
+  obligations: LayoutCheckObligation[]
 }
 
 const maxInlineDepth = 12
@@ -105,13 +108,13 @@ export async function verifyLayoutFiles(paths: string[]): Promise<LayoutCheckRep
 
 export function verifyLayoutSource(file: string, sourceText: string): LayoutCheckObligation[] {
   const sourceFile = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
-  const program = buildProgram(sourceFile)
+  const program = buildProgram(sourceFile, sourceText)
   const obligations: LayoutCheckObligation[] = []
 
   for (const statement of sourceFile.statements) {
     if (!ts.isFunctionDeclaration(statement)) continue
     if (statement.name == null) continue
-    const specs = parseLayoutSpecs(sourceText, statement)
+    const specs = program.specsByFunction.get(statement.name.text) ?? []
     if (specs.length === 0) continue
     obligations.push(...verifyFunctionSpecs(file, program, statement, specs))
   }
@@ -119,13 +122,15 @@ export function verifyLayoutSource(file: string, sourceText: string): LayoutChec
   return obligations
 }
 
-function buildProgram(sourceFile: ts.SourceFile): Program {
+function buildProgram(sourceFile: ts.SourceFile, sourceText: string): Program {
   const globals = new Map<string, NumberValue>()
   const functions = new Map<string, ts.FunctionDeclaration>()
+  const specsByFunction = new Map<string, LayoutSpec[]>()
 
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement) && statement.name != null) {
       functions.set(statement.name.text, statement)
+      specsByFunction.set(statement.name.text, parseLayoutSpecs(sourceText, statement))
       continue
     }
     if (!ts.isVariableStatement(statement)) continue
@@ -137,7 +142,7 @@ function buildProgram(sourceFile: ts.SourceFile): Program {
     }
   }
 
-  return {sourceFile, globals, functions}
+  return {sourceFile, globals, functions, specsByFunction}
 }
 
 function parseLayoutSpecs(sourceText: string, node: ts.Node): LayoutSpec[] {
@@ -225,13 +230,13 @@ function verifyFunctionSpecs(
     env.set(spec.name, numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.name))
   }
 
-  const context: EvalContext = {program, env, stack: [functionName]}
+  const context: EvalContext = {program, file, env, stack: [functionName], obligations: []}
   const result = evaluateFunctionBody(fn, context)
-  const obligations: LayoutCheckObligation[] = []
+  const obligations: LayoutCheckObligation[] = [...context.obligations]
 
   for (const spec of specs) {
     if (spec.kind === 'requires-range') continue
-    obligations.push(verifyEnsuresSpec(file, program, functionName, env, result, spec))
+    obligations.push(verifyEnsuresSpec(file, program, functionName, env, result, spec, obligations))
   }
 
   return obligations
@@ -244,10 +249,11 @@ function verifyEnsuresSpec(
   baseEnv: Map<string, Value>,
   result: Value,
   spec: Exclude<LayoutSpec, {kind: 'requires-range'}>,
+  obligations: LayoutCheckObligation[],
 ): LayoutCheckObligation {
   const env = new Map(baseEnv)
   env.set('result', result)
-  const context: EvalContext = {program, env, stack: [functionName]}
+  const context: EvalContext = {program, file, env, stack: [functionName], obligations}
 
   if (spec.kind === 'ensures-range') {
     const value = evaluateSpecExpression(spec.expression, context)
@@ -401,21 +407,59 @@ function evaluateCall(expression: ts.CallExpression, context: EvalContext): Valu
   if (fn == null) return unknown(`Unknown function ${functionName}`)
   if (context.stack.length >= maxInlineDepth) return unknown(`Inline depth exceeded at ${functionName}`)
   if (fn.parameters.length !== expression.arguments.length) return unknown(`Call arity mismatch for ${functionName}`)
+  const argumentValues = expression.arguments.map(argument => evaluateExpression(argument, context))
+  verifyCallRequires(functionName, fn, expression, argumentValues, context)
 
   const env = new Map<string, Value>()
   for (const [name, value] of context.program.globals) env.set(name, value)
   for (let i = 0; i < fn.parameters.length; i++) {
     const param = fn.parameters[i]!
-    const argument = expression.arguments[i]!
     if (!ts.isIdentifier(param.name)) return unknown(`Unsupported parameter pattern in ${functionName}`)
-    env.set(param.name.text, evaluateExpression(argument, context))
+    env.set(param.name.text, argumentValues[i] ?? unknown(`Missing argument ${i} for ${functionName}`))
   }
 
   return evaluateFunctionBody(fn, {
     program: context.program,
+    file: context.file,
     env,
     stack: [...context.stack, functionName],
+    obligations: context.obligations,
   })
+}
+
+function verifyCallRequires(
+  functionName: string,
+  fn: ts.FunctionDeclaration,
+  expression: ts.CallExpression,
+  argumentValues: Value[],
+  context: EvalContext,
+) {
+  const specs = context.program.specsByFunction.get(functionName) ?? []
+  for (const spec of specs) {
+    if (spec.kind !== 'requires-range') continue
+    const paramIndex = parameterIndex(fn, spec.name)
+    const value =
+      paramIndex == null
+        ? unknown(`Call target ${functionName} has no parameter named ${spec.name}`)
+        : argumentValues[paramIndex] ?? unknown(`Call target ${functionName} missing argument for ${spec.name}`)
+    const status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int')
+    const callText = `${functionName}(${expression.arguments.map(argument => argument.getText(context.program.sourceFile)).join(', ')})`
+    context.obligations.push({
+      file: context.file,
+      functionName: context.stack.join(' > '),
+      text: `call ${callText}: ${spec.text}`,
+      status: status.status,
+      ...(status.reason == null ? {} : {reason: status.reason}),
+    })
+  }
+}
+
+function parameterIndex(fn: ts.FunctionDeclaration, name: string): number | null {
+  for (let i = 0; i < fn.parameters.length; i++) {
+    const param = fn.parameters[i]!
+    if (ts.isIdentifier(param.name) && param.name.text === name) return i
+  }
+  return null
 }
 
 function evaluateMathCall(name: string, args: ts.NodeArray<ts.Expression>, context: EvalContext): Value {

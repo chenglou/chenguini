@@ -1,7 +1,6 @@
 // Runnable checker pattern specimen. `bun run verify:layout` must run this file.
 //
 // Queued patterns:
-// - discharge `requires`: callsite proof, named trusted boundary, or explicit "assumed domain" in the report
 // - relational preconditions, e.g. `requires container >= containee`
 // - clamp / min / max cap proofs that need path-sensitive narrowing
 // - running `y` loops
@@ -116,4 +115,28 @@ export function mathSubset(value: number) {
  */
 export function exactExpressionIdentity(containee: number, container: number) {
   return (container - containee) / 2
+}
+
+/** @layout
+ * requires value: number[4, 14]
+ * ensures result: number[5, 15]
+ */
+function trackedInnerRequires(value: number) {
+  return value + 1
+}
+
+/** @layout
+ * requires value: number[0, 10]
+ * ensures result: number[5, 15]
+ */
+function trackedMiddleRequires(value: number) {
+  return trackedInnerRequires(value + patternGap)
+}
+
+/** @layout
+ * requires value: number[0, 10]
+ * ensures result: number[5, 15]
+ */
+export function transitiveRequiresTracking(value: number) {
+  return trackedMiddleRequires(value)
 }

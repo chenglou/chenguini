@@ -21,6 +21,8 @@ function colsBoxMaxSizeXF(width: number) {
 
 The comment is not prose. It is a tiny parsed language. Unknown names, unsupported operators, and unsupported lines are errors.
 
+When a verified same-file helper calls another helper with `@layout` requirements, the caller has to prove the callee's input ranges. Entry-point `requires` clauses are still assumptions unless some caller discharges them.
+
 For the current runnable pattern surface, see [patterns.ts](./patterns.ts).
 
 ## Run
