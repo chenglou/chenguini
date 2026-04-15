@@ -142,3 +142,13 @@ A report should say:
 - the reason for `fail` or `unknown`
 
 Keep drafted facts and exploratory checks out of the committed verifier report.
+
+## Contract Tests
+
+Keep verifier tests split:
+
+- `patterns.ts` is good code that must prove.
+- `negative-patterns.ts` is bad code that must not prove.
+- Track normalized diagnostics, not the whole JSON report.
+
+Good negative tests are tiny and archetypal. E.g. a helper accepts `value: number[0, 20]` and calls another helper that requires `value: number[0, 10]`; the expected output should name that failed call requirement.

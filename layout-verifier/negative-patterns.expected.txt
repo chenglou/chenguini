@@ -1,0 +1,6 @@
+FAIL layout-verifier/negative-patterns.ts:negativeOutputRange: ensures result: int[0, 4]
+  range was int[5, 15] as (value + 5), expected inside int[0, 4]
+FAIL layout-verifier/negative-patterns.ts:negativeComparison: ensures result.high < result.low
+  number[10, 15] as (value + 10) < number[0, 5] as value is false
+FAIL layout-verifier/negative-patterns.ts:negativeCallRequires: call negativeNeedsSmallValue(value): requires value: number[0, 10]
+  range was number[0, 20] as value, expected inside number[0, 10]

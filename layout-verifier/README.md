@@ -23,12 +23,12 @@ The comment is not prose. It is a tiny parsed language. Unknown names, unsupport
 
 When a verified same-file helper calls another helper with `@layout` requirements, the caller has to prove the callee's input ranges. Entry-point `requires` clauses are still assumptions unless some caller discharges them.
 
-For the current runnable pattern surface, see [patterns.ts](./patterns.ts).
+For the current runnable pattern surface, see [patterns.ts](./patterns.ts). For intentionally bad facts, see [negative-patterns.ts](./negative-patterns.ts) and its normalized expected output.
 
 ## Run
 
 ```sh
-bun layout-verifier/verify.ts layout-verifier/patterns.ts
+bun run verify:layout
 ```
 
-The checker exits non-zero if any obligation fails or remains unknown.
+The checker exits non-zero if a positive obligation fails or remains unknown, or if the negative diagnostics drift.
