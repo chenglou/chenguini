@@ -30,6 +30,32 @@ export function negativePathSensitiveMinOverflow(width: number) {
 }
 
 /** @layout
+ * given items.length: int[0, 10]
+ * given index: int[0, 10]
+ * result < items.length
+ */
+export function negativeArrayIndexNeedsUpperBound(items: number[], index: number) {
+  const length = items.length
+  return length >= 0 ? index : index
+}
+
+/** @layout
+ * given items.length: int[0, 10]
+ * result: int[0, 10]
+ */
+function negativeNeedsShortArray(items: number[]) {
+  return items.length
+}
+
+/** @layout
+ * given items.length: int[0, 20]
+ * result: int[0, 20]
+ */
+export function negativeArrayLengthCallGiven(items: number[]) {
+  return negativeNeedsShortArray(items)
+}
+
+/** @layout
  * given value: number[0, 10]
  * result: number[0, 10]
  */

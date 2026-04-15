@@ -4,6 +4,10 @@ FAIL layout-verifier/negative-patterns.ts:negativeComparison: result.high < resu
   number[10, 15] as (value + 10) < number[0, 5] as value is false
 FAIL layout-verifier/negative-patterns.ts:negativePathSensitiveMinOverflow: result.overflow < 0
   int[0, 0] as (width - width) < int[0, 0] as 0 is false
+UNKNOWN layout-verifier/negative-patterns.ts:negativeArrayIndexNeedsUpperBound: result < items.length
+  int[0, 10] as index < int[0, 10] as items.length was not proven
+FAIL layout-verifier/negative-patterns.ts:negativeArrayLengthCallGiven: call negativeNeedsShortArray(items): given items.length: int[0, 10]
+  range was int[0, 20] as items.length, expected inside int[0, 10]
 FAIL layout-verifier/negative-patterns.ts:negativeCallGiven: call negativeNeedsSmallValue(value): given value: number[0, 10]
   range was number[0, 20] as value, expected inside number[0, 10]
 FAIL layout-verifier/negative-patterns.ts:negativeRelationalCallGiven: call negativeNeedsContainerFit(containee, container): given container >= containee

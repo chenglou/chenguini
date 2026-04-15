@@ -10,7 +10,6 @@
 
 - Recognize the first running-sum loop. E.g. `let y = top; rows.push({top: y, height}); y += height + gap` should prove row tops move forward when heights and gap are non-negative.
 - Add append-only array facts needed by that loop: `sameLength(result, items)`, `monotone(rows.map(row => row.top))`, `contiguousY(rows, gap)`, and `lastBottom(rows)`.
-- Add a tiny array/length/index domain. Start with `items.length`, loop index bounds, result length, and half-open hit rect checks.
 - Add geometry atoms after the loop facts exist: `rectInside(child, parent)`, `rectEquals(a, b)`, `nonOverlapX(rects)`, and `nonOverlapY(rects)`.
 - Improve messages with proof context. A failed `rectInside` should name the overflowing edge; a linear failure should name the missing non-negative fact.
 - Add module/import summaries. Same-file inlining is enough for now, but real helpers need summaries across files, and the report should say when a summary was trusted.
@@ -29,8 +28,9 @@
 - The checker only handles the small pure subset it can inline. No side effects, mutation reasoning, loops, or callbacks.
 - Top-level `given` lines are still assumptions unless a same-file caller proves them.
 - Math choice facts are local and bounded. They prove immediate `Math.min` / `Math.max` / clamp relations, not full branch correlation across arbitrary fields.
+- The array domain only tracks `.length`, literal elements, spread append length, and numeric index bounds. No `rows[].height` or mutation facts yet.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.
 - No overloads, generics, TS type narrowing, or type-system integration.
-- No array/object precondition domains yet, so no `items.length`, `rows[].height`, etc.
+- No object precondition domains yet, so no `rows[].height`.
 - Branch-local proof is limited to the current simple ternary/comparison path analysis.

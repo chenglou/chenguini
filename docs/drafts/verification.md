@@ -122,6 +122,22 @@ function cappedOverflow(width: number) {
 
 The checker proves this by splitting `Math.min`: either `capped == width`, or `capped == 320` and `width >= 320`. Keep this tiny and local. Do not turn it into a general path engine until ordinary layout code needs that.
 
+Array facts should be its own small layer:
+
+```ts
+/** @layout
+ * given items.length: int[0, 100]
+ * given index: int[0, 100]
+ * given index < items.length
+ * result.index < items.length
+ */
+function keepIndex(items: Item[], index: number) {
+  return {index}
+}
+```
+
+This layer knows `.length`, array literal length, literal indexing, and spread append length. It should not own row contiguity. The running-sum loop can use these facts later, but it should be recognized as a separate layout shape.
+
 ## Atoms
 
 Start with a small owned vocabulary:

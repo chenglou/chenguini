@@ -24,7 +24,7 @@ export type LayoutCheckReport = {
 type LayoutSpec =
   | {
       kind: 'given-range'
-      name: string
+      expression: string
       valueKind: 'int' | 'number'
       min: number
       max: number
@@ -62,7 +62,7 @@ type Program = {
   specsByFunction: Map<string, LayoutSpec[]>
 }
 
-type Value = NumberValue | ObjectValue | UnknownValue
+type Value = NumberValue | ObjectValue | ArrayValue | UnknownValue
 
 type NumberValue = {
   kind: 'number'
@@ -77,6 +77,13 @@ type NumberValue = {
 type ObjectValue = {
   kind: 'object'
   props: Map<string, Value>
+  expr: string | null
+}
+
+type ArrayValue = {
+  kind: 'array'
+  length: NumberValue
+  elements: Value[] | null
   expr: string | null
 }
 
@@ -200,11 +207,13 @@ function cleanCommentLine(line: string) {
 }
 
 function parseLayoutSpecLine(line: string): LayoutSpec {
-  const givenRange = /^given\s+([A-Za-z_$][\w$]*)\s*:\s*(int|number)\[(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\]$/.exec(line)
+  const givenRange = /^given\s+(.+)\s*:\s*(int|number)\[(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\]$/.exec(line)
   if (givenRange != null) {
+    const expression = givenRange[1]!.trim()
+    parseExpression(expression)
     return {
       kind: 'given-range',
-      name: givenRange[1]!,
+      expression,
       valueKind: givenRange[2]! as 'int' | 'number',
       min: Number(givenRange[3]!),
       max: Number(givenRange[4]!),
@@ -271,12 +280,12 @@ function verifyFunctionSpecs(
 
   for (const param of fn.parameters) {
     if (!ts.isIdentifier(param.name)) continue
-    env.set(param.name.text, unknownNumber(param.name.text))
+    env.set(param.name.text, specMentionsArrayParam(param.name.text, specs) ? unknownArray(param.name.text) : unknownNumber(param.name.text))
   }
 
   for (const spec of specs) {
     if (spec.kind !== 'given-range') continue
-    env.set(spec.name, numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.name, linearVariable(spec.name)))
+    applyGivenRangeSpec(env, spec)
   }
 
   const assumptions = collectComparisonAssumptions(file, program, functionName, env, specs)
@@ -303,7 +312,8 @@ function collectComparisonAssumptions(
   const context: EvalContext = {program, file, env, stack: [functionName], checks: [], assumptions}
   for (const spec of specs) {
     if (spec.kind === 'given-range') {
-      assumptions.push(...rangeFactsFromSpec(spec))
+      const value = evaluateSpecExpression(spec.expression, context)
+      assumptions.push(...rangeFactsFromValue(value, spec.min, spec.max))
       continue
     }
     if (spec.kind === 'given-comparison') {
@@ -312,6 +322,54 @@ function collectComparisonAssumptions(
     }
   }
   return assumptions
+}
+
+function applyGivenRangeSpec(env: Map<string, Value>, spec: Extract<LayoutSpec, {kind: 'given-range'}>) {
+  const value = numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.expression, linearVariable(spec.expression))
+  const expression = parseExpression(spec.expression)
+  if (ts.isIdentifier(expression)) {
+    env.set(expression.text, value)
+    return
+  }
+
+  const lengthRoot = arrayLengthRoot(expression)
+  if (lengthRoot == null) return
+  const target = env.get(lengthRoot)
+  env.set(lengthRoot, target?.kind === 'array' ? {...target, length: value} : unknownArray(lengthRoot, value))
+}
+
+function specMentionsArrayParam(name: string, specs: LayoutSpec[]) {
+  for (const spec of specs) {
+    if (spec.kind === 'given-range' || spec.kind === 'check-range') {
+      if (expressionMentionsArrayParam(parseExpression(spec.expression), name)) return true
+      continue
+    }
+    if (expressionMentionsArrayParam(parseExpression(spec.left), name) || expressionMentionsArrayParam(parseExpression(spec.right), name)) return true
+  }
+  return false
+}
+
+function expressionMentionsArrayParam(expression: ts.Expression, name: string): boolean {
+  const lengthRoot = arrayLengthRoot(expression)
+  if (lengthRoot === name) return true
+  if (ts.isElementAccessExpression(expression) && expressionRootName(expression.expression) === name) return true
+
+  for (const child of expression.getChildren()) {
+    if (ts.isExpression(child) && expressionMentionsArrayParam(child, name)) return true
+  }
+  return false
+}
+
+function arrayLengthRoot(expression: ts.Expression): string | null {
+  if (!ts.isPropertyAccessExpression(expression)) return null
+  if (expression.name.text !== 'length') return null
+  return expressionRootName(expression.expression)
+}
+
+function expressionRootName(expression: ts.Expression): string | null {
+  if (ts.isIdentifier(expression)) return expression.text
+  if (ts.isParenthesizedExpression(expression)) return expressionRootName(expression.expression)
+  return null
 }
 
 function verifyCheckSpec(
@@ -411,7 +469,9 @@ function evaluateExpression(expression: ts.Expression, context: EvalContext): Va
   if (ts.isConditionalExpression(expression)) return evaluateConditional(expression, context)
   if (ts.isCallExpression(expression)) return evaluateCall(expression, context)
   if (ts.isPropertyAccessExpression(expression)) return evaluatePropertyAccess(expression, context)
+  if (ts.isElementAccessExpression(expression)) return evaluateElementAccess(expression, context)
   if (ts.isObjectLiteralExpression(expression)) return evaluateObjectLiteral(expression, context)
+  if (ts.isArrayLiteralExpression(expression)) return evaluateArrayLiteral(expression, context)
   return unknown(`Unsupported expression: ${expression.getText(context.program.sourceFile)}`)
 }
 
@@ -558,11 +618,7 @@ function verifyCallGivenSpecs(
   for (const spec of specs) {
     let status: {status: LayoutCheckStatus; reason?: string} | null = null
     if (spec.kind === 'given-range') {
-      const paramIndex = parameterIndex(fn, spec.name)
-      const value =
-        paramIndex == null
-          ? unknown(`Call target ${functionName} has no parameter named ${spec.name}`)
-          : argumentValues[paramIndex] ?? unknown(`Call target ${functionName} missing argument for ${spec.name}`)
+      const value = evaluateSpecExpression(spec.expression, calleeContext)
       status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int', calleeContext.assumptions)
     }
     if (spec.kind === 'given-comparison') {
@@ -581,18 +637,13 @@ function verifyCallGivenSpecs(
   }
 }
 
-function parameterIndex(fn: ts.FunctionDeclaration, name: string): number | null {
-  for (let i = 0; i < fn.parameters.length; i++) {
-    const param = fn.parameters[i]!
-    if (ts.isIdentifier(param.name) && param.name.text === name) return i
-  }
-  return null
-}
-
 function evaluateMathCall(name: string, args: ts.NodeArray<ts.Expression>, context: EvalContext): Value {
   const values = args.map(arg => evaluateExpression(arg, context))
-  if (values.some(value => value.kind !== 'number')) return unknown(`Math.${name} expected numbers`)
-  const numbers = values as NumberValue[]
+  const numbers: NumberValue[] = []
+  for (const value of values) {
+    if (value.kind !== 'number') return unknown(`Math.${name} expected numbers`)
+    numbers.push(value)
+  }
 
   switch (name) {
     case 'floor': {
@@ -781,8 +832,27 @@ function choiceNumberPair(
 
 function evaluatePropertyAccess(expression: ts.PropertyAccessExpression, context: EvalContext): Value {
   const target = evaluateExpression(expression.expression, context)
+  if (target.kind === 'array' && expression.name.text === 'length') return target.length
   if (target.kind !== 'object') return unknown(`Property access ${expression.name.text} expected an object`)
   return target.props.get(expression.name.text) ?? unknown(`Unknown property ${expression.name.text}`)
+}
+
+function evaluateElementAccess(expression: ts.ElementAccessExpression, context: EvalContext): Value {
+  const target = evaluateExpression(expression.expression, context)
+  if (target.kind !== 'array') return unknown(`Element access expected an array`)
+  const index = evaluateExpression(expression.argumentExpression, context)
+  if (index.kind !== 'number') return unknown('Array index expected a number')
+  if (!index.isInteger) return unknown(`Array index ${formatRange(index)} was not proven integer`)
+  const lower = proveComparison(index, '>=', numberValue(0, 0, true, '0', linearConstant(0)), context.assumptions)
+  const upper = proveComparison(index, '<', target.length, context.assumptions)
+  if (lower.status !== 'pass' || upper.status !== 'pass') return unknown(`Array index ${formatRange(index)} was not proven inside length ${formatRange(target.length)}`)
+  if (target.elements == null) return unknown('Array element values are not tracked')
+  const start = Math.max(0, Math.ceil(index.min))
+  const end = Math.min(target.elements.length - 1, Math.floor(index.max))
+  if (start > end) return unknown(`Array index ${formatRange(index)} has no possible element`)
+  let value = target.elements[start]!
+  for (let i = start + 1; i <= end; i++) value = joinValues(value, target.elements[i]!)
+  return value
 }
 
 function evaluateObjectLiteral(expression: ts.ObjectLiteralExpression, context: EvalContext): Value {
@@ -799,6 +869,31 @@ function evaluateObjectLiteral(expression: ts.ObjectLiteralExpression, context: 
     return unknown(`Unsupported object literal property: ${property.getText(context.program.sourceFile)}`)
   }
   return {kind: 'object', props, expr: null}
+}
+
+function evaluateArrayLiteral(expression: ts.ArrayLiteralExpression, context: EvalContext): Value {
+  let length = numberValue(0, 0, true, '0', linearConstant(0))
+  let elements: Value[] | null = []
+
+  for (const element of expression.elements) {
+    if (ts.isSpreadElement(element)) {
+      const spreadValue = evaluateExpression(element.expression, context)
+      if (spreadValue.kind !== 'array') return unknown('Array spread expected an array')
+      const nextLength = evaluateNumberBinary(ts.SyntaxKind.PlusToken, length, spreadValue.length)
+      if (nextLength.kind !== 'number') return nextLength
+      length = nextLength
+      elements = elements == null || spreadValue.elements == null ? null : [...elements, ...spreadValue.elements]
+      continue
+    }
+
+    const value = evaluateExpression(element, context)
+    const nextLength = evaluateNumberBinary(ts.SyntaxKind.PlusToken, length, numberValue(1, 1, true, '1', linearConstant(1)))
+    if (nextLength.kind !== 'number') return nextLength
+    length = nextLength
+    if (elements != null) elements.push(value)
+  }
+
+  return {kind: 'array', length, elements, expr: null}
 }
 
 type Truth = 'true' | 'false' | 'maybe'
@@ -930,10 +1025,10 @@ function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'given-comparis
   return comparisonConstraint(left, spec.op, right)
 }
 
-function rangeFactsFromSpec(spec: Extract<LayoutSpec, {kind: 'given-range'}>): LinearConstraint[] {
-  const value = linearVariable(spec.name)
-  const minDiff = linearSubtract(value, linearConstant(spec.min))
-  const maxDiff = linearSubtract(linearConstant(spec.max), value)
+function rangeFactsFromValue(value: Value, min: number, max: number): LinearConstraint[] {
+  if (value.kind !== 'number') return []
+  const minDiff = linearSubtract(value.linear, linearConstant(min))
+  const maxDiff = linearSubtract(linearConstant(max), value.linear)
   const facts: LinearConstraint[] = []
   if (minDiff != null) facts.push({diff: minDiff, op: '>='})
   if (maxDiff != null) facts.push({diff: maxDiff, op: '>='})
@@ -1014,8 +1109,9 @@ function nonNegativeFacts(assumption: LinearConstraint): Array<{diff: LinearExpr
   }
 }
 
-function nonNumberReason(value: ObjectValue | UnknownValue) {
-  return value.kind === 'unknown' ? value.reason : 'Expected a number, got an object'
+function nonNumberReason(value: ObjectValue | ArrayValue | UnknownValue) {
+  if (value.kind === 'unknown') return value.reason
+  return value.kind === 'array' ? 'Expected a number, got an array' : 'Expected a number, got an object'
 }
 
 function numberValue(min: number, max: number, isInteger: boolean, expr: string | null, linear: LinearExpr | null = null, cases: NumberCase[] | null = null): NumberValue {
@@ -1035,6 +1131,15 @@ function unknownNumber(name: string): NumberValue {
     expr: name,
     linear: linearVariable(name),
     cases: null,
+  }
+}
+
+function unknownArray(name: string, length: NumberValue = unknownNumber(`${name}.length`)): ArrayValue {
+  return {
+    kind: 'array',
+    length,
+    elements: null,
+    expr: name,
   }
 }
 
@@ -1229,6 +1334,18 @@ function joinValues(left: Value, right: Value): Value {
       props.set(key, leftProp == null || rightProp == null ? unknown(`Property ${key} only exists on one branch`) : joinValues(leftProp, rightProp))
     }
     return {kind: 'object', props, expr: left.expr != null && left.expr === right.expr ? left.expr : null}
+  }
+  if (left.kind === 'array' && right.kind === 'array') {
+    const length = joinValues(left.length, right.length)
+    if (length.kind !== 'number') return unknown('Array branches had incompatible lengths')
+    return {
+      kind: 'array',
+      length,
+      elements: left.elements != null && right.elements != null && left.elements.length === right.elements.length
+        ? left.elements.map((leftElement, index) => joinValues(leftElement, right.elements![index]!))
+        : null,
+      expr: left.expr != null && left.expr === right.expr ? left.expr : null,
+    }
   }
   return unknown('Branches returned incompatible value shapes')
 }

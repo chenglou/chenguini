@@ -2,12 +2,10 @@
 //
 // Queued patterns:
 // - running `y` loops
-// - append-only arrays
 // - `sameLength`
 // - `contiguousY`
 // - `monotone`
 // - `lastBottom`
-// - half-open hit rects
 // - `rectInside`
 // - `rectEquals`
 // - `nonOverlapX` / `nonOverlapY`
@@ -156,6 +154,67 @@ function clampLayoutValue(value: number, min: number, max: number) {
  */
 export function userlandClamp(value: number) {
   return clampLayoutValue(value, 0, 320)
+}
+
+/** @layout
+ * given items.length: int[0, 100]
+ * result: int[0, 100]
+ */
+export function arrayLengthRange(items: number[]) {
+  return items.length
+}
+
+/** @layout
+ * result: int[3, 3]
+ */
+export function arrayLiteralLength() {
+  const values = [10, 20, 30]
+  return values.length
+}
+
+/** @layout
+ * given index: int[0, 2]
+ * result: int[10, 30]
+ */
+export function arrayLiteralIndex(index: number) {
+  return [10, 20, 30][index]
+}
+
+/** @layout
+ * given items.length: int[0, 100]
+ * given index: int[0, 100]
+ * given index < items.length
+ * result.index >= 0
+ * result.index < items.length
+ * result.length == items.length
+ */
+export function halfOpenArrayIndex(items: number[], index: number) {
+  return {index, length: items.length}
+}
+
+/** @layout
+ * given items.length: int[0, 20]
+ * result.length: int[1, 21]
+ * result.length == items.length + 1
+ */
+export function spreadAppendLength(items: number[], value: number) {
+  return [...items, value]
+}
+
+/** @layout
+ * given items.length: int[0, 10]
+ * result: int[0, 10]
+ */
+function shortArrayLength(items: number[]) {
+  return items.length
+}
+
+/** @layout
+ * given items.length: int[0, 10]
+ * result: int[0, 10]
+ */
+export function arrayLengthGivenThroughHelper(items: number[]) {
+  return shortArrayLength(items)
 }
 
 /** @layout
