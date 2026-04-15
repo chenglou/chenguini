@@ -1,17 +1,17 @@
 // Intentionally bad checker patterns. `bun run verify:layout` compares their
-// normalized diagnostics against negative-patterns.expected.txt.
+// stable messages against negative-patterns.expected.txt.
 
 /** @layout
- * requires value: int[0, 10]
- * ensures result: int[0, 4]
+ * given value: int[0, 10]
+ * result: int[0, 4]
  */
 export function negativeOutputRange(value: number) {
   return value + 5
 }
 
 /** @layout
- * requires value: number[0, 5]
- * ensures result.high < result.low
+ * given value: number[0, 5]
+ * result.high < result.low
  */
 export function negativeComparison(value: number) {
   const low = value
@@ -20,46 +20,46 @@ export function negativeComparison(value: number) {
 }
 
 /** @layout
- * requires value: number[0, 10]
- * ensures result: number[0, 10]
+ * given value: number[0, 10]
+ * result: number[0, 10]
  */
 function negativeNeedsSmallValue(value: number) {
   return value
 }
 
 /** @layout
- * requires value: number[0, 20]
- * ensures result: number[0, 20]
+ * given value: number[0, 20]
+ * result: number[0, 20]
  */
-export function negativeCallRequires(value: number) {
+export function negativeCallGiven(value: number) {
   return negativeNeedsSmallValue(value)
 }
 
 /** @layout
- * requires containee: number[0, 1000]
- * requires container: number[0, 1000]
- * requires container >= containee
- * ensures result >= 0
+ * given containee: number[0, 1000]
+ * given container: number[0, 1000]
+ * given container >= containee
+ * result >= 0
  */
 function negativeNeedsContainerFit(containee: number, container: number) {
   return (container - containee) / 2
 }
 
 /** @layout
- * requires containee: number[100, 200]
- * requires container: number[0, 50]
- * ensures result: number[-100, 0]
+ * given containee: number[100, 200]
+ * given container: number[0, 50]
+ * result: number[-100, 0]
  */
-export function negativeRelationalCallRequires(containee: number, container: number) {
+export function negativeRelationalCallGiven(containee: number, container: number) {
   return negativeNeedsContainerFit(containee, container)
 }
 
 /** @layout
- * requires containee: number[0, 1000]
- * requires padding: number[-100, 100]
- * requires container: number[0, 1200]
- * requires container >= containee + padding
- * ensures result.offset >= 0
+ * given containee: number[0, 1000]
+ * given padding: number[-100, 100]
+ * given container: number[0, 1200]
+ * given container >= containee + padding
+ * result.offset >= 0
  */
 export function negativeLinearReductionNeedsNonNegativePadding(containee: number, padding: number, container: number) {
   return {offset: (container - containee) / 2, padding}

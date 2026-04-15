@@ -13,23 +13,23 @@
 // - `rectEquals`
 // - `nonOverlapX` / `nonOverlapY`
 // - `life-calendar` numeric sizing: `**`, `Math.sqrt`, `Math.ceil`, positive-domain facts, integer facts after `ceil`
-// - track/vector reasoning: tables, grids, flex-like negotiation, spanning constraints
+// - column/row width reasoning: tables, grids, flex-like negotiation, cells that cover multiple columns
 // - Pretext text facts: line width fits, fragments are ordered, fragments cover ranges, selection rects reuse paint fragments
 // - scroll-anchor stability as a userland geometry relation
 
 const patternGap = 4
 
 /** @layout
- * requires width: int[320, 1600]
- * ensures result: int[320, 1600]
+ * given width: int[320, 1600]
+ * result: int[320, 1600]
  */
 export function constantBoundedInput(width: number) {
   return width
 }
 
 /** @layout
- * requires value: int[0, 10]
- * ensures result: int[5, 15]
+ * given value: int[0, 10]
+ * result: int[5, 15]
  */
 export function outputRangeFact(value: number) {
   const shifted = value + 5
@@ -37,9 +37,9 @@ export function outputRangeFact(value: number) {
 }
 
 /** @layout
- * requires value: number[0, 5]
- * ensures result.high > result.low
- * ensures result.low < result.high
+ * given value: number[0, 5]
+ * result.high > result.low
+ * result.low < result.high
  */
 export function scalarComparisons(value: number) {
   const low = value
@@ -48,9 +48,9 @@ export function scalarComparisons(value: number) {
 }
 
 /** @layout
- * requires value: int[0, 5]
- * ensures result.square: int[0, 25]
- * ensures result.half: number[0, 2.5]
+ * given value: int[0, 5]
+ * result.square: int[0, 25]
+ * result.half: number[0, 2.5]
  */
 export function straightLineArithmetic(value: number) {
   const square = value ** 2
@@ -59,8 +59,8 @@ export function straightLineArithmetic(value: number) {
 }
 
 /** @layout
- * requires value: number[10, 20]
- * ensures result.width: number[14, 24]
+ * given value: number[10, 20]
+ * result.width: number[14, 24]
  */
 export function objectReturnPropertyAccess(value: number) {
   const width = value + patternGap
@@ -73,28 +73,28 @@ function addPatternGap(value: number) {
 }
 
 /** @layout
- * requires value: number[0, 10]
- * ensures result: number[4, 14]
+ * given value: number[0, 10]
+ * result: number[4, 14]
  */
 export function sameFilePureHelperCall(value: number) {
   return addPatternGap(value)
 }
 
 /** @layout
- * requires value: int[0, 10]
- * ensures result: int[3, 7]
+ * given value: int[0, 10]
+ * result: int[3, 7]
  */
 export function ternaryBranchJoin(value: number) {
   return value > 5 ? 7 : 3
 }
 
 /** @layout
- * requires value: number[2, 8]
- * ensures result.floorValue: int[1, 4]
- * ensures result.ceilValue: int[1, 4]
- * ensures result.sqrtValue: number[1, 3]
- * ensures result.minValue <= 4
- * ensures result.maxValue >= 4
+ * given value: number[2, 8]
+ * result.floorValue: int[1, 4]
+ * result.ceilValue: int[1, 4]
+ * result.sqrtValue: number[1, 3]
+ * result.minValue <= 4
+ * result.maxValue >= 4
  */
 export function mathSubset(value: number) {
   const half = value / 2
@@ -108,65 +108,65 @@ export function mathSubset(value: number) {
 }
 
 /** @layout
- * requires containee: number[0, 10000]
- * requires container: number[0, 10000]
- * ensures result == (container - containee) / 2
+ * given containee: number[0, 10000]
+ * given container: number[0, 10000]
+ * result == (container - containee) / 2
  */
 export function exactExpressionIdentity(containee: number, container: number) {
   return (container - containee) / 2
 }
 
 /** @layout
- * requires containee: number[0, 1000]
- * requires container: number[0, 1000]
- * requires container >= containee
- * ensures result >= 0
+ * given containee: number[0, 1000]
+ * given container: number[0, 1000]
+ * given container >= containee
+ * result >= 0
  */
 export function centeredOffset(containee: number, container: number) {
   return (container - containee) / 2
 }
 
 /** @layout
- * requires containee: number[0, 1000]
- * requires container: number[0, 1000]
- * requires container >= containee
- * ensures result >= 0
+ * given containee: number[0, 1000]
+ * given container: number[0, 1000]
+ * given container >= containee
+ * result >= 0
  */
 export function centeredOffsetThroughHelper(containee: number, container: number) {
   return centeredOffset(containee, container)
 }
 
 /** @layout
- * requires containee: number[0, 1000]
- * requires padding: number[0, 100]
- * requires container: number[0, 1200]
- * requires container >= containee + padding
- * ensures result.offset >= 0
+ * given containee: number[0, 1000]
+ * given padding: number[0, 100]
+ * given container: number[0, 1200]
+ * given container >= containee + padding
+ * result.offset >= 0
  */
 export function centeredOffsetWithPaddingSlack(containee: number, padding: number, container: number) {
   return {offset: (container - containee) / 2, padding}
 }
 
 /** @layout
- * requires value: number[4, 14]
- * ensures result: number[5, 15]
+ * given value: number[4, 14]
+ * result: number[5, 15]
  */
-function trackedInnerRequires(value: number) {
+function trackedInnerGiven(value: number) {
   return value + 1
 }
 
 /** @layout
- * requires value: number[0, 10]
- * ensures result: number[5, 15]
+ * given value: number[0, 10]
+ * result: number[5, 15]
  */
-function trackedMiddleRequires(value: number) {
-  return trackedInnerRequires(value + patternGap)
+function trackedMiddleGiven(value: number) {
+  return trackedInnerGiven(value + patternGap)
 }
 
 /** @layout
- * requires value: number[0, 10]
- * ensures result: number[5, 15]
+ * given value: number[0, 10]
+ * result: number[5, 15]
  */
-export function transitiveRequiresTracking(value: number) {
-  return trackedMiddleRequires(value)
+export function transitiveGivenTracking(value: number) {
+  return trackedMiddleGiven(value)
 }

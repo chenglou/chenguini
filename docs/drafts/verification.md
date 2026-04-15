@@ -14,9 +14,9 @@ If a fact is not proven statically, it is not a verifier guarantee.
 
 ```ts
 /** @layout
- * requires width: int[320, 1600]
- * ensures result.cols: int[1, 7]
- * ensures result.boxMaxSizeX >= 0
+ * given width: int[320, 1600]
+ * result.cols: int[1, 7]
+ * result.boxMaxSizeX >= 0
  */
 function colsBoxMaxSizeXF(width: number) {
   const boxMinSizeX = 220
@@ -24,6 +24,8 @@ function colsBoxMaxSizeXF(width: number) {
   return {cols, boxMaxSizeX: (width - gap - cols * gap) / cols}
 }
 ```
+
+`given` lines are input facts. Bare lines are facts the checker has to prove.
 
 This is not prose. The parser should reject "does the right thing". The authoring surface can later be prose-assisted, but the committed truth is a small structured language.
 
@@ -34,7 +36,7 @@ Good proof mechanisms:
 - symbolic facts over the lowered source
 - range facts over declared numeric domains
 - structural facts over recognized layout loops, say stacked rows or local width vectors
-- finite discrete domains only when the domain is explicitly finite and the checker proves the obligation as such
+- finite discrete domains only when the domain is explicitly finite and the checker proves the check as such
 
 Not static guarantees:
 
@@ -80,10 +82,10 @@ Good spec:
 
 ```ts
 /** @layout
- * requires items[].height >= 0
- * requires gap >= 0
- * ensures sameLength(result, items)
- * ensures contiguousY(result, gap)
+ * given items[].height >= 0
+ * given gap >= 0
+ * sameLength(result, items)
+ * contiguousY(result, gap)
  */
 ```
 
@@ -93,10 +95,10 @@ Relational preconditions should read like the layout fact they mean:
 
 ```ts
 /** @layout
- * requires containee: number[0, 1000]
- * requires container: number[0, 1000]
- * requires container >= containee
- * ensures result >= 0
+ * given containee: number[0, 1000]
+ * given container: number[0, 1000]
+ * given container >= containee
+ * result >= 0
  */
 function centeredOffset(containee: number, container: number) {
   return (container - containee) / 2
@@ -117,7 +119,7 @@ Start with a small owned vocabulary:
 - `sameLength(a, b)`
 - `lastBottom(rows)`
 - `coversOffsets(fragments, textRange)`
-- `trackVectorSatisfiesBounds(widths, cells)`
+- `columnWidthsFitCells(widths, cells)`
 
 Agents may compose atoms into local named facts. If a composition repeats, promote it into a shared atom after reading it.
 
@@ -152,19 +154,19 @@ No sampled sweep is a verifier law.
 
 A report should say:
 
-- which file and function the obligation came from
+- which file and function the check came from
 - the exact annotation text
 - `pass`, `fail`, or `unknown`
 - the reason for `fail` or `unknown`
 
 Keep drafted facts and exploratory checks out of the committed verifier report.
 
-## Contract Tests
+## Checker Tests
 
 Keep verifier tests split:
 
 - `patterns.ts` is good code that must prove.
 - `negative-patterns.ts` is bad code that must not prove.
-- Track normalized diagnostics, not the whole JSON report.
+- Track stable expected messages, not the whole JSON report.
 
-Good negative tests are tiny and archetypal. E.g. a helper accepts `value: number[0, 20]` and calls another helper that requires `value: number[0, 10]`; the expected output should name that failed call requirement.
+Good negative tests are tiny and archetypal. E.g. a helper accepts `value: number[0, 20]` and calls another helper with `given value: number[0, 10]`; the expected output should name the failed `given` line.

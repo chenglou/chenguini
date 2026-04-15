@@ -1,4 +1,4 @@
-import {type LayoutCheckObligation, verifyLayoutFiles} from './check.ts'
+import {type LayoutCheck, verifyLayoutFiles} from './check.ts'
 
 const positiveFiles = ['layout-verifier/patterns.ts']
 const negativeFiles = ['layout-verifier/negative-patterns.ts']
@@ -13,24 +13,24 @@ if (positiveReport.phase !== 'ready') {
 }
 
 const negativeReport = await verifyLayoutFiles(negativeFiles)
-const actualNegative = normalizeNegative(negativeReport.obligations)
+const actualNegative = normalizeNegative(negativeReport.checks)
 const expectedNegative = normalizeText(await Bun.file(negativeExpectedPath).text())
 
 if (actualNegative !== expectedNegative) {
-  console.error('negative diagnostics drifted')
+  console.error('expected negative messages changed')
   console.error('\nExpected:\n' + expectedNegative)
   console.error('Actual:\n' + actualNegative)
   process.exitCode = 1
 } else {
-  console.log(`negative: ${negativeReport.obligations.filter(obligation => obligation.status !== 'pass').length} expected diagnostics`)
+  console.log(`negative: ${negativeReport.checks.filter(check => check.status !== 'pass').length} expected messages`)
 }
 
-function normalizeNegative(obligations: LayoutCheckObligation[]) {
-  const lines = obligations
-    .filter(obligation => obligation.status !== 'pass')
-    .map(obligation => {
-      const head = `${obligation.status.toUpperCase()} ${obligation.file}:${obligation.functionName}: ${obligation.text}`
-      return obligation.reason == null ? head : `${head}\n  ${obligation.reason}`
+function normalizeNegative(checks: LayoutCheck[]) {
+  const lines = checks
+    .filter(check => check.status !== 'pass')
+    .map(check => {
+      const head = `${check.status.toUpperCase()} ${check.file}:${check.functionName}: ${check.text}`
+      return check.reason == null ? head : `${head}\n  ${check.reason}`
     })
   return normalizeText(lines.join('\n'))
 }

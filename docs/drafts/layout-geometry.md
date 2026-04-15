@@ -20,8 +20,8 @@ Then state the intended geometry:
 
 ```ts
 /** @layout
- * requires rows[].height >= 0
- * ensures contiguousY(result.boxes, gap)
+ * given rows[].height >= 0
+ * contiguousY(result.boxes, gap)
  */
 ```
 
@@ -80,8 +80,8 @@ Good summary:
 
 ```ts
 /** @layout
- * ensures result.visibleHeight == result.lines.length * lineHeight
- * ensures result.width <= offeredWidth
+ * result.visibleHeight == result.lines.length * lineHeight
+ * result.width <= offeredWidth
  */
 function measureTextBlock(...) { ... }
 ```
@@ -90,7 +90,7 @@ Bad summary:
 
 - a second approximate text measurement in the outer layout
 - a sampled page case that happens to match one string
-- a contract file that silently stands in for source without appearing in the report
+- a summary file that silently stands in for source without appearing in the report
 
 ## Negotiated Vectors
 
@@ -106,7 +106,7 @@ return {widths, totalWidth}
 
 Good facts:
 
-- `trackVectorSatisfiesBounds(widths, cells)`
+- `columnWidthsFitCells(widths, cells)`
 - `totalWidth == sum(widths) + gap * max(0, widths.length - 1)`
 
 Bad:

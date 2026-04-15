@@ -2,7 +2,7 @@ import * as ts from 'typescript'
 
 export type LayoutCheckStatus = 'pass' | 'fail' | 'unknown'
 
-export type LayoutCheckObligation = {
+export type LayoutCheck = {
   file: string
   functionName: string
   text: string
@@ -13,7 +13,7 @@ export type LayoutCheckObligation = {
 export type LayoutCheckReport = {
   phase: 'ready' | 'error'
   files: string[]
-  obligations: LayoutCheckObligation[]
+  checks: LayoutCheck[]
   summary: {
     pass: number
     fail: number
@@ -23,7 +23,7 @@ export type LayoutCheckReport = {
 
 type LayoutSpec =
   | {
-      kind: 'requires-range'
+      kind: 'given-range'
       name: string
       valueKind: 'int' | 'number'
       min: number
@@ -31,14 +31,14 @@ type LayoutSpec =
       text: string
     }
   | {
-      kind: 'requires-comparison'
+      kind: 'given-comparison'
       left: string
       op: ComparisonOperator
       right: string
       text: string
     }
   | {
-      kind: 'ensures-range'
+      kind: 'check-range'
       expression: string
       valueKind: 'int' | 'number'
       min: number
@@ -46,7 +46,7 @@ type LayoutSpec =
       text: string
     }
   | {
-      kind: 'ensures-comparison'
+      kind: 'check-comparison'
       left: string
       op: ComparisonOperator
       right: string
@@ -89,7 +89,7 @@ type EvalContext = {
   file: string
   env: Map<string, Value>
   stack: string[]
-  obligations: LayoutCheckObligation[]
+  checks: LayoutCheck[]
   assumptions: LinearConstraint[]
 }
 
@@ -108,39 +108,39 @@ type LinearConstraint = {
 }
 
 export async function verifyLayoutFiles(paths: string[]): Promise<LayoutCheckReport> {
-  const obligations: LayoutCheckObligation[] = []
+  const checks: LayoutCheck[] = []
   for (const path of paths) {
     const sourceText = await Bun.file(path).text()
-    obligations.push(...verifyLayoutSource(path, sourceText))
+    checks.push(...verifyLayoutSource(path, sourceText))
   }
 
   const summary = {
-    pass: obligations.filter(obligation => obligation.status === 'pass').length,
-    fail: obligations.filter(obligation => obligation.status === 'fail').length,
-    unknown: obligations.filter(obligation => obligation.status === 'unknown').length,
+    pass: checks.filter(check => check.status === 'pass').length,
+    fail: checks.filter(check => check.status === 'fail').length,
+    unknown: checks.filter(check => check.status === 'unknown').length,
   }
   return {
     phase: summary.fail === 0 && summary.unknown === 0 ? 'ready' : 'error',
     files: paths,
-    obligations,
+    checks,
     summary,
   }
 }
 
-export function verifyLayoutSource(file: string, sourceText: string): LayoutCheckObligation[] {
+export function verifyLayoutSource(file: string, sourceText: string): LayoutCheck[] {
   const sourceFile = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const program = buildProgram(sourceFile, sourceText)
-  const obligations: LayoutCheckObligation[] = []
+  const checks: LayoutCheck[] = []
 
   for (const statement of sourceFile.statements) {
     if (!ts.isFunctionDeclaration(statement)) continue
     if (statement.name == null) continue
     const specs = program.specsByFunction.get(statement.name.text) ?? []
     if (specs.length === 0) continue
-    obligations.push(...verifyFunctionSpecs(file, program, statement, specs))
+    checks.push(...verifyFunctionSpecs(file, program, statement, specs))
   }
 
-  return obligations
+  return checks
 }
 
 function buildProgram(sourceFile: ts.SourceFile, sourceText: string): Program {
@@ -193,48 +193,58 @@ function cleanCommentLine(line: string) {
 }
 
 function parseLayoutSpecLine(line: string): LayoutSpec {
-  const requiresRange = /^requires\s+([A-Za-z_$][\w$]*)\s*:\s*(int|number)\[(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\]$/.exec(line)
-  if (requiresRange != null) {
+  const givenRange = /^given\s+([A-Za-z_$][\w$]*)\s*:\s*(int|number)\[(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\]$/.exec(line)
+  if (givenRange != null) {
     return {
-      kind: 'requires-range',
-      name: requiresRange[1]!,
-      valueKind: requiresRange[2]! as 'int' | 'number',
-      min: Number(requiresRange[3]!),
-      max: Number(requiresRange[4]!),
+      kind: 'given-range',
+      name: givenRange[1]!,
+      valueKind: givenRange[2]! as 'int' | 'number',
+      min: Number(givenRange[3]!),
+      max: Number(givenRange[4]!),
       text: line,
     }
   }
 
-  const requiresComparison = /^requires\s+(.+?)\s*(==|>=|<=|>|<)\s*(.+)$/.exec(line)
-  if (requiresComparison != null) {
+  const givenComparison = /^given\s+(.+?)\s*(==|>=|<=|>|<)\s*(.+)$/.exec(line)
+  if (givenComparison != null) {
+    const left = givenComparison[1]!.trim()
+    const right = givenComparison[3]!.trim()
+    parseExpression(left)
+    parseExpression(right)
     return {
-      kind: 'requires-comparison',
-      left: requiresComparison[1]!.trim(),
-      op: requiresComparison[2]! as ComparisonOperator,
-      right: requiresComparison[3]!.trim(),
+      kind: 'given-comparison',
+      left,
+      op: givenComparison[2]! as ComparisonOperator,
+      right,
       text: line,
     }
   }
 
-  const ensuresRange = /^ensures\s+(.+)\s*:\s*(int|number)\[(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\]$/.exec(line)
-  if (ensuresRange != null) {
+  const checkRange = /^(.+)\s*:\s*(int|number)\[(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\]$/.exec(line)
+  if (checkRange != null) {
+    const expression = checkRange[1]!.trim()
+    parseExpression(expression)
     return {
-      kind: 'ensures-range',
-      expression: ensuresRange[1]!.trim(),
-      valueKind: ensuresRange[2]! as 'int' | 'number',
-      min: Number(ensuresRange[3]!),
-      max: Number(ensuresRange[4]!),
+      kind: 'check-range',
+      expression,
+      valueKind: checkRange[2]! as 'int' | 'number',
+      min: Number(checkRange[3]!),
+      max: Number(checkRange[4]!),
       text: line,
     }
   }
 
-  const comparison = /^ensures\s+(.+?)\s*(==|>=|<=|>|<)\s*(.+)$/.exec(line)
-  if (comparison != null) {
+  const checkComparison = /^(.+?)\s*(==|>=|<=|>|<)\s*(.+)$/.exec(line)
+  if (checkComparison != null) {
+    const left = checkComparison[1]!.trim()
+    const right = checkComparison[3]!.trim()
+    parseExpression(left)
+    parseExpression(right)
     return {
-      kind: 'ensures-comparison',
-      left: comparison[1]!.trim(),
-      op: comparison[2]! as ComparisonOperator,
-      right: comparison[3]!.trim(),
+      kind: 'check-comparison',
+      left,
+      op: checkComparison[2]! as ComparisonOperator,
+      right,
       text: line,
     }
   }
@@ -247,7 +257,7 @@ function verifyFunctionSpecs(
   program: Program,
   fn: ts.FunctionDeclaration,
   specs: LayoutSpec[],
-): LayoutCheckObligation[] {
+): LayoutCheck[] {
   const functionName = fn.name?.text ?? '<anonymous>'
   const env = new Map<string, Value>()
   for (const [name, value] of program.globals) env.set(name, value)
@@ -258,21 +268,21 @@ function verifyFunctionSpecs(
   }
 
   for (const spec of specs) {
-    if (spec.kind !== 'requires-range') continue
+    if (spec.kind !== 'given-range') continue
     env.set(spec.name, numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.name, linearVariable(spec.name)))
   }
 
   const assumptions = collectComparisonAssumptions(file, program, functionName, env, specs)
-  const context: EvalContext = {program, file, env, stack: [functionName], obligations: [], assumptions}
+  const context: EvalContext = {program, file, env, stack: [functionName], checks: [], assumptions}
   const result = evaluateFunctionBody(fn, context)
-  const obligations: LayoutCheckObligation[] = [...context.obligations]
+  const checks: LayoutCheck[] = [...context.checks]
 
   for (const spec of specs) {
-    if (spec.kind === 'requires-range' || spec.kind === 'requires-comparison') continue
-    obligations.push(verifyEnsuresSpec(file, program, functionName, env, result, spec, obligations, assumptions))
+    if (spec.kind === 'given-range' || spec.kind === 'given-comparison') continue
+    checks.push(verifyCheckSpec(file, program, functionName, env, result, spec, checks, assumptions))
   }
 
-  return obligations
+  return checks
 }
 
 function collectComparisonAssumptions(
@@ -283,13 +293,13 @@ function collectComparisonAssumptions(
   specs: LayoutSpec[],
 ): LinearConstraint[] {
   const assumptions: LinearConstraint[] = []
-  const context: EvalContext = {program, file, env, stack: [functionName], obligations: [], assumptions}
+  const context: EvalContext = {program, file, env, stack: [functionName], checks: [], assumptions}
   for (const spec of specs) {
-    if (spec.kind === 'requires-range') {
+    if (spec.kind === 'given-range') {
       assumptions.push(...rangeFactsFromSpec(spec))
       continue
     }
-    if (spec.kind === 'requires-comparison') {
+    if (spec.kind === 'given-comparison') {
       const fact = comparisonFactFromSpec(spec, context)
       if (fact != null) assumptions.push(fact)
     }
@@ -297,21 +307,21 @@ function collectComparisonAssumptions(
   return assumptions
 }
 
-function verifyEnsuresSpec(
+function verifyCheckSpec(
   file: string,
   program: Program,
   functionName: string,
   baseEnv: Map<string, Value>,
   result: Value,
-  spec: Extract<LayoutSpec, {kind: 'ensures-range'} | {kind: 'ensures-comparison'}>,
-  obligations: LayoutCheckObligation[],
+  spec: Extract<LayoutSpec, {kind: 'check-range'} | {kind: 'check-comparison'}>,
+  checks: LayoutCheck[],
   assumptions: LinearConstraint[],
-): LayoutCheckObligation {
+): LayoutCheck {
   const env = new Map(baseEnv)
   env.set('result', result)
-  const context: EvalContext = {program, file, env, stack: [functionName], obligations, assumptions}
+  const context: EvalContext = {program, file, env, stack: [functionName], checks, assumptions}
 
-  if (spec.kind === 'ensures-range') {
+  if (spec.kind === 'check-range') {
     const value = evaluateSpecExpression(spec.expression, context)
     const status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int')
     return {
@@ -342,6 +352,8 @@ function evaluateSpecExpression(text: string, context: EvalContext): Value {
 
 function parseExpression(text: string): ts.Expression {
   const sourceFile = ts.createSourceFile('layout-spec-expression.ts', `const value = ${text}`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const parseDiagnostics = (sourceFile as ts.SourceFile & {parseDiagnostics: readonly ts.Diagnostic[]}).parseDiagnostics
+  if (parseDiagnostics.length > 0 || sourceFile.statements.length !== 1) throw new Error(`Could not parse @layout expression: ${text}`)
   const statement = sourceFile.statements[0]
   if (statement == null || !ts.isVariableStatement(statement)) throw new Error(`Could not parse @layout expression: ${text}`)
   const declaration = statement.declarationList.declarations[0]
@@ -464,7 +476,7 @@ function evaluateCall(expression: ts.CallExpression, context: EvalContext): Valu
   if (context.stack.length >= maxInlineDepth) return unknown(`Inline depth exceeded at ${functionName}`)
   if (fn.parameters.length !== expression.arguments.length) return unknown(`Call arity mismatch for ${functionName}`)
   const argumentValues = expression.arguments.map(argument => evaluateExpression(argument, context))
-  verifyCallRequires(functionName, fn, expression, argumentValues, context)
+  verifyCallGivenSpecs(functionName, fn, expression, argumentValues, context)
 
   const env = new Map<string, Value>()
   for (const [name, value] of context.program.globals) env.set(name, value)
@@ -479,12 +491,12 @@ function evaluateCall(expression: ts.CallExpression, context: EvalContext): Valu
     file: context.file,
     env,
     stack: [...context.stack, functionName],
-    obligations: context.obligations,
+    checks: context.checks,
     assumptions: context.assumptions,
   })
 }
 
-function verifyCallRequires(
+function verifyCallGivenSpecs(
   functionName: string,
   fn: ts.FunctionDeclaration,
   expression: ts.CallExpression,
@@ -504,7 +516,7 @@ function verifyCallRequires(
 
   for (const spec of specs) {
     let status: {status: LayoutCheckStatus; reason?: string} | null = null
-    if (spec.kind === 'requires-range') {
+    if (spec.kind === 'given-range') {
       const paramIndex = parameterIndex(fn, spec.name)
       const value =
         paramIndex == null
@@ -512,13 +524,13 @@ function verifyCallRequires(
           : argumentValues[paramIndex] ?? unknown(`Call target ${functionName} missing argument for ${spec.name}`)
       status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int')
     }
-    if (spec.kind === 'requires-comparison') {
+    if (spec.kind === 'given-comparison') {
       const left = evaluateSpecExpression(spec.left, calleeContext)
       const right = evaluateSpecExpression(spec.right, calleeContext)
       status = proveComparison(left, spec.op, right, calleeContext.assumptions)
     }
     if (status == null) continue
-    context.obligations.push({
+    context.checks.push({
       file: context.file,
       functionName: context.stack.join(' > '),
       text: `call ${callText}: ${spec.text}`,
@@ -685,7 +697,7 @@ function proveComparison(left: Value, op: ComparisonOperator, right: Value, assu
   return {status: 'unknown', reason: `${formatRange(left)} ${op} ${formatRange(right)} was not proven`}
 }
 
-function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'requires-comparison'}>, context: EvalContext): LinearConstraint | null {
+function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'given-comparison'}>, context: EvalContext): LinearConstraint | null {
   const left = evaluateSpecExpression(spec.left, context)
   const right = evaluateSpecExpression(spec.right, context)
   if (left.kind !== 'number' || right.kind !== 'number') return null
@@ -693,7 +705,7 @@ function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'requires-compa
   return diff == null ? null : {diff, op: spec.op}
 }
 
-function rangeFactsFromSpec(spec: Extract<LayoutSpec, {kind: 'requires-range'}>): LinearConstraint[] {
+function rangeFactsFromSpec(spec: Extract<LayoutSpec, {kind: 'given-range'}>): LinearConstraint[] {
   const value = linearVariable(spec.name)
   const minDiff = linearSubtract(value, linearConstant(spec.min))
   const maxDiff = linearSubtract(linearConstant(spec.max), value)
