@@ -107,6 +107,21 @@ function centeredOffset(containee: number, container: number) {
 
 The checker can do small linear reduction. E.g. `container >= containee + padding` plus `padding: number[0, 100]` is enough to prove `container >= containee`. This is still just static arithmetic over the lowered source, not a general logic engine.
 
+Math choice helpers should keep the branch fact just long enough:
+
+```ts
+/** @layout
+ * given width: number[0, 1000]
+ * result.overflow >= 0
+ */
+function cappedOverflow(width: number) {
+  const capped = Math.min(width, 320)
+  return {overflow: width - capped}
+}
+```
+
+The checker proves this by splitting `Math.min`: either `capped == width`, or `capped == 320` and `width >= 320`. Keep this tiny and local. Do not turn it into a general path engine until ordinary layout code needs that.
+
 ## Atoms
 
 Start with a small owned vocabulary:

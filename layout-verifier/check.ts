@@ -71,6 +71,7 @@ type NumberValue = {
   isInteger: boolean
   expr: string | null
   linear: LinearExpr | null
+  cases: NumberCase[] | null
 }
 
 type ObjectValue = {
@@ -94,6 +95,7 @@ type EvalContext = {
 }
 
 const maxInlineDepth = 12
+const maxNumberCases = 8
 const maxLinearReductionDepth = 4
 const linearEpsilon = 1e-9
 
@@ -105,6 +107,11 @@ type LinearExpr = {
 type LinearConstraint = {
   diff: LinearExpr
   op: ComparisonOperator
+}
+
+type NumberCase = {
+  value: NumberValue
+  assumptions: LinearConstraint[]
 }
 
 export async function verifyLayoutFiles(paths: string[]): Promise<LayoutCheckReport> {
@@ -323,7 +330,7 @@ function verifyCheckSpec(
 
   if (spec.kind === 'check-range') {
     const value = evaluateSpecExpression(spec.expression, context)
-    const status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int')
+    const status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int', context.assumptions)
     return {
       file,
       functionName,
@@ -430,6 +437,19 @@ function evaluateBinary(expression: ts.BinaryExpression, context: EvalContext): 
   const right = evaluateExpression(expression.right, context)
   if (left.kind !== 'number' || right.kind !== 'number') return unknown('Binary arithmetic expected numbers')
 
+  return evaluateNumberBinary(op, left, right)
+}
+
+function evaluateNumberBinary(op: ts.SyntaxKind, left: NumberValue, right: NumberValue): Value {
+  const plain = evaluatePlainNumberBinary(op, plainNumber(left), plainNumber(right))
+  if (plain.kind !== 'number') return plain
+  if (left.cases == null && right.cases == null) return plain
+
+  const cases = combineNumberCases(left, right, (leftCase, rightCase) => evaluatePlainNumberBinary(op, leftCase, rightCase))
+  return withNumberCases(plain, cases)
+}
+
+function evaluatePlainNumberBinary(op: ts.SyntaxKind, left: NumberValue, right: NumberValue): Value {
   switch (op) {
     case ts.SyntaxKind.PlusToken:
       return numberValue(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger, binaryExpr(left, '+', right), linearAdd(left.linear, right.linear))
@@ -444,6 +464,27 @@ function evaluateBinary(expression: ts.BinaryExpression, context: EvalContext): 
     default:
       return unknown(`Unsupported binary operator ${ts.SyntaxKind[op]}`)
   }
+}
+
+function combineNumberCases(
+  left: NumberValue,
+  right: NumberValue,
+  evaluate: (left: NumberValue, right: NumberValue) => Value,
+): NumberCase[] | null {
+  if (left.cases == null && right.cases == null) return null
+  const cases: NumberCase[] = []
+  for (const leftCase of numberBranches(left)) {
+    for (const rightCase of numberBranches(right)) {
+      const value = evaluate(leftCase.value, rightCase.value)
+      if (value.kind !== 'number') return null
+      cases.push({
+        value,
+        assumptions: mergeAssumptions(leftCase.assumptions, rightCase.assumptions),
+      })
+      if (cases.length > maxNumberCases) return null
+    }
+  }
+  return cases
 }
 
 function evaluateConditional(expression: ts.ConditionalExpression, context: EvalContext): Value {
@@ -522,7 +563,7 @@ function verifyCallGivenSpecs(
         paramIndex == null
           ? unknown(`Call target ${functionName} has no parameter named ${spec.name}`)
           : argumentValues[paramIndex] ?? unknown(`Call target ${functionName} missing argument for ${spec.name}`)
-      status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int')
+      status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int', calleeContext.assumptions)
     }
     if (spec.kind === 'given-comparison') {
       const left = evaluateSpecExpression(spec.left, calleeContext)
@@ -557,30 +598,185 @@ function evaluateMathCall(name: string, args: ts.NodeArray<ts.Expression>, conte
     case 'floor': {
       const value = numbers[0]
       if (value == null) return unknown('Math.floor expects one argument')
-      return numberValue(Math.floor(value.min), Math.floor(value.max), true, value.expr == null ? null : `floor(${value.expr})`)
+      return evaluateNumberUnary(value, floorNumber)
     }
     case 'ceil': {
       const value = numbers[0]
       if (value == null) return unknown('Math.ceil expects one argument')
-      return numberValue(Math.ceil(value.min), Math.ceil(value.max), true, value.expr == null ? null : `ceil(${value.expr})`)
+      return evaluateNumberUnary(value, ceilNumber)
+    }
+    case 'round': {
+      const value = numbers[0]
+      if (value == null) return unknown('Math.round expects one argument')
+      return evaluateNumberUnary(value, roundNumber)
+    }
+    case 'trunc': {
+      const value = numbers[0]
+      if (value == null) return unknown('Math.trunc expects one argument')
+      return evaluateNumberUnary(value, truncNumber)
+    }
+    case 'abs': {
+      const value = numbers[0]
+      if (value == null) return unknown('Math.abs expects one argument')
+      return absNumber(value, context.assumptions)
     }
     case 'sqrt': {
       const value = numbers[0]
       if (value == null) return unknown('Math.sqrt expects one argument')
-      if (value.min < 0) return unknown('Math.sqrt over a negative range is unsupported')
-      return numberValue(Math.sqrt(value.min), Math.sqrt(value.max), false, value.expr == null ? null : `sqrt(${value.expr})`)
+      return evaluateNumberUnary(value, sqrtNumber)
     }
     case 'min': {
       if (numbers.length === 0) return unknown('Math.min expects at least one argument')
-      return numberValue(Math.min(...numbers.map(value => value.min)), Math.min(...numbers.map(value => value.max)), numbers.every(value => value.isInteger), callExpr('min', numbers))
+      return numbers.slice(1).reduce((current, next) => minNumberPair(current, next, context.assumptions), numbers[0]!)
     }
     case 'max': {
       if (numbers.length === 0) return unknown('Math.max expects at least one argument')
-      return numberValue(Math.max(...numbers.map(value => value.min)), Math.max(...numbers.map(value => value.max)), numbers.every(value => value.isInteger), callExpr('max', numbers))
+      return numbers.slice(1).reduce((current, next) => maxNumberPair(current, next, context.assumptions), numbers[0]!)
     }
     default:
       return unknown(`Math.${name} is not in the static layout subset`)
   }
+}
+
+function evaluateNumberUnary(value: NumberValue, evaluate: (value: NumberValue) => Value): Value {
+  const plain = evaluate(plainNumber(value))
+  if (plain.kind !== 'number') return plain
+  if (value.cases == null) return plain
+
+  const cases: NumberCase[] = []
+  for (const valueCase of value.cases) {
+    const caseResult = evaluate(valueCase.value)
+    if (caseResult.kind !== 'number') return plain
+    cases.push({value: caseResult, assumptions: valueCase.assumptions})
+    if (cases.length > maxNumberCases) return plain
+  }
+  return withNumberCases(plain, cases)
+}
+
+function floorNumber(value: NumberValue): NumberValue {
+  if (value.isInteger) return numberValue(value.min, value.max, true, value.expr, value.linear)
+  return numberValue(Math.floor(value.min), Math.floor(value.max), true, value.expr == null ? null : `floor(${value.expr})`)
+}
+
+function ceilNumber(value: NumberValue): NumberValue {
+  if (value.isInteger) return numberValue(value.min, value.max, true, value.expr, value.linear)
+  return numberValue(Math.ceil(value.min), Math.ceil(value.max), true, value.expr == null ? null : `ceil(${value.expr})`)
+}
+
+function roundNumber(value: NumberValue): NumberValue {
+  if (value.isInteger) return numberValue(value.min, value.max, true, value.expr, value.linear)
+  return numberValue(Math.round(value.min), Math.round(value.max), true, value.expr == null ? null : `round(${value.expr})`)
+}
+
+function truncNumber(value: NumberValue): NumberValue {
+  if (value.isInteger) return numberValue(value.min, value.max, true, value.expr, value.linear)
+  return numberValue(Math.trunc(value.min), Math.trunc(value.max), true, value.expr == null ? null : `trunc(${value.expr})`)
+}
+
+function sqrtNumber(value: NumberValue): Value {
+  if (value.min < 0) return unknown('Math.sqrt over a negative range is unsupported')
+  return numberValue(Math.sqrt(value.min), Math.sqrt(value.max), false, value.expr == null ? null : `sqrt(${value.expr})`)
+}
+
+function absNumber(value: NumberValue, assumptions: LinearConstraint[]): NumberValue {
+  const plain = plainNumber(value)
+  if (plain.min >= 0) return withNumberCases(plain, value.cases)
+  if (plain.max <= 0) {
+    const result = evaluateNumberUnary(value, current => numberValue(-current.max, -current.min, current.isInteger, current.expr == null ? null : `abs(${current.expr})`, linearScale(current.linear, -1)))
+    return result.kind === 'number' ? result : numberValue(-plain.max, -plain.min, plain.isInteger, plain.expr == null ? null : `abs(${plain.expr})`, linearScale(plain.linear, -1))
+  }
+
+  const max = Math.max(Math.abs(plain.min), Math.abs(plain.max))
+  const joined = numberValue(0, max, plain.isInteger, plain.expr == null ? null : `abs(${plain.expr})`)
+  const cases: NumberCase[] = []
+  for (const valueCase of numberBranches(value)) {
+    const nonNegative = comparisonConstraint(valueCase.value, '>=', numberValue(0, 0, true, '0', linearConstant(0)))
+    const nonPositive = comparisonConstraint(valueCase.value, '<=', numberValue(0, 0, true, '0', linearConstant(0)))
+    if (nonNegative == null || nonPositive == null) return joined
+
+    const positiveStatus = proveComparisonPlain(valueCase.value, '>=', numberValue(0, 0, true, '0', linearConstant(0)), mergeAssumptions(assumptions, valueCase.assumptions))
+    const negativeStatus = proveComparisonPlain(valueCase.value, '<=', numberValue(0, 0, true, '0', linearConstant(0)), mergeAssumptions(assumptions, valueCase.assumptions))
+
+    if (positiveStatus.status !== 'fail') {
+      cases.push({
+        value: valueCase.value,
+        assumptions: positiveStatus.status === 'pass' ? valueCase.assumptions : mergeAssumptions(valueCase.assumptions, [nonNegative]),
+      })
+    }
+    if (negativeStatus.status !== 'fail') {
+      cases.push({
+        value: numberValue(-valueCase.value.max, -valueCase.value.min, valueCase.value.isInteger, valueCase.value.expr == null ? null : `abs(${valueCase.value.expr})`, linearScale(valueCase.value.linear, -1)),
+        assumptions: negativeStatus.status === 'pass' ? valueCase.assumptions : mergeAssumptions(valueCase.assumptions, [nonPositive]),
+      })
+    }
+    if (cases.length > maxNumberCases) return joined
+  }
+  return withNumberCases(joined, cases)
+}
+
+function minNumberPair(left: NumberValue, right: NumberValue, assumptions: LinearConstraint[]): NumberValue {
+  return choiceNumberPair('min', left, right, '<=', '<=', assumptions)
+}
+
+function maxNumberPair(left: NumberValue, right: NumberValue, assumptions: LinearConstraint[]): NumberValue {
+  return choiceNumberPair('max', left, right, '>=', '>=', assumptions)
+}
+
+function choiceNumberPair(
+  name: 'min' | 'max',
+  left: NumberValue,
+  right: NumberValue,
+  leftOp: ComparisonOperator,
+  rightOp: ComparisonOperator,
+  assumptions: LinearConstraint[],
+): NumberValue {
+  const plainLeft = plainNumber(left)
+  const plainRight = plainNumber(right)
+  const joined =
+    name === 'min'
+      ? numberValue(Math.min(plainLeft.min, plainRight.min), Math.min(plainLeft.max, plainRight.max), plainLeft.isInteger && plainRight.isInteger, callExpr(name, [plainLeft, plainRight]))
+      : numberValue(Math.max(plainLeft.min, plainRight.min), Math.max(plainLeft.max, plainRight.max), plainLeft.isInteger && plainRight.isInteger, callExpr(name, [plainLeft, plainRight]))
+
+  const cases: NumberCase[] = []
+  for (const leftCase of numberBranches(left)) {
+    for (const rightCase of numberBranches(right)) {
+      const baseAssumptions = mergeAssumptions(assumptions, leftCase.assumptions, rightCase.assumptions)
+      const leftWins = proveComparisonPlain(leftCase.value, leftOp, rightCase.value, baseAssumptions)
+      const rightWins = proveComparisonPlain(rightCase.value, rightOp, leftCase.value, baseAssumptions)
+
+      if (leftWins.status !== 'fail') {
+        const fact = comparisonConstraint(leftCase.value, leftOp, rightCase.value)
+        if (leftWins.status === 'pass') {
+          cases.push({
+            value: leftCase.value,
+            assumptions: mergeAssumptions(leftCase.assumptions, rightCase.assumptions),
+          })
+        } else if (fact != null) {
+          cases.push({
+            value: leftCase.value,
+            assumptions: mergeAssumptions(leftCase.assumptions, rightCase.assumptions, [fact]),
+          })
+        }
+      }
+      if (rightWins.status !== 'fail') {
+        const fact = comparisonConstraint(rightCase.value, rightOp, leftCase.value)
+        if (rightWins.status === 'pass') {
+          cases.push({
+            value: rightCase.value,
+            assumptions: mergeAssumptions(leftCase.assumptions, rightCase.assumptions),
+          })
+        } else if (fact != null) {
+          cases.push({
+            value: rightCase.value,
+            assumptions: mergeAssumptions(leftCase.assumptions, rightCase.assumptions, [fact]),
+          })
+        }
+      }
+      if (cases.length > maxNumberCases) return joined
+    }
+  }
+
+  return withNumberCases(joined, cases)
 }
 
 function evaluatePropertyAccess(expression: ts.PropertyAccessExpression, context: EvalContext): Value {
@@ -674,11 +870,16 @@ function compareRanges(left: NumberValue, op: ComparisonOperator, right: NumberV
   }
 }
 
-function proveRange(value: Value, min: number, max: number, requireInteger: boolean): {status: LayoutCheckStatus; reason?: string} {
+function proveRange(value: Value, min: number, max: number, requireInteger: boolean, assumptions: LinearConstraint[] = []): {status: LayoutCheckStatus; reason?: string} {
   if (value.kind !== 'number') return {status: 'unknown', reason: nonNumberReason(value)}
-  if (value.min < min || value.max > max) return {
-    status: 'fail',
-    reason: `range was ${formatRange(value)}, expected inside ${requireInteger ? 'int' : 'number'}[${min}, ${max}]`,
+  if (value.min < min || value.max > max) {
+    const lower = proveComparison(value, '>=', numberValue(min, min, Number.isInteger(min), `${min}`, linearConstant(min)), assumptions)
+    const upper = proveComparison(value, '<=', numberValue(max, max, Number.isInteger(max), `${max}`, linearConstant(max)), assumptions)
+    if (lower.status === 'pass' && upper.status === 'pass' && (!requireInteger || value.isInteger)) return {status: 'pass'}
+    return {
+      status: 'fail',
+      reason: `range was ${formatRange(value)}, expected inside ${requireInteger ? 'int' : 'number'}[${min}, ${max}]`,
+    }
   }
   if (requireInteger && !value.isInteger) return {status: 'fail', reason: `range was ${formatRange(value)}, expected integer`}
   return {status: 'pass'}
@@ -687,6 +888,26 @@ function proveRange(value: Value, min: number, max: number, requireInteger: bool
 function proveComparison(left: Value, op: ComparisonOperator, right: Value, assumptions: LinearConstraint[]): {status: LayoutCheckStatus; reason?: string} {
   if (left.kind !== 'number') return {status: 'unknown', reason: nonNumberReason(left)}
   if (right.kind !== 'number') return {status: 'unknown', reason: nonNumberReason(right)}
+  if (left.cases != null || right.cases != null) {
+    let unknownStatus: {status: LayoutCheckStatus; reason?: string} | null = null
+    for (const leftCase of numberBranches(left)) {
+      for (const rightCase of numberBranches(right)) {
+        const status = proveComparisonPlain(
+          leftCase.value,
+          op,
+          rightCase.value,
+          mergeAssumptions(assumptions, leftCase.assumptions, rightCase.assumptions),
+        )
+        if (status.status === 'fail') return status
+        if (status.status === 'unknown') unknownStatus = status
+      }
+    }
+    return unknownStatus ?? {status: 'pass'}
+  }
+  return proveComparisonPlain(left, op, right, assumptions)
+}
+
+function proveComparisonPlain(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]): {status: LayoutCheckStatus; reason?: string} {
   if (op === '==' && left.expr != null && right.expr != null && left.expr === right.expr) return {status: 'pass'}
   const truth = compareRanges(left, op, right)
   if (truth === 'true') return {status: 'pass'}
@@ -697,12 +918,16 @@ function proveComparison(left: Value, op: ComparisonOperator, right: Value, assu
   return {status: 'unknown', reason: `${formatRange(left)} ${op} ${formatRange(right)} was not proven`}
 }
 
+function comparisonConstraint(left: NumberValue, op: ComparisonOperator, right: NumberValue): LinearConstraint | null {
+  const diff = linearSubtract(left.linear, right.linear)
+  return diff == null ? null : {diff, op}
+}
+
 function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'given-comparison'}>, context: EvalContext): LinearConstraint | null {
   const left = evaluateSpecExpression(spec.left, context)
   const right = evaluateSpecExpression(spec.right, context)
   if (left.kind !== 'number' || right.kind !== 'number') return null
-  const diff = linearSubtract(left.linear, right.linear)
-  return diff == null ? null : {diff, op: spec.op}
+  return comparisonConstraint(left, spec.op, right)
 }
 
 function rangeFactsFromSpec(spec: Extract<LayoutSpec, {kind: 'given-range'}>): LinearConstraint[] {
@@ -793,8 +1018,12 @@ function nonNumberReason(value: ObjectValue | UnknownValue) {
   return value.kind === 'unknown' ? value.reason : 'Expected a number, got an object'
 }
 
-function numberValue(min: number, max: number, isInteger: boolean, expr: string | null, linear: LinearExpr | null = null): NumberValue {
-  return {kind: 'number', min, max, isInteger, expr, linear}
+function numberValue(min: number, max: number, isInteger: boolean, expr: string | null, linear: LinearExpr | null = null, cases: NumberCase[] | null = null): NumberValue {
+  const clean = linear == null ? null : cleanLinear(linear)
+  if (clean != null && clean.terms.size === 0 && Number.isFinite(clean.constant)) {
+    return {kind: 'number', min: clean.constant, max: clean.constant, isInteger: Number.isInteger(clean.constant), expr, linear: clean, cases}
+  }
+  return {kind: 'number', min, max, isInteger, expr, linear: clean, cases}
 }
 
 function unknownNumber(name: string): NumberValue {
@@ -805,11 +1034,29 @@ function unknownNumber(name: string): NumberValue {
     isInteger: false,
     expr: name,
     linear: linearVariable(name),
+    cases: null,
   }
 }
 
 function unknown(reason: string): UnknownValue {
   return {kind: 'unknown', reason}
+}
+
+function plainNumber(value: NumberValue): NumberValue {
+  return value.cases == null ? value : {...value, cases: null}
+}
+
+function numberBranches(value: NumberValue): NumberCase[] {
+  return value.cases ?? [{value: plainNumber(value), assumptions: []}]
+}
+
+function withNumberCases(value: NumberValue, cases: NumberCase[] | null): NumberValue {
+  if (cases == null || cases.length === 0 || cases.length > maxNumberCases) return value
+  return {...value, cases: cases.map(choice => ({value: plainNumber(choice.value), assumptions: choice.assumptions}))}
+}
+
+function mergeAssumptions(...groups: LinearConstraint[][]): LinearConstraint[] {
+  return groups.flat()
 }
 
 function numericLiteralValue(expression: ts.Expression): number | null {

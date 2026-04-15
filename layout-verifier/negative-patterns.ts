@@ -20,6 +20,16 @@ export function negativeComparison(value: number) {
 }
 
 /** @layout
+ * given width: number[0, 1000]
+ * result.overflow < 0
+ */
+export function negativePathSensitiveMinOverflow(width: number) {
+  const capped = Math.min(width, 320)
+  const overflow = width - capped
+  return {capped, overflow}
+}
+
+/** @layout
  * given value: number[0, 10]
  * result: number[0, 10]
  */

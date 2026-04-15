@@ -8,7 +8,6 @@
 
 ## Next Work
 
-- Add path-sensitive `Math.min` / `Math.max` / clamp facts. E.g. if `width` is inside `[0, 1000]`, `Math.min(width, 320)` should prove both the cap and the lower bound.
 - Recognize the first running-sum loop. E.g. `let y = top; rows.push({top: y, height}); y += height + gap` should prove row tops move forward when heights and gap are non-negative.
 - Add append-only array facts needed by that loop: `sameLength(result, items)`, `monotone(rows.map(row => row.top))`, `contiguousY(rows, gap)`, and `lastBottom(rows)`.
 - Add a tiny array/length/index domain. Start with `items.length`, loop index bounds, result length, and half-open hit rect checks.
@@ -29,6 +28,7 @@
 - Parameters must be simple names. No destructuring, rest params, or defaults.
 - The checker only handles the small pure subset it can inline. No side effects, mutation reasoning, loops, or callbacks.
 - Top-level `given` lines are still assumptions unless a same-file caller proves them.
+- Math choice facts are local and bounded. They prove immediate `Math.min` / `Math.max` / clamp relations, not full branch correlation across arbitrary fields.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.
 - No overloads, generics, TS type narrowing, or type-system integration.

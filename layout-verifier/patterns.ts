@@ -1,7 +1,6 @@
 // Runnable checker pattern specimen. `bun run verify:layout` must run this file.
 //
 // Queued patterns:
-// - clamp / min / max cap proofs that need path-sensitive narrowing
 // - running `y` loops
 // - append-only arrays
 // - `sameLength`
@@ -92,19 +91,71 @@ export function ternaryBranchJoin(value: number) {
  * given value: number[2, 8]
  * result.floorValue: int[1, 4]
  * result.ceilValue: int[1, 4]
+ * result.roundValue: int[1, 4]
+ * result.truncValue: int[1, 4]
  * result.sqrtValue: number[1, 3]
+ * result.absValue: number[0, 3]
+ * result.minValue: number[2, 4]
  * result.minValue <= 4
+ * result.maxValue: number[4, 8]
  * result.maxValue >= 4
  */
 export function mathSubset(value: number) {
   const half = value / 2
+  const shifted = value - 5
   return {
     floorValue: Math.floor(half),
     ceilValue: Math.ceil(half),
+    roundValue: Math.round(half),
+    truncValue: Math.trunc(half),
     sqrtValue: Math.sqrt(value),
+    absValue: Math.abs(shifted),
     minValue: Math.min(value, 4),
     maxValue: Math.max(value, 4),
   }
+}
+
+/** @layout
+ * given width: number[0, 1000]
+ * result.capped: number[0, 320]
+ * result.overflow >= 0
+ */
+export function pathSensitiveMinOverflow(width: number) {
+  const capped = Math.min(width, 320)
+  const overflow = width - capped
+  return {capped, overflow}
+}
+
+/** @layout
+ * given width: number[0, 1000]
+ * given padding: number[0, 120]
+ * result.content: number[0, 1000]
+ * result.leftover >= 0
+ */
+export function pathSensitiveMaxLeftover(width: number, padding: number) {
+  const content = Math.max(width - padding, 0)
+  const leftover = width - content
+  return {content, leftover}
+}
+
+/** @layout
+ * given value: number[-1000, 1000]
+ * given min: number[-1000, 1000]
+ * given max: number[-1000, 1000]
+ * given max >= min
+ * result >= min
+ * result <= max
+ */
+function clampLayoutValue(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max))
+}
+
+/** @layout
+ * given value: number[-1000, 1000]
+ * result: number[0, 320]
+ */
+export function userlandClamp(value: number) {
+  return clampLayoutValue(value, 0, 320)
 }
 
 /** @layout
