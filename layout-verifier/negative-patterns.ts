@@ -34,3 +34,22 @@ function negativeNeedsSmallValue(value: number) {
 export function negativeCallRequires(value: number) {
   return negativeNeedsSmallValue(value)
 }
+
+/** @layout
+ * requires containee: number[0, 1000]
+ * requires container: number[0, 1000]
+ * requires container >= containee
+ * ensures result >= 0
+ */
+function negativeNeedsContainerFit(containee: number, container: number) {
+  return (container - containee) / 2
+}
+
+/** @layout
+ * requires containee: number[100, 200]
+ * requires container: number[0, 50]
+ * ensures result: number[-100, 0]
+ */
+export function negativeRelationalCallRequires(containee: number, container: number) {
+  return negativeNeedsContainerFit(containee, container)
+}

@@ -9,8 +9,8 @@
 ## Current Limitations
 
 - Call-requirement discharge only works inside one file.
-- `requires` only supports constant-bounded ranges, e.g. `value: number[0, 10]`.
-- No relational preconditions yet, e.g. `container >= containee`, `right == left + width`, or `index < items.length`.
+- `requires` supports constant-bounded ranges and simple linear comparisons, e.g. `value: number[0, 10]` and `container >= containee`.
+- Relational preconditions are still a small linear layer. They do not prove richer facts like `container >= containee + 10` implying `container >= containee`.
 - Calls must be direct named calls. No method calls except the hardcoded `Math.*` subset.
 - Parameters must be simple names. No destructuring, rest params, or defaults.
 - The checker only handles the small pure subset it can inline. No side effects, mutation reasoning, loops, or callbacks.

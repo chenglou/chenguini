@@ -89,6 +89,20 @@ Good spec:
 
 The checker can learn `contiguousY` by recognizing the running `y` loop. If it cannot, it reports `unknown`. Do not rewrite the app into `contiguousYBuilder(...)` just to satisfy the checker.
 
+Relational preconditions should read like the layout fact they mean:
+
+```ts
+/** @layout
+ * requires containee: number[0, 1000]
+ * requires container: number[0, 1000]
+ * requires container >= containee
+ * ensures result >= 0
+ */
+function centeredOffset(containee: number, container: number) {
+  return (container - containee) / 2
+}
+```
+
 ## Atoms
 
 Start with a small owned vocabulary:

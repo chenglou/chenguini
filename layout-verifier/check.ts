@@ -31,6 +31,13 @@ type LayoutSpec =
       text: string
     }
   | {
+      kind: 'requires-comparison'
+      left: string
+      op: ComparisonOperator
+      right: string
+      text: string
+    }
+  | {
       kind: 'ensures-range'
       expression: string
       valueKind: 'int' | 'number'
@@ -63,6 +70,7 @@ type NumberValue = {
   max: number
   isInteger: boolean
   expr: string | null
+  linear: LinearExpr | null
 }
 
 type ObjectValue = {
@@ -82,9 +90,21 @@ type EvalContext = {
   env: Map<string, Value>
   stack: string[]
   obligations: LayoutCheckObligation[]
+  assumptions: LinearConstraint[]
 }
 
 const maxInlineDepth = 12
+const linearEpsilon = 1e-9
+
+type LinearExpr = {
+  constant: number
+  terms: Map<string, number>
+}
+
+type LinearConstraint = {
+  diff: LinearExpr
+  op: ComparisonOperator
+}
 
 export async function verifyLayoutFiles(paths: string[]): Promise<LayoutCheckReport> {
   const obligations: LayoutCheckObligation[] = []
@@ -138,7 +158,7 @@ function buildProgram(sourceFile: ts.SourceFile, sourceText: string): Program {
       if (!ts.isIdentifier(declaration.name) || declaration.initializer == null) continue
       const literal = numericLiteralValue(declaration.initializer)
       if (literal == null) continue
-      globals.set(declaration.name.text, numberValue(literal, literal, Number.isInteger(literal), declaration.name.text))
+      globals.set(declaration.name.text, numberValue(literal, literal, Number.isInteger(literal), declaration.name.text, linearConstant(literal)))
     }
   }
 
@@ -180,6 +200,17 @@ function parseLayoutSpecLine(line: string): LayoutSpec {
       valueKind: requiresRange[2]! as 'int' | 'number',
       min: Number(requiresRange[3]!),
       max: Number(requiresRange[4]!),
+      text: line,
+    }
+  }
+
+  const requiresComparison = /^requires\s+(.+?)\s*(==|>=|<=|>|<)\s*(.+)$/.exec(line)
+  if (requiresComparison != null) {
+    return {
+      kind: 'requires-comparison',
+      left: requiresComparison[1]!.trim(),
+      op: requiresComparison[2]! as ComparisonOperator,
+      right: requiresComparison[3]!.trim(),
       text: line,
     }
   }
@@ -227,19 +258,37 @@ function verifyFunctionSpecs(
 
   for (const spec of specs) {
     if (spec.kind !== 'requires-range') continue
-    env.set(spec.name, numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.name))
+    env.set(spec.name, numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.name, linearVariable(spec.name)))
   }
 
-  const context: EvalContext = {program, file, env, stack: [functionName], obligations: []}
+  const assumptions = collectComparisonAssumptions(file, program, functionName, env, specs)
+  const context: EvalContext = {program, file, env, stack: [functionName], obligations: [], assumptions}
   const result = evaluateFunctionBody(fn, context)
   const obligations: LayoutCheckObligation[] = [...context.obligations]
 
   for (const spec of specs) {
-    if (spec.kind === 'requires-range') continue
-    obligations.push(verifyEnsuresSpec(file, program, functionName, env, result, spec, obligations))
+    if (spec.kind === 'requires-range' || spec.kind === 'requires-comparison') continue
+    obligations.push(verifyEnsuresSpec(file, program, functionName, env, result, spec, obligations, assumptions))
   }
 
   return obligations
+}
+
+function collectComparisonAssumptions(
+  file: string,
+  program: Program,
+  functionName: string,
+  env: Map<string, Value>,
+  specs: LayoutSpec[],
+): LinearConstraint[] {
+  const assumptions: LinearConstraint[] = []
+  const context: EvalContext = {program, file, env, stack: [functionName], obligations: [], assumptions}
+  for (const spec of specs) {
+    if (spec.kind !== 'requires-comparison') continue
+    const fact = comparisonFactFromSpec(spec, context)
+    if (fact != null) assumptions.push(fact)
+  }
+  return assumptions
 }
 
 function verifyEnsuresSpec(
@@ -248,12 +297,13 @@ function verifyEnsuresSpec(
   functionName: string,
   baseEnv: Map<string, Value>,
   result: Value,
-  spec: Exclude<LayoutSpec, {kind: 'requires-range'}>,
+  spec: Extract<LayoutSpec, {kind: 'ensures-range'} | {kind: 'ensures-comparison'}>,
   obligations: LayoutCheckObligation[],
+  assumptions: LinearConstraint[],
 ): LayoutCheckObligation {
   const env = new Map(baseEnv)
   env.set('result', result)
-  const context: EvalContext = {program, file, env, stack: [functionName], obligations}
+  const context: EvalContext = {program, file, env, stack: [functionName], obligations, assumptions}
 
   if (spec.kind === 'ensures-range') {
     const value = evaluateSpecExpression(spec.expression, context)
@@ -269,7 +319,7 @@ function verifyEnsuresSpec(
 
   const left = evaluateSpecExpression(spec.left, context)
   const right = evaluateSpecExpression(spec.right, context)
-  const status = proveComparison(left, spec.op, right)
+  const status = proveComparison(left, spec.op, right, context.assumptions)
   return {
     file,
     functionName,
@@ -327,7 +377,7 @@ function bindVariableDeclaration(declaration: ts.VariableDeclaration, context: E
 function evaluateExpression(expression: ts.Expression, context: EvalContext): Value {
   if (ts.isNumericLiteral(expression)) {
     const value = Number(expression.text)
-    return numberValue(value, value, Number.isInteger(value), expression.text)
+    return numberValue(value, value, Number.isInteger(value), expression.text, linearConstant(value))
   }
   if (ts.isIdentifier(expression)) return context.env.get(expression.text) ?? unknown(`Unknown identifier ${expression.text}`)
   if (ts.isParenthesizedExpression(expression)) return evaluateExpression(expression.expression, context)
@@ -345,7 +395,7 @@ function evaluatePrefixUnary(expression: ts.PrefixUnaryExpression, context: Eval
   if (value.kind !== 'number') return unknown('Unary operator expected a number')
   switch (expression.operator) {
     case ts.SyntaxKind.MinusToken:
-      return numberValue(-value.max, -value.min, value.isInteger, value.expr == null ? null : `-${value.expr}`)
+      return numberValue(-value.max, -value.min, value.isInteger, value.expr == null ? null : `-${value.expr}`, linearScale(value.linear, -1))
     case ts.SyntaxKind.PlusToken:
       return value
     default:
@@ -364,9 +414,9 @@ function evaluateBinary(expression: ts.BinaryExpression, context: EvalContext): 
 
   switch (op) {
     case ts.SyntaxKind.PlusToken:
-      return numberValue(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger, binaryExpr(left, '+', right))
+      return numberValue(left.min + right.min, left.max + right.max, left.isInteger && right.isInteger, binaryExpr(left, '+', right), linearAdd(left.linear, right.linear))
     case ts.SyntaxKind.MinusToken:
-      return numberValue(left.min - right.max, left.max - right.min, left.isInteger && right.isInteger, binaryExpr(left, '-', right))
+      return numberValue(left.min - right.max, left.max - right.min, left.isInteger && right.isInteger, binaryExpr(left, '-', right), linearSubtract(left.linear, right.linear))
     case ts.SyntaxKind.AsteriskToken:
       return multiplyNumbers(left, right)
     case ts.SyntaxKind.SlashToken:
@@ -424,6 +474,7 @@ function evaluateCall(expression: ts.CallExpression, context: EvalContext): Valu
     env,
     stack: [...context.stack, functionName],
     obligations: context.obligations,
+    assumptions: context.assumptions,
   })
 }
 
@@ -435,15 +486,32 @@ function verifyCallRequires(
   context: EvalContext,
 ) {
   const specs = context.program.specsByFunction.get(functionName) ?? []
+  const callText = `${functionName}(${expression.arguments.map(argument => argument.getText(context.program.sourceFile)).join(', ')})`
+  const env = new Map<string, Value>()
+  for (const [name, value] of context.program.globals) env.set(name, value)
+  for (let i = 0; i < fn.parameters.length; i++) {
+    const param = fn.parameters[i]!
+    if (!ts.isIdentifier(param.name)) continue
+    env.set(param.name.text, argumentValues[i] ?? unknown(`Missing argument ${i} for ${functionName}`))
+  }
+  const calleeContext: EvalContext = {...context, env}
+
   for (const spec of specs) {
-    if (spec.kind !== 'requires-range') continue
-    const paramIndex = parameterIndex(fn, spec.name)
-    const value =
-      paramIndex == null
-        ? unknown(`Call target ${functionName} has no parameter named ${spec.name}`)
-        : argumentValues[paramIndex] ?? unknown(`Call target ${functionName} missing argument for ${spec.name}`)
-    const status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int')
-    const callText = `${functionName}(${expression.arguments.map(argument => argument.getText(context.program.sourceFile)).join(', ')})`
+    let status: {status: LayoutCheckStatus; reason?: string} | null = null
+    if (spec.kind === 'requires-range') {
+      const paramIndex = parameterIndex(fn, spec.name)
+      const value =
+        paramIndex == null
+          ? unknown(`Call target ${functionName} has no parameter named ${spec.name}`)
+          : argumentValues[paramIndex] ?? unknown(`Call target ${functionName} missing argument for ${spec.name}`)
+      status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int')
+    }
+    if (spec.kind === 'requires-comparison') {
+      const left = evaluateSpecExpression(spec.left, calleeContext)
+      const right = evaluateSpecExpression(spec.right, calleeContext)
+      status = proveComparison(left, spec.op, right, calleeContext.assumptions)
+    }
+    if (status == null) continue
     context.obligations.push({
       file: context.file,
       functionName: context.stack.join(' > '),
@@ -528,7 +596,10 @@ function evaluateCondition(expression: ts.Expression, context: EvalContext): Tru
   const left = evaluateExpression(expression.left, context)
   const right = evaluateExpression(expression.right, context)
   if (left.kind !== 'number' || right.kind !== 'number') return 'maybe'
-  return compareRanges(left, syntaxToComparison(op), right)
+  const status = proveComparison(left, syntaxToComparison(op), right, context.assumptions)
+  if (status.status === 'pass') return 'true'
+  if (status.status === 'fail') return 'false'
+  return 'maybe'
 }
 
 function isComparisonSyntax(kind: ts.SyntaxKind) {
@@ -595,22 +666,83 @@ function proveRange(value: Value, min: number, max: number, requireInteger: bool
   return {status: 'pass'}
 }
 
-function proveComparison(left: Value, op: ComparisonOperator, right: Value): {status: LayoutCheckStatus; reason?: string} {
+function proveComparison(left: Value, op: ComparisonOperator, right: Value, assumptions: LinearConstraint[]): {status: LayoutCheckStatus; reason?: string} {
   if (left.kind !== 'number') return {status: 'unknown', reason: nonNumberReason(left)}
   if (right.kind !== 'number') return {status: 'unknown', reason: nonNumberReason(right)}
   if (op === '==' && left.expr != null && right.expr != null && left.expr === right.expr) return {status: 'pass'}
   const truth = compareRanges(left, op, right)
   if (truth === 'true') return {status: 'pass'}
   if (truth === 'false') return {status: 'fail', reason: `${formatRange(left)} ${op} ${formatRange(right)} is false`}
+  const linearTruth = compareLinear(left, op, right, assumptions)
+  if (linearTruth === 'true') return {status: 'pass'}
+  if (linearTruth === 'false') return {status: 'fail', reason: `${formatRange(left)} ${op} ${formatRange(right)} is false by exact linear facts`}
   return {status: 'unknown', reason: `${formatRange(left)} ${op} ${formatRange(right)} was not proven`}
+}
+
+function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'requires-comparison'}>, context: EvalContext): LinearConstraint | null {
+  const left = evaluateSpecExpression(spec.left, context)
+  const right = evaluateSpecExpression(spec.right, context)
+  if (left.kind !== 'number' || right.kind !== 'number') return null
+  const diff = linearSubtract(left.linear, right.linear)
+  return diff == null ? null : {diff, op: spec.op}
+}
+
+function compareLinear(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]): Truth {
+  const diff = linearSubtract(left.linear, right.linear)
+  if (diff == null) return 'maybe'
+
+  switch (op) {
+    case '==':
+      if (isZeroLinear(diff)) return 'true'
+      return provesNonNegative(diff, false, assumptions) && provesNonNegative(linearScaleExact(diff, -1), false, assumptions) ? 'true' : 'maybe'
+    case '>=':
+      return provesNonNegative(diff, false, assumptions) ? 'true' : 'maybe'
+    case '<=':
+      return provesNonNegative(linearScaleExact(diff, -1), false, assumptions) ? 'true' : 'maybe'
+    case '>':
+      if (isZeroLinear(diff)) return 'false'
+      return provesNonNegative(diff, true, assumptions) ? 'true' : 'maybe'
+    case '<':
+      if (isZeroLinear(diff)) return 'false'
+      return provesNonNegative(linearScaleExact(diff, -1), true, assumptions) ? 'true' : 'maybe'
+  }
+}
+
+function provesNonNegative(diff: LinearExpr, strict: boolean, assumptions: LinearConstraint[]) {
+  if (isZeroLinear(diff)) return !strict
+  for (const assumption of assumptions) {
+    for (const fact of nonNegativeFacts(assumption)) {
+      const scale = positiveScaleMultiple(diff, fact.diff)
+      if (scale != null && (!strict || fact.strict)) return true
+    }
+  }
+  return false
+}
+
+function nonNegativeFacts(assumption: LinearConstraint): Array<{diff: LinearExpr; strict: boolean}> {
+  switch (assumption.op) {
+    case '==':
+      return [
+        {diff: assumption.diff, strict: false},
+        {diff: linearScaleExact(assumption.diff, -1), strict: false},
+      ]
+    case '>=':
+      return [{diff: assumption.diff, strict: false}]
+    case '<=':
+      return [{diff: linearScaleExact(assumption.diff, -1), strict: false}]
+    case '>':
+      return [{diff: assumption.diff, strict: true}]
+    case '<':
+      return [{diff: linearScaleExact(assumption.diff, -1), strict: true}]
+  }
 }
 
 function nonNumberReason(value: ObjectValue | UnknownValue) {
   return value.kind === 'unknown' ? value.reason : 'Expected a number, got an object'
 }
 
-function numberValue(min: number, max: number, isInteger: boolean, expr: string | null): NumberValue {
-  return {kind: 'number', min, max, isInteger, expr}
+function numberValue(min: number, max: number, isInteger: boolean, expr: string | null, linear: LinearExpr | null = null): NumberValue {
+  return {kind: 'number', min, max, isInteger, expr, linear}
 }
 
 function unknownNumber(name: string): NumberValue {
@@ -620,6 +752,7 @@ function unknownNumber(name: string): NumberValue {
     max: Number.POSITIVE_INFINITY,
     isInteger: false,
     expr: name,
+    linear: linearVariable(name),
   }
 }
 
@@ -635,6 +768,91 @@ function numericLiteralValue(expression: ts.Expression): number | null {
   return null
 }
 
+function linearConstant(value: number): LinearExpr {
+  return {constant: value, terms: new Map()}
+}
+
+function linearVariable(name: string): LinearExpr {
+  return {constant: 0, terms: new Map([[name, 1]])}
+}
+
+function linearAdd(left: LinearExpr | null, right: LinearExpr | null): LinearExpr | null {
+  if (left == null || right == null) return null
+  const terms = new Map(left.terms)
+  for (const [name, coefficient] of right.terms) {
+    terms.set(name, (terms.get(name) ?? 0) + coefficient)
+  }
+  return cleanLinear({constant: left.constant + right.constant, terms})
+}
+
+function linearSubtract(left: LinearExpr | null, right: LinearExpr | null): LinearExpr | null {
+  if (left == null || right == null) return null
+  return linearAdd(left, linearScaleExact(right, -1))
+}
+
+function linearScale(linear: LinearExpr | null, factor: number): LinearExpr | null {
+  return linear == null ? null : linearScaleExact(linear, factor)
+}
+
+function linearScaleExact(linear: LinearExpr, factor: number): LinearExpr {
+  const terms = new Map<string, number>()
+  for (const [name, coefficient] of linear.terms) terms.set(name, coefficient * factor)
+  return cleanLinear({constant: linear.constant * factor, terms})
+}
+
+function linearMultiply(left: NumberValue, right: NumberValue): LinearExpr | null {
+  if (left.min === left.max) return linearScale(right.linear, left.min)
+  if (right.min === right.max) return linearScale(left.linear, right.min)
+  return null
+}
+
+function sameLinear(left: LinearExpr, right: LinearExpr) {
+  const diff = linearSubtract(left, right)
+  return diff != null && isZeroLinear(diff)
+}
+
+function cleanLinear(linear: LinearExpr): LinearExpr {
+  const terms = new Map<string, number>()
+  for (const [name, coefficient] of linear.terms) {
+    if (Math.abs(coefficient) > linearEpsilon) terms.set(name, coefficient)
+  }
+  return {
+    constant: Math.abs(linear.constant) > linearEpsilon ? linear.constant : 0,
+    terms,
+  }
+}
+
+function isZeroLinear(linear: LinearExpr) {
+  return linear.constant === 0 && linear.terms.size === 0
+}
+
+function positiveScaleMultiple(target: LinearExpr, fact: LinearExpr): number | null {
+  let scale: number | null = null
+  const names = new Set([...target.terms.keys(), ...fact.terms.keys()])
+  for (const name of names) {
+    const nextScale = coefficientScale(target.terms.get(name) ?? 0, fact.terms.get(name) ?? 0)
+    if (nextScale === false) return null
+    if (nextScale != null) scale = mergeScale(scale, nextScale)
+    if (scale === Number.NEGATIVE_INFINITY) return null
+  }
+
+  const constantScale = coefficientScale(target.constant, fact.constant)
+  if (constantScale === false) return null
+  if (constantScale != null) scale = mergeScale(scale, constantScale)
+  if (scale == null || scale === Number.NEGATIVE_INFINITY || scale <= 0) return null
+  return scale
+}
+
+function coefficientScale(target: number, fact: number): number | null | false {
+  if (Math.abs(fact) <= linearEpsilon) return Math.abs(target) <= linearEpsilon ? null : false
+  return target / fact
+}
+
+function mergeScale(current: number | null, next: number): number {
+  if (current == null) return next
+  return Math.abs(current - next) <= linearEpsilon ? current : Number.NEGATIVE_INFINITY
+}
+
 function multiplyNumbers(left: NumberValue, right: NumberValue): NumberValue {
   const products = [
     left.min * right.min,
@@ -642,7 +860,7 @@ function multiplyNumbers(left: NumberValue, right: NumberValue): NumberValue {
     left.max * right.min,
     left.max * right.max,
   ]
-  return numberValue(Math.min(...products), Math.max(...products), left.isInteger && right.isInteger, binaryExpr(left, '*', right))
+  return numberValue(Math.min(...products), Math.max(...products), left.isInteger && right.isInteger, binaryExpr(left, '*', right), linearMultiply(left, right))
 }
 
 function divideNumbers(left: NumberValue, right: NumberValue): Value {
@@ -653,7 +871,7 @@ function divideNumbers(left: NumberValue, right: NumberValue): Value {
     left.max / right.min,
     left.max / right.max,
   ]
-  return numberValue(Math.min(...quotients), Math.max(...quotients), false, binaryExpr(left, '/', right))
+  return numberValue(Math.min(...quotients), Math.max(...quotients), false, binaryExpr(left, '/', right), right.min === right.max ? linearScale(left.linear, 1 / right.min) : null)
 }
 
 function powerNumbers(left: NumberValue, right: NumberValue): Value {
@@ -672,6 +890,7 @@ function joinValues(left: Value, right: Value): Value {
       Math.max(left.max, right.max),
       left.isInteger && right.isInteger,
       left.expr != null && right.expr != null && left.expr === right.expr ? left.expr : null,
+      left.linear != null && right.linear != null && sameLinear(left.linear, right.linear) ? left.linear : null,
     )
   }
   if (left.kind === 'object' && right.kind === 'object') {

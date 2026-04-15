@@ -4,3 +4,5 @@ FAIL layout-verifier/negative-patterns.ts:negativeComparison: ensures result.hig
   number[10, 15] as (value + 10) < number[0, 5] as value is false
 FAIL layout-verifier/negative-patterns.ts:negativeCallRequires: call negativeNeedsSmallValue(value): requires value: number[0, 10]
   range was number[0, 20] as value, expected inside number[0, 10]
+FAIL layout-verifier/negative-patterns.ts:negativeRelationalCallRequires: call negativeNeedsContainerFit(containee, container): requires container >= containee
+  number[0, 50] as container >= number[100, 200] as containee is false

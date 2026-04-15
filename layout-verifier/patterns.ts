@@ -1,7 +1,6 @@
 // Runnable checker pattern specimen. `bun run verify:layout` must run this file.
 //
 // Queued patterns:
-// - relational preconditions, e.g. `requires container >= containee`
 // - clamp / min / max cap proofs that need path-sensitive narrowing
 // - running `y` loops
 // - append-only arrays
@@ -115,6 +114,26 @@ export function mathSubset(value: number) {
  */
 export function exactExpressionIdentity(containee: number, container: number) {
   return (container - containee) / 2
+}
+
+/** @layout
+ * requires containee: number[0, 1000]
+ * requires container: number[0, 1000]
+ * requires container >= containee
+ * ensures result >= 0
+ */
+export function centeredOffset(containee: number, container: number) {
+  return (container - containee) / 2
+}
+
+/** @layout
+ * requires containee: number[0, 1000]
+ * requires container: number[0, 1000]
+ * requires container >= containee
+ * ensures result >= 0
+ */
+export function centeredOffsetThroughHelper(containee: number, container: number) {
+  return centeredOffset(containee, container)
 }
 
 /** @layout
