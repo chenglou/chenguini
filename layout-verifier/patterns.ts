@@ -137,6 +137,17 @@ export function centeredOffsetThroughHelper(containee: number, container: number
 }
 
 /** @layout
+ * requires containee: number[0, 1000]
+ * requires padding: number[0, 100]
+ * requires container: number[0, 1200]
+ * requires container >= containee + padding
+ * ensures result.offset >= 0
+ */
+export function centeredOffsetWithPaddingSlack(containee: number, padding: number, container: number) {
+  return {offset: (container - containee) / 2, padding}
+}
+
+/** @layout
  * requires value: number[4, 14]
  * ensures result: number[5, 15]
  */

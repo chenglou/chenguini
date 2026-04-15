@@ -103,6 +103,8 @@ function centeredOffset(containee: number, container: number) {
 }
 ```
 
+The checker can do small linear reduction. E.g. `container >= containee + padding` plus `padding: number[0, 100]` is enough to prove `container >= containee`. This is still just static arithmetic over the lowered source, not a general logic engine.
+
 ## Atoms
 
 Start with a small owned vocabulary:

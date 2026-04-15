@@ -10,7 +10,7 @@
 
 - Call-requirement discharge only works inside one file.
 - `requires` supports constant-bounded ranges and simple linear comparisons, e.g. `value: number[0, 10]` and `container >= containee`.
-- Relational preconditions are still a small linear layer. They do not prove richer facts like `container >= containee + 10` implying `container >= containee`.
+- Linear reduction is intentionally tiny and bounded. It is not a general linear solver.
 - Calls must be direct named calls. No method calls except the hardcoded `Math.*` subset.
 - Parameters must be simple names. No destructuring, rest params, or defaults.
 - The checker only handles the small pure subset it can inline. No side effects, mutation reasoning, loops, or callbacks.

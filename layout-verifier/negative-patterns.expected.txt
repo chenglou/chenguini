@@ -6,3 +6,5 @@ FAIL layout-verifier/negative-patterns.ts:negativeCallRequires: call negativeNee
   range was number[0, 20] as value, expected inside number[0, 10]
 FAIL layout-verifier/negative-patterns.ts:negativeRelationalCallRequires: call negativeNeedsContainerFit(containee, container): requires container >= containee
   number[0, 50] as container >= number[100, 200] as containee is false
+UNKNOWN layout-verifier/negative-patterns.ts:negativeLinearReductionNeedsNonNegativePadding: ensures result.offset >= 0
+  number[-500, 600] as ((container - containee) / 2) >= int[0, 0] as 0 was not proven

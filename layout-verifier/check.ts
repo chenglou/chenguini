@@ -94,6 +94,7 @@ type EvalContext = {
 }
 
 const maxInlineDepth = 12
+const maxLinearReductionDepth = 4
 const linearEpsilon = 1e-9
 
 type LinearExpr = {
@@ -284,9 +285,14 @@ function collectComparisonAssumptions(
   const assumptions: LinearConstraint[] = []
   const context: EvalContext = {program, file, env, stack: [functionName], obligations: [], assumptions}
   for (const spec of specs) {
-    if (spec.kind !== 'requires-comparison') continue
-    const fact = comparisonFactFromSpec(spec, context)
-    if (fact != null) assumptions.push(fact)
+    if (spec.kind === 'requires-range') {
+      assumptions.push(...rangeFactsFromSpec(spec))
+      continue
+    }
+    if (spec.kind === 'requires-comparison') {
+      const fact = comparisonFactFromSpec(spec, context)
+      if (fact != null) assumptions.push(fact)
+    }
   }
   return assumptions
 }
@@ -687,6 +693,16 @@ function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'requires-compa
   return diff == null ? null : {diff, op: spec.op}
 }
 
+function rangeFactsFromSpec(spec: Extract<LayoutSpec, {kind: 'requires-range'}>): LinearConstraint[] {
+  const value = linearVariable(spec.name)
+  const minDiff = linearSubtract(value, linearConstant(spec.min))
+  const maxDiff = linearSubtract(linearConstant(spec.max), value)
+  const facts: LinearConstraint[] = []
+  if (minDiff != null) facts.push({diff: minDiff, op: '>='})
+  if (maxDiff != null) facts.push({diff: maxDiff, op: '>='})
+  return facts
+}
+
 function compareLinear(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]): Truth {
   const diff = linearSubtract(left.linear, right.linear)
   if (diff == null) return 'maybe'
@@ -709,11 +725,35 @@ function compareLinear(left: NumberValue, op: ComparisonOperator, right: NumberV
 }
 
 function provesNonNegative(diff: LinearExpr, strict: boolean, assumptions: LinearConstraint[]) {
-  if (isZeroLinear(diff)) return !strict
-  for (const assumption of assumptions) {
-    for (const fact of nonNegativeFacts(assumption)) {
-      const scale = positiveScaleMultiple(diff, fact.diff)
-      if (scale != null && (!strict || fact.strict)) return true
+  const facts = assumptions.flatMap(nonNegativeFacts)
+  return reduceToNonNegative(diff, strict, facts, maxLinearReductionDepth, new Set())
+}
+
+function reduceToNonNegative(
+  diff: LinearExpr,
+  strict: boolean,
+  facts: Array<{diff: LinearExpr; strict: boolean}>,
+  depth: number,
+  seen: Set<string>,
+): boolean {
+  const cleanDiff = cleanLinear(diff)
+  if (linearConstantStatus(cleanDiff, strict)) return true
+  for (const fact of facts) {
+    const scale = positiveScaleMultiple(cleanDiff, fact.diff)
+    if (scale != null && (!strict || fact.strict)) return true
+  }
+  if (depth === 0) return false
+
+  const key = `${strict ? 'strict' : 'loose'}:${linearKey(cleanDiff)}`
+  if (seen.has(key)) return false
+  seen.add(key)
+
+  for (const fact of facts) {
+    for (const scale of reductionScales(cleanDiff, fact.diff)) {
+      const scaledFact = linearScaleExact(fact.diff, scale)
+      const remainder = linearSubtract(cleanDiff, scaledFact)
+      if (remainder == null || sameLinear(remainder, cleanDiff)) continue
+      if (reduceToNonNegative(remainder, strict && !fact.strict, facts, depth - 1, new Set(seen))) return true
     }
   }
   return false
@@ -824,6 +864,34 @@ function cleanLinear(linear: LinearExpr): LinearExpr {
 
 function isZeroLinear(linear: LinearExpr) {
   return linear.constant === 0 && linear.terms.size === 0
+}
+
+function linearConstantStatus(linear: LinearExpr, strict: boolean) {
+  if (linear.terms.size > 0) return false
+  return strict ? linear.constant > linearEpsilon : linear.constant >= -linearEpsilon
+}
+
+function linearKey(linear: LinearExpr) {
+  const parts = [`${linear.constant}`]
+  for (const [name, coefficient] of [...linear.terms.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    parts.push(`${name}:${coefficient}`)
+  }
+  return parts.join('|')
+}
+
+function reductionScales(target: LinearExpr, fact: LinearExpr): number[] {
+  const scales: number[] = []
+  const names = new Set([...target.terms.keys(), ...fact.terms.keys()])
+  for (const name of names) addReductionScale(scales, target.terms.get(name) ?? 0, fact.terms.get(name) ?? 0)
+  addReductionScale(scales, target.constant, fact.constant)
+  return scales
+}
+
+function addReductionScale(scales: number[], targetCoefficient: number, factCoefficient: number) {
+  if (Math.abs(targetCoefficient) <= linearEpsilon || Math.abs(factCoefficient) <= linearEpsilon) return
+  const scale = targetCoefficient / factCoefficient
+  if (scale <= linearEpsilon) return
+  if (!scales.some(existing => Math.abs(existing - scale) <= linearEpsilon)) scales.push(scale)
 }
 
 function positiveScaleMultiple(target: LinearExpr, fact: LinearExpr): number | null {

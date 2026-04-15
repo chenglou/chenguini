@@ -53,3 +53,14 @@ function negativeNeedsContainerFit(containee: number, container: number) {
 export function negativeRelationalCallRequires(containee: number, container: number) {
   return negativeNeedsContainerFit(containee, container)
 }
+
+/** @layout
+ * requires containee: number[0, 1000]
+ * requires padding: number[-100, 100]
+ * requires container: number[0, 1200]
+ * requires container >= containee + padding
+ * ensures result.offset >= 0
+ */
+export function negativeLinearReductionNeedsNonNegativePadding(containee: number, padding: number, container: number) {
+  return {offset: (container - containee) / 2, padding}
+}
