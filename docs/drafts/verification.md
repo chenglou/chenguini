@@ -189,6 +189,7 @@ A report should say:
 - the exact annotation text
 - `pass`, `fail`, or `unknown`
 - the reason for `fail` or `unknown`
+- the local proof context: what was needed, what was known, and the likely missing fact
 
 Keep drafted facts and exploratory checks out of the committed verifier report.
 

@@ -3,7 +3,7 @@
 - Keep the active checker static-only: no browser runs, runtime traces, sampled sweeps, or committed fixture evidence.
 - Work through [patterns.ts](./patterns.ts) without restating its list here.
 - Add helper summaries only for opaque boundaries, and report which summary was trusted.
-- Improve messages so failed geometry facts show the relevant edges, overflow amount, or crossing boxes.
+- Keep improving messages as new atoms land. Geometry facts should show the relevant edges, overflow amount, or crossing boxes.
 - Use temporary mutation/red probes to decide which atoms to add next; keep them out of the committed guarantee report.
 
 ## Next Work
@@ -11,7 +11,7 @@
 - Recognize the first running-sum loop. E.g. `let y = top; rows.push({top: y, height}); y += height + gap` should prove row tops move forward when heights and gap are non-negative.
 - Add append-only array facts needed by that loop: `sameLength(result, items)`, `monotone(rows.map(row => row.top))`, `contiguousY(rows, gap)`, and `lastBottom(rows)`.
 - Add geometry atoms after the loop facts exist: `rectInside(child, parent)`, `rectEquals(a, b)`, `nonOverlapX(rects)`, and `nonOverlapY(rects)`.
-- Improve messages with proof context. A failed `rectInside` should name the overflowing edge; a linear failure should name the missing non-negative fact.
+- Improve geometry messages once atoms exist. A failed `rectInside` should name the overflowing edge.
 - Add module/import summaries. Same-file inlining is enough for now, but real helpers need summaries across files, and the report should say when a summary was trusted.
 - Add Pretext-facing text facts: line width fits, fragments are ordered, fragments cover a text range, and selection rects come from the paint fragments.
 - Add the `life-calendar` hard numeric examples as small patterns: positive-domain `Math.sqrt`, `Math.ceil`, integer facts after `ceil`, `**`, and half-open grid hit testing.

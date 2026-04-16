@@ -30,7 +30,9 @@ function normalizeNegative(checks: LayoutCheck[]) {
     .filter(check => check.status !== 'pass')
     .map(check => {
       const head = `${check.status.toUpperCase()} ${check.file}:${check.functionName}: ${check.text}`
-      return check.reason == null ? head : `${head}\n  ${check.reason}`
+      if (check.reason == null) return head
+      const reason = check.reason.split('\n').map(line => `  ${line}`).join('\n')
+      return `${head}\n${reason}`
     })
   return normalizeText(lines.join('\n'))
 }

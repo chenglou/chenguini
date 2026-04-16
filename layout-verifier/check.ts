@@ -114,6 +114,14 @@ type LinearExpr = {
 type LinearConstraint = {
   diff: LinearExpr
   op: ComparisonOperator
+  text?: string
+  source?: 'range' | 'comparison' | 'derived'
+}
+
+type NonNegativeFact = {
+  diff: LinearExpr
+  strict: boolean
+  text?: string
 }
 
 type NumberCase = {
@@ -620,11 +628,13 @@ function verifyCallGivenSpecs(
     if (spec.kind === 'given-range') {
       const value = evaluateSpecExpression(spec.expression, calleeContext)
       status = proveRange(value, spec.min, spec.max, spec.valueKind === 'int', calleeContext.assumptions)
+      if (status.status !== 'pass') status = withCallRangeReason(status, value, spec)
     }
     if (spec.kind === 'given-comparison') {
       const left = evaluateSpecExpression(spec.left, calleeContext)
       const right = evaluateSpecExpression(spec.right, calleeContext)
       status = proveComparison(left, spec.op, right, calleeContext.assumptions)
+      if (status.status !== 'pass') status = withCallComparisonReason(status, left, spec.op, right, spec.text)
     }
     if (status == null) continue
     context.checks.push({
@@ -634,6 +644,40 @@ function verifyCallGivenSpecs(
       status: status.status,
       ...(status.reason == null ? {} : {reason: status.reason}),
     })
+  }
+}
+
+function withCallRangeReason(
+  status: {status: LayoutCheckStatus; reason?: string},
+  value: Value,
+  spec: Extract<LayoutSpec, {kind: 'given-range'}>,
+): {status: LayoutCheckStatus; reason?: string} {
+  if (value.kind !== 'number') return status
+  return {
+    ...status,
+    reason: [
+      `caller has ${formatRange(value)}`,
+      `callee needs ${spec.expression}: ${spec.valueKind}[${spec.min}, ${spec.max}]`,
+      ...missingRangeBounds(value, spec.min, spec.max),
+    ].join('\n'),
+  }
+}
+
+function withCallComparisonReason(
+  status: {status: LayoutCheckStatus; reason?: string},
+  left: Value,
+  op: ComparisonOperator,
+  right: Value,
+  text: string,
+): {status: LayoutCheckStatus; reason?: string} {
+  if (left.kind !== 'number' || right.kind !== 'number') return status
+  return {
+    ...status,
+    reason: [
+      `callee needs ${text}`,
+      `caller has ${formatRange(left)} ${op} ${formatRange(right)}`,
+      ...(status.reason == null ? [] : status.reason.split('\n')),
+    ].join('\n'),
   }
 }
 
@@ -973,10 +1017,10 @@ function proveRange(value: Value, min: number, max: number, requireInteger: bool
     if (lower.status === 'pass' && upper.status === 'pass' && (!requireInteger || value.isInteger)) return {status: 'pass'}
     return {
       status: 'fail',
-      reason: `range was ${formatRange(value)}, expected inside ${requireInteger ? 'int' : 'number'}[${min}, ${max}]`,
+      reason: rangeFailureReason(value, min, max, requireInteger, assumptions),
     }
   }
-  if (requireInteger && !value.isInteger) return {status: 'fail', reason: `range was ${formatRange(value)}, expected integer`}
+  if (requireInteger && !value.isInteger) return {status: 'fail', reason: `range was ${formatRange(value)}, expected integer\nneed: ${value.expr ?? formatRange(value)} to be integer`}
   return {status: 'pass'}
 }
 
@@ -1006,23 +1050,112 @@ function proveComparisonPlain(left: NumberValue, op: ComparisonOperator, right: 
   if (op === '==' && left.expr != null && right.expr != null && left.expr === right.expr) return {status: 'pass'}
   const truth = compareRanges(left, op, right)
   if (truth === 'true') return {status: 'pass'}
-  if (truth === 'false') return {status: 'fail', reason: `${formatRange(left)} ${op} ${formatRange(right)} is false`}
+  if (truth === 'false') return {status: 'fail', reason: comparisonFailureReason(left, op, right, assumptions, 'is false')}
   const linearTruth = compareLinear(left, op, right, assumptions)
   if (linearTruth === 'true') return {status: 'pass'}
-  if (linearTruth === 'false') return {status: 'fail', reason: `${formatRange(left)} ${op} ${formatRange(right)} is false by exact linear facts`}
-  return {status: 'unknown', reason: `${formatRange(left)} ${op} ${formatRange(right)} was not proven`}
+  if (linearTruth === 'false') return {status: 'fail', reason: comparisonFailureReason(left, op, right, assumptions, 'is false by exact linear facts')}
+  return {status: 'unknown', reason: comparisonFailureReason(left, op, right, assumptions, 'was not proven')}
 }
 
-function comparisonConstraint(left: NumberValue, op: ComparisonOperator, right: NumberValue): LinearConstraint | null {
+function rangeFailureReason(value: NumberValue, min: number, max: number, requireInteger: boolean, assumptions: LinearConstraint[]) {
+  const lines = [
+    `range was ${formatRange(value)}, expected inside ${requireInteger ? 'int' : 'number'}[${min}, ${max}]`,
+    `need: ${value.expr ?? formatRange(value)} inside ${requireInteger ? 'int' : 'number'}[${min}, ${max}]`,
+  ]
+  const known = knownProofContext(value, numberValue(min, max, requireInteger, `${min}..${max}`), assumptions)
+  if (known.length > 0) lines.push(`known:\n${known.map(line => `  ${line}`).join('\n')}`)
+  lines.push(...missingRangeBounds(value, min, max))
+  return lines.join('\n')
+}
+
+function missingRangeBounds(value: NumberValue, min: number, max: number) {
+  const name = value.expr ?? formatRange(value)
+  const missing: string[] = []
+  if (value.min < min) missing.push(`missing: ${name} >= ${min}`)
+  if (value.max > max) missing.push(`missing: ${name} <= ${max}`)
+  return missing
+}
+
+function comparisonFailureReason(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[], result: string) {
+  const lines = [
+    `${formatRange(left)} ${op} ${formatRange(right)} ${result}`,
+    `need: ${comparisonNeed(left, op, right)}`,
+  ]
+  const known = knownProofContext(left, right, assumptions)
+  if (known.length > 0) lines.push(`known:\n${known.map(line => `  ${line}`).join('\n')}`)
+  const missing = missingComparisonFact(left, op, right, assumptions)
+  lines.push(`missing: ${missing}`)
+  return lines.join('\n')
+}
+
+function comparisonNeed(left: NumberValue, op: ComparisonOperator, right: NumberValue) {
+  return `${left.expr ?? formatRange(left)} ${op} ${right.expr ?? formatRange(right)}`
+}
+
+function knownProofContext(left: NumberValue, right: NumberValue, assumptions: LinearConstraint[]) {
+  const lines = [formatRange(left), formatRange(right)]
+  for (const assumption of assumptions) {
+    lines.push(assumption.text ?? formatLinearConstraint(assumption))
+    if (lines.length >= 12) break
+  }
+  return [...new Set(lines)]
+}
+
+function missingComparisonFact(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]) {
+  const missingLinear = missingLinearFact(left, op, right, assumptions)
+  if (missingLinear != null) return missingLinear
+  return `given ${comparisonNeed(left, op, right)}`
+}
+
+function missingLinearFact(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]) {
+  const diff = comparisonDiff(left, op, right)
+  if (diff == null) return null
+  const target = cleanLinear(diff)
+  for (const fact of assumptions.filter(assumption => assumption.source !== 'range').flatMap(nonNegativeFacts)) {
+    for (const scale of reductionScales(target, fact.diff)) {
+      const scaledFact = linearScaleExact(fact.diff, scale)
+      const remainder = linearSubtract(target, scaledFact)
+      if (remainder == null || sameLinear(remainder, target)) continue
+      const missing = singleLinearBound(remainder)
+      if (missing != null) return missing
+    }
+  }
+  return null
+}
+
+function comparisonDiff(left: NumberValue, op: ComparisonOperator, right: NumberValue): LinearExpr | null {
+  switch (op) {
+    case '==':
+      return null
+    case '>=':
+    case '>':
+      return linearSubtract(left.linear, right.linear)
+    case '<=':
+    case '<':
+      return linearSubtract(right.linear, left.linear)
+  }
+}
+
+function singleLinearBound(linear: LinearExpr) {
+  const clean = cleanLinear(linear)
+  if (clean.constant !== 0 || clean.terms.size !== 1) return null
+  const first = [...clean.terms.entries()][0]
+  if (first == null) return null
+  const [name, coefficient] = first
+  if (coefficient === 0) return null
+  return coefficient > 0 ? `${name} >= 0` : `${name} <= 0`
+}
+
+function comparisonConstraint(left: NumberValue, op: ComparisonOperator, right: NumberValue, text?: string, source: LinearConstraint['source'] = 'derived'): LinearConstraint | null {
   const diff = linearSubtract(left.linear, right.linear)
-  return diff == null ? null : {diff, op}
+  return diff == null ? null : {diff, op, source, ...(text == null ? {} : {text})}
 }
 
 function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'given-comparison'}>, context: EvalContext): LinearConstraint | null {
   const left = evaluateSpecExpression(spec.left, context)
   const right = evaluateSpecExpression(spec.right, context)
   if (left.kind !== 'number' || right.kind !== 'number') return null
-  return comparisonConstraint(left, spec.op, right)
+  return comparisonConstraint(left, spec.op, right, spec.text, 'comparison')
 }
 
 function rangeFactsFromValue(value: Value, min: number, max: number): LinearConstraint[] {
@@ -1030,8 +1163,8 @@ function rangeFactsFromValue(value: Value, min: number, max: number): LinearCons
   const minDiff = linearSubtract(value.linear, linearConstant(min))
   const maxDiff = linearSubtract(linearConstant(max), value.linear)
   const facts: LinearConstraint[] = []
-  if (minDiff != null) facts.push({diff: minDiff, op: '>='})
-  if (maxDiff != null) facts.push({diff: maxDiff, op: '>='})
+  if (minDiff != null) facts.push({diff: minDiff, op: '>=', text: `${value.expr ?? formatLinear(value.linear)} >= ${min}`, source: 'range'})
+  if (maxDiff != null) facts.push({diff: maxDiff, op: '>=', text: `${value.expr ?? formatLinear(value.linear)} <= ${max}`, source: 'range'})
   return facts
 }
 
@@ -1064,7 +1197,7 @@ function provesNonNegative(diff: LinearExpr, strict: boolean, assumptions: Linea
 function reduceToNonNegative(
   diff: LinearExpr,
   strict: boolean,
-  facts: Array<{diff: LinearExpr; strict: boolean}>,
+  facts: NonNegativeFact[],
   depth: number,
   seen: Set<string>,
 ): boolean {
@@ -1091,22 +1224,26 @@ function reduceToNonNegative(
   return false
 }
 
-function nonNegativeFacts(assumption: LinearConstraint): Array<{diff: LinearExpr; strict: boolean}> {
+function nonNegativeFacts(assumption: LinearConstraint): NonNegativeFact[] {
   switch (assumption.op) {
     case '==':
       return [
-        {diff: assumption.diff, strict: false},
-        {diff: linearScaleExact(assumption.diff, -1), strict: false},
+        nonNegativeFact(assumption.diff, false, assumption.text),
+        nonNegativeFact(linearScaleExact(assumption.diff, -1), false, assumption.text == null ? undefined : `${assumption.text} reversed`),
       ]
     case '>=':
-      return [{diff: assumption.diff, strict: false}]
+      return [nonNegativeFact(assumption.diff, false, assumption.text)]
     case '<=':
-      return [{diff: linearScaleExact(assumption.diff, -1), strict: false}]
+      return [nonNegativeFact(linearScaleExact(assumption.diff, -1), false, assumption.text)]
     case '>':
-      return [{diff: assumption.diff, strict: true}]
+      return [nonNegativeFact(assumption.diff, true, assumption.text)]
     case '<':
-      return [{diff: linearScaleExact(assumption.diff, -1), strict: true}]
+      return [nonNegativeFact(linearScaleExact(assumption.diff, -1), true, assumption.text)]
   }
+}
+
+function nonNegativeFact(diff: LinearExpr, strict: boolean, text?: string): NonNegativeFact {
+  return {diff, strict, ...(text == null ? {} : {text})}
 }
 
 function nonNumberReason(value: ObjectValue | ArrayValue | UnknownValue) {
@@ -1368,4 +1505,41 @@ function formatRange(value: NumberValue) {
   const kind = value.isInteger ? 'int' : 'number'
   const expr = value.expr == null ? '' : ` as ${value.expr}`
   return `${kind}[${value.min}, ${value.max}]${expr}`
+}
+
+function formatLinearConstraint(constraint: LinearConstraint) {
+  switch (constraint.op) {
+    case '>=':
+      return `${formatLinear(constraint.diff)} >= 0`
+    case '>':
+      return `${formatLinear(constraint.diff)} > 0`
+    case '<=':
+      return `${formatLinear(constraint.diff)} <= 0`
+    case '<':
+      return `${formatLinear(constraint.diff)} < 0`
+    case '==':
+      return `${formatLinear(constraint.diff)} == 0`
+  }
+}
+
+function formatLinear(linear: LinearExpr | null) {
+  if (linear == null) return '<nonlinear>'
+  const clean = cleanLinear(linear)
+  const parts: string[] = []
+  for (const [name, coefficient] of [...clean.terms.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    parts.push(formatLinearTerm(coefficient, name, parts.length === 0))
+  }
+  if (clean.constant !== 0 || parts.length === 0) parts.push(formatLinearTerm(clean.constant, '', parts.length === 0))
+  return parts.join(' ')
+}
+
+function formatLinearTerm(coefficient: number, name: string, first: boolean) {
+  const sign = coefficient < 0 ? '-' : '+'
+  const amount = Math.abs(coefficient)
+  const body = name.length === 0 ? formatNumber(amount) : amount === 1 ? name : `${formatNumber(amount)} * ${name}`
+  return first ? (sign === '-' ? `-${body}` : body) : `${sign} ${body}`
+}
+
+function formatNumber(value: number) {
+  return Number.isInteger(value) ? `${value}` : `${value}`
 }
