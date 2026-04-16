@@ -57,16 +57,16 @@ export type ComparisonOperator = '==' | '>=' | '<=' | '>' | '<'
 const identifierPattern = '[A-Za-z_$][\\w$]*'
 const domainPathPattern = new RegExp(`${identifierPattern}(?:(?:\\.${identifierPattern})|(?:\\[\\]))+`, 'g')
 
-export function parseLayoutSpecs(sourceText: string, node: ts.Node): LayoutSpec[] {
+export function parseLayoutSpecs(sourceText: string, node: ts.Node, marker = '@layout'): LayoutSpec[] {
   const commentRanges = ts.getLeadingCommentRanges(sourceText, node.pos) ?? []
   const specs: LayoutSpec[] = []
 
   for (const range of commentRanges) {
     const comment = sourceText.slice(range.pos, range.end)
-    if (!comment.includes('@layout')) continue
     const lines = comment.split(/\r?\n/).map(cleanCommentLine)
+    if (!lines.some(line => line === marker)) continue
     for (const line of lines) {
-      if (line.length === 0 || line === '@layout') continue
+      if (line.length === 0 || line === marker) continue
       if (line.startsWith('@layout')) continue
       specs.push(parseLayoutSpecLine(line))
     }

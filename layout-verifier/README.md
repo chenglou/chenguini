@@ -40,6 +40,30 @@ This is not prose. Unsupported lines are parser errors.
 
 `given` lines are input assumptions. Bare lines are facts the checker must prove.
 
+Put a `@layout-loop` block immediately above a supported `for...of` when the fact belongs to that loop:
+
+```ts
+function stackRows(items: {height: number}[], top: number, gap: number) {
+  const rows = []
+  let y = top
+  /** @layout-loop
+   * given items[].height: number[0, 40]
+   * rows.length == items.length
+   * rows[].height: number[0, 40]
+   * monotone(rows.top)
+   * contiguousY(rows, gap)
+   * lastBottom(rows) == y - gap
+   */
+  for (const item of items) {
+    rows.push({top: y, height: item.height})
+    y += item.height + gap
+  }
+  return {rows, bottom: y - gap}
+}
+```
+
+Loop specs use the same language. `given` facts are trusted from that point forward. Bare lines are checked after the loop. Name local values directly; loop specs do not have `result`.
+
 ## Annotation Language
 
 Ranges:
@@ -129,7 +153,7 @@ The checker understands a small pure subset:
 - direct same-file function calls
 - object literals with normal or shorthand properties
 - array literals, array spread, `.length`, and bounded literal indexing
-- one append-only running-sum `for...of` loop shape
+- one append-only running-sum `for...of` loop shape, with optional `@layout-loop` facts
 
 Unsupported source becomes `unknown`; unsupported annotation syntax is an error.
 
@@ -294,7 +318,6 @@ Not supported yet:
 - destructured params, rest params, default params
 - TS type narrowing, generics, overloads
 - strings, booleans, unions, branded types
-- object precondition domains like `row.height: number[0, 40]`
 - geometry atoms: `rectInside`, `rectEquals`, `nonOverlapX`, `nonOverlapY`
 - Pretext text facts
 - table/grid/flex column negotiation

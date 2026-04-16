@@ -261,6 +261,31 @@ export function runningSumLoopPerItemHeight(items: {height: number}[], top: numb
 }
 
 /** @layout
+ * given items.length: int[1, 50]
+ * given top: number[0, 1000]
+ * given gap: number[0, 10]
+ * result.bottom >= top
+ * result.rows.length == items.length
+ */
+export function localLoopAnnotation(items: {height: number}[], top: number, gap: number) {
+  const rows = []
+  let y = top
+  /** @layout-loop
+   * given items[].height: number[0, 40]
+   * rows.length == items.length
+   * rows[].height: number[0, 40]
+   * monotone(rows.top)
+   * contiguousY(rows, gap)
+   * lastBottom(rows) == y - gap
+   */
+  for (const item of items) {
+    rows.push({top: y, height: item.height})
+    y += item.height + gap
+  }
+  return {rows, bottom: y - gap}
+}
+
+/** @layout
  * given width: number[0, 1000]
  * result.capped: number[0, 320]
  * result.overflow >= 0

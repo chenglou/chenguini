@@ -195,6 +195,25 @@ export function negativeRunningSumPerItemHeightNeedsNonNegative(items: {height: 
 }
 
 /** @layout
+ * given items.length: int[1, 50]
+ * given top: number[0, 1000]
+ * result.rows.length == items.length
+ */
+export function negativeLocalLoopAnnotationNeedsNonNegativeItem(items: {height: number}[], top: number) {
+  const rows = []
+  let y = top
+  /** @layout-loop
+   * given items[].height: number[-40, 40]
+   * monotone(rows.top)
+   */
+  for (const item of items) {
+    rows.push({top: y, height: item.height})
+    y += item.height
+  }
+  return {rows, bottom: y}
+}
+
+/** @layout
  * given value: number[0, 10]
  * result: number[0, 10]
  */

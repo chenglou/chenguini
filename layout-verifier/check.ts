@@ -43,6 +43,7 @@ export type LayoutCheckReport = {
 
 type Program = {
   sourceFile: ts.SourceFile
+  sourceText: string
   globals: Map<string, NumberValue>
   functions: Map<string, ts.FunctionDeclaration>
   specsByFunction: Map<string, LayoutSpec[]>
@@ -181,7 +182,7 @@ function buildProgram(sourceFile: ts.SourceFile, sourceText: string): Program {
     }
   }
 
-  return {sourceFile, globals, functions, specsByFunction}
+  return {sourceFile, sourceText, globals, functions, specsByFunction}
 }
 
 function verifyFunctionSpecs(
@@ -211,7 +212,7 @@ function verifyFunctionSpecs(
 
   for (const spec of specs) {
     if (spec.kind === 'given-range' || spec.kind === 'given-comparison') continue
-    checks.push(verifyCheckSpec(file, program, functionName, env, result, spec, checks, assumptions))
+    checks.push(verifyCheckSpec(file, program, functionName, env, result, spec, checks, context.assumptions))
   }
 
   return checks
@@ -487,7 +488,9 @@ function evaluateFunctionBody(fn: ts.FunctionDeclaration, context: EvalContext):
   if (fn.body == null) return unknown(`Function ${fn.name?.text ?? '<anonymous>'} has no body`)
   const localEnv = new Map(context.env)
   const localContext: EvalContext = {...context, env: localEnv}
-  return evaluateStatements(fn.body.statements, localContext)
+  const result = evaluateStatements(fn.body.statements, localContext)
+  context.assumptions = localContext.assumptions
+  return result
 }
 
 function evaluateStatements(statements: ts.NodeArray<ts.Statement>, context: EvalContext, startIndex = 0): Value {
@@ -594,6 +597,9 @@ function evaluateBranchStatement(statement: ts.Statement, context: EvalContext):
 }
 
 function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalContext): Value | null {
+  const localSpecs = parseLayoutSpecs(context.program.sourceText, statement, '@layout-loop')
+  applyLocalGivenSpecs(localSpecs, context)
+
   if (!ts.isVariableDeclarationList(statement.initializer)) return unknown('Only for-of variable declarations are supported')
   const declaration = statement.initializer.declarations[0]
   if (declaration == null || !ts.isIdentifier(declaration.name)) return unknown('Only simple for-of variables are supported')
@@ -650,7 +656,37 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
     })
   }
 
+  verifyLocalLoopSpecs(localSpecs, context)
+
   return null
+}
+
+function applyLocalGivenSpecs(specs: LayoutSpec[], context: EvalContext) {
+  for (const spec of specs) {
+    if (spec.kind !== 'given-range') continue
+    applyGivenRangeSpec(context.env, spec)
+  }
+  const assumptions = collectComparisonAssumptions(context.file, context.program, context.stack.at(-1) ?? '<unknown>', context.env, specs)
+  context.assumptions = mergeAssumptions(context.assumptions, assumptions)
+}
+
+function verifyLocalLoopSpecs(specs: LayoutSpec[], context: EvalContext) {
+  if (specs.length === 0) return
+  const functionName = `${context.stack.at(-1) ?? '<unknown>'} > loop`
+  const loopResult = unknown('Loop annotations do not have result; name local values directly')
+  for (const spec of specs) {
+    if (spec.kind === 'given-range' || spec.kind === 'given-comparison') continue
+    context.checks.push(verifyCheckSpec(
+      context.file,
+      context.program,
+      functionName,
+      context.env,
+      loopResult,
+      spec,
+      context.checks,
+      context.assumptions,
+    ))
+  }
 }
 
 type LoopPush = {

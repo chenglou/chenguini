@@ -89,6 +89,26 @@ Good spec:
  */
 ```
 
+If a fact really belongs to a loop, put it on the loop:
+
+```ts
+const rows = []
+let y = top
+/** @layout-loop
+ * given items[].height: number[0, 40]
+ * rows.length == items.length
+ * monotone(rows.top)
+ * contiguousY(rows, gap)
+ * lastBottom(rows) == y - gap
+ */
+for (const item of items) {
+  rows.push({top: y, height: item.height})
+  y += item.height + gap
+}
+```
+
+This is the same spec language, just closer to the code that earns it. Loop `given` facts are still trusted assumptions, and loop checks name locals directly instead of `result`.
+
 The checker can learn `contiguousY` by recognizing the running `y` loop. If it cannot, it reports `unknown`. Do not rewrite the app into `contiguousYBuilder(...)` just to satisfy the checker.
 
 Relational preconditions should read like the layout fact they mean:

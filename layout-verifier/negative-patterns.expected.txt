@@ -142,6 +142,9 @@ UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumPerItemHeightNeed
 UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumPerItemHeightNeedsNonNegative: monotone(result.rows.top)
   monotone(result.rows.top) was not inferred
   known: contiguousY(0), lastBottom = number[-Infinity, Infinity] as runningSum(top, items.length, items[].height)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeLocalLoopAnnotationNeedsNonNegativeItem > loop: monotone(rows.top)
+  monotone(rows.top) was not inferred
+  known: contiguousY(0), lastBottom = number[-Infinity, Infinity] as runningSum(top, items.length, items[].height)
 FAIL layout-verifier/negative-patterns.ts:negativeCallGiven: call negativeNeedsSmallValue(value): given value: number[0, 10]
   caller has number[0, 20] as value
   callee needs value: number[0, 10]

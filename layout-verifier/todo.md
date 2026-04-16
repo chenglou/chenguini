@@ -16,7 +16,7 @@
 - If geometry atoms land, support field naming without forcing one app shape too hard. `x/y/w/h` vs `x/y/width/height` should be a deliberate choice, not an accident.
 - Improve geometry messages once geometry exists. A failed inside check should name the edge, e.g. `child.x + child.w <= parent.x + parent.w`.
 - Add module/import summaries. Same-file inlining is enough for now, but real helper libraries need summaries across files.
-- Make top-level assumptions loud in machine output. A contextless caller should see which `given` facts were trusted, not proved.
+- Make top-level and loop-local assumptions loud in machine output. A contextless caller should see which `given` facts were trusted, not proved.
 - Add Pretext-facing text facts: line width fits offered width, fragments are ordered, fragments cover a text range, line ranges cover rendered text, and selection rects reuse paint fragments.
 - Add column/row width reasoning only after array/object domains exist: table columns, grids, flex-like width negotiation, and cells spanning multiple columns.
 - Keep failure messages improving as the proof surface grows. Missing facts should point at the smallest useful assumption, e.g. `padding >= 0`.
@@ -40,6 +40,9 @@
 - Parameters must be simple names. No destructuring, rest params, or defaults.
 - The checker only handles the small pure subset it can inline. Side effects are still out, except the recognized append-only running-sum loop.
 - Top-level `given` lines are still assumptions unless a same-file caller proves them.
+- `@layout-loop` is only attached to supported `for...of` loops.
+- Loop specs can name locals after the loop, but they do not have `result`.
+- Loop-local `given` facts are trusted from that point forward. They are not proved against the earlier function state yet.
 - Math choice facts are local and bounded. They prove immediate `Math.min` / `Math.max` / clamp relations, not full branch correlation across arbitrary fields.
 - Integer helper facts are narrow known shapes, e.g. `ceil(total / count) * count >= total`, `floor(pointer / cellSize) < count`, and `index % count < count`, not a general nonlinear arithmetic solver.
 - Positive scale/divide facts only preserve order through matching expressions with a known non-negative or positive factor. They are not polynomial reasoning.
