@@ -8,8 +8,8 @@
 
 ## Next Work
 
-- Add per-item domains, e.g. `items[].height: number[0, 40]`, so running-sum loops can use `item.height` instead of only scalar `rowHeight`.
-- Add object element domains, e.g. rows with known `top`, `height`, `left`, `width`. This is the real unlock for richer arrays and geometry.
+- Add relational per-item domains, e.g. `cells[].start + cells[].span <= columnCount`, so table/grid indexing can avoid new atoms.
+- Support nested wildcard paths in comparisons, e.g. `params.rows[].height >= params.minRowHeight`.
 - Extend append-only array inference beyond the first running-sum loop: `push`, conditional push, append length, and facts that survive simple branches.
 - Handle empty-list `lastBottom`. Today `lastBottom(rows)` needs a non-empty input length.
 - Decide the smallest geometry surface. First try plain field comparisons like `child.x >= parent.x` and `child.x + child.w <= parent.x + parent.w`; add `rectInside(child, parent)` only if the repeated shape deserves a name.
@@ -45,9 +45,8 @@
 - Positive scale/divide facts only preserve order through matching expressions with a known non-negative or positive factor. They are not polynomial reasoning.
 - Branch facts only flow through ternaries and return-style `if` guards.
 - The array domain only tracks `.length`, literal elements, spread append length, running-sum sequence facts, and numeric index bounds.
-- No `items[].height`, `rows[].height`, or object element precondition domains yet.
+- Per-item domains support simple field/range facts like `items[].height: number[0, 40]`, but not relational per-item facts yet.
 - Running-sum `lastBottom` currently needs a non-empty input length.
-- Running-sum loops do not yet read per-item domains such as `items[].height`.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.
 - No overloads, generics, TS type narrowing, or type-system integration.

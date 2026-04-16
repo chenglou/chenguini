@@ -1,5 +1,15 @@
 import * as ts from 'typescript'
-import {parseExpression, parseLayoutSpecs, type ComparisonOperator, type LayoutSpec} from './parser.ts'
+import {
+  domainPathSyntheticName,
+  parseDomainPathText,
+  parseExpression,
+  parseLayoutExpression,
+  parseLayoutSpecs,
+  type ComparisonOperator,
+  type LayoutDomainPath,
+  type LayoutDomainPathSegment,
+  type LayoutSpec,
+} from './parser.ts'
 
 export type LayoutCheckStatus = 'pass' | 'fail' | 'unknown'
 
@@ -51,6 +61,7 @@ type ArrayValue = {
   kind: 'array'
   length: NumberValue
   elements: Value[] | null
+  element: Value | null
   expr: string | null
   summary: ArraySummary | null
 }
@@ -176,7 +187,7 @@ function verifyFunctionSpecs(
 
   for (const param of fn.parameters) {
     if (!ts.isIdentifier(param.name)) continue
-    env.set(param.name.text, specMentionsArrayParam(param.name.text, specs) ? unknownArray(param.name.text) : unknownNumber(param.name.text))
+    env.set(param.name.text, unknownParamValue(param.name.text, specs))
   }
 
   for (const spec of specs) {
@@ -221,7 +232,15 @@ function collectComparisonAssumptions(
 }
 
 function applyGivenRangeSpec(env: Map<string, Value>, spec: Extract<LayoutSpec, {kind: 'given-range'}>) {
-  const value = numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.expression, linearVariable(spec.expression))
+  const value = numberValue(spec.min, spec.max, spec.valueKind === 'int', spec.expression, linearVariable(linearNameForExpression(spec.expression)))
+  if (spec.expression.includes('[]')) {
+    const domainPath = parseDomainPathText(spec.expression)
+    if (domainPath != null && domainPath.segments.length > 0) {
+      env.set(domainPath.root, setDomainPathValue(env.get(domainPath.root), domainPath.root, domainPath.segments, value))
+    }
+    return
+  }
+
   const expression = parseExpression(spec.expression)
   if (ts.isIdentifier(expression)) {
     env.set(expression.text, value)
@@ -229,24 +248,59 @@ function applyGivenRangeSpec(env: Map<string, Value>, spec: Extract<LayoutSpec, 
   }
 
   const lengthRoot = arrayLengthRoot(expression)
-  if (lengthRoot == null) return
-  const target = env.get(lengthRoot)
-  env.set(lengthRoot, target?.kind === 'array' ? {...target, length: value} : unknownArray(lengthRoot, value))
+  if (lengthRoot != null) {
+    const target = env.get(lengthRoot)
+    env.set(lengthRoot, target?.kind === 'array' ? {...target, length: value} : unknownArray(lengthRoot, value))
+    return
+  }
+
+  const domainPath = parseDomainPathText(spec.expression)
+  if (domainPath == null || domainPath.segments.length === 0) return
+  env.set(domainPath.root, setDomainPathValue(env.get(domainPath.root), domainPath.root, domainPath.segments, value))
 }
 
-function specMentionsArrayParam(name: string, specs: LayoutSpec[]) {
+function unknownParamValue(name: string, specs: LayoutSpec[]): Value {
+  const shape = specParamShape(name, specs)
+  if (shape === 'array') return unknownArray(name)
+  if (shape === 'object') return unknownObject(name)
+  return unknownNumber(name)
+}
+
+function specParamShape(name: string, specs: LayoutSpec[]): 'array' | 'object' | 'number' {
+  let shape: 'object' | 'number' = 'number'
   for (const spec of specs) {
     if (spec.kind === 'given-range' || spec.kind === 'check-range') {
-      if (expressionMentionsArrayParam(parseExpression(spec.expression), name)) return true
+      const next = specExpressionParamShape(spec.expression, name)
+      if (next === 'array') return 'array'
+      if (next === 'object') shape = 'object'
       continue
     }
     if (spec.kind === 'check-atom') {
-      if (spec.args.some(arg => expressionMentionsArrayParam(parseExpression(arg), name))) return true
+      for (const arg of spec.args) {
+        const next = specExpressionParamShape(arg, name)
+        if (next === 'array') return 'array'
+        if (next === 'object') shape = 'object'
+      }
       continue
     }
-    if (expressionMentionsArrayParam(parseExpression(spec.left), name) || expressionMentionsArrayParam(parseExpression(spec.right), name)) return true
+    for (const expression of [spec.left, spec.right]) {
+      const next = specExpressionParamShape(expression, name)
+      if (next === 'array') return 'array'
+      if (next === 'object') shape = 'object'
+    }
   }
-  return false
+  return shape
+}
+
+function specExpressionParamShape(text: string, name: string): 'array' | 'object' | 'number' {
+  const parsed = parseLayoutExpression(text)
+  for (const domainPath of parsed.domainPaths.values()) {
+    if (domainPath.root !== name) continue
+    return domainPath.segments[0]?.kind === 'item' ? 'array' : 'object'
+  }
+  if (expressionMentionsArrayParam(parsed.expression, name)) return 'array'
+  if (expressionMentionsObjectParam(parsed.expression, name)) return 'object'
+  return 'number'
 }
 
 function expressionMentionsArrayParam(expression: ts.Expression, name: string): boolean {
@@ -256,6 +310,15 @@ function expressionMentionsArrayParam(expression: ts.Expression, name: string): 
 
   for (const child of expression.getChildren()) {
     if (ts.isExpression(child) && expressionMentionsArrayParam(child, name)) return true
+  }
+  return false
+}
+
+function expressionMentionsObjectParam(expression: ts.Expression, name: string): boolean {
+  if (ts.isPropertyAccessExpression(expression) && expressionRootNameDeep(expression.expression) === name) return true
+
+  for (const child of expression.getChildren()) {
+    if (ts.isExpression(child) && expressionMentionsObjectParam(child, name)) return true
   }
   return false
 }
@@ -270,6 +333,57 @@ function expressionRootName(expression: ts.Expression): string | null {
   if (ts.isIdentifier(expression)) return expression.text
   if (ts.isParenthesizedExpression(expression)) return expressionRootName(expression.expression)
   return null
+}
+
+function expressionRootNameDeep(expression: ts.Expression): string | null {
+  if (ts.isIdentifier(expression)) return expression.text
+  if (ts.isParenthesizedExpression(expression)) return expressionRootNameDeep(expression.expression)
+  if (ts.isPropertyAccessExpression(expression)) return expressionRootNameDeep(expression.expression)
+  return null
+}
+
+function setDomainPathValue(current: Value | undefined, expr: string, segments: LayoutDomainPathSegment[], value: Value): Value {
+  const segment = segments[0]
+  if (segment == null) return value
+
+  if (segment.kind === 'prop') {
+    const base = current?.kind === 'object' ? current : unknownObject(expr)
+    const props = new Map(base.props)
+    const propExpr = `${expr}.${segment.name}`
+    props.set(segment.name, setDomainPathValue(props.get(segment.name), propExpr, segments.slice(1), value))
+    return {...base, props}
+  }
+
+  const base = current?.kind === 'array' ? current : unknownArray(expr)
+  return {
+    ...base,
+    element: setDomainPathValue(base.element ?? undefined, `${expr}[]`, segments.slice(1), value),
+  }
+}
+
+function evaluateDomainPath(domainPath: LayoutDomainPath, context: EvalContext): Value {
+  const root = context.env.get(domainPath.root) ?? unknown(`Unknown identifier ${domainPath.root}`)
+  return evaluateDomainPathSegments(root, domainPath.root, domainPath.segments)
+}
+
+function evaluateDomainPathSegments(current: Value, expr: string, segments: LayoutDomainPathSegment[]): Value {
+  const segment = segments[0]
+  if (segment == null) return current
+
+  if (segment.kind === 'item') {
+    if (current.kind !== 'array') return unknown(`${expr} expected an array`)
+    const item = current.element ?? (segments[1]?.kind === 'prop' ? unknownObject(`${expr}[]`) : unknownNumber(`${expr}[]`))
+    return evaluateDomainPathSegments(item, `${expr}[]`, segments.slice(1))
+  }
+
+  if (current.kind === 'array' && segment.name === 'length') {
+    return evaluateDomainPathSegments(current.length, `${expr}.length`, segments.slice(1))
+  }
+  if (current.kind === 'object') {
+    const prop = current.props.get(segment.name) ?? (current.expr == null ? unknown(`Unknown property ${segment.name}`) : unknownNumber(`${current.expr}.${segment.name}`))
+    return evaluateDomainPathSegments(prop, `${expr}.${segment.name}`, segments.slice(1))
+  }
+  return unknown(`${expr}.${segment.name} expected an object`)
 }
 
 function verifyCheckSpec(
@@ -313,8 +427,12 @@ function verifyCheckSpec(
 }
 
 function evaluateSpecExpression(text: string, context: EvalContext): Value {
-  const expression = parseExpression(text)
-  return evaluateExpression(expression, context)
+  const parsed = parseLayoutExpression(text)
+  if (parsed.domainPaths.size === 0) return evaluateExpression(parsed.expression, context)
+
+  const env = new Map(context.env)
+  for (const [name, domainPath] of parsed.domainPaths) env.set(name, evaluateDomainPath(domainPath, context))
+  return evaluateExpression(parsed.expression, {...context, env})
 }
 
 function verifyAtomSpec(file: string, functionName: string, spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): LayoutCheck {
@@ -475,22 +593,24 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
   if (!ts.isBlock(statement.statement)) return unknown('Only block for-of bodies are supported')
 
   const loopItemName = declaration.name.text
+  const loopItem = source.element ?? unknownObject(`${source.expr ?? statement.expression.getText(context.program.sourceFile)}[]`)
   const pushedArrays: LoopPush[] = []
   const pendingAdds = new Map<string, NumberValue>()
 
   for (const child of statement.statement.statements) {
+    const loopContext = {...context, env: new Map(context.env).set(loopItemName, loopItem)}
     if (ts.isExpressionStatement(child) && isPushCall(child.expression)) {
       const targetName = child.expression.expression.expression.text
       const target = context.env.get(targetName)
       if (target == null || target.kind !== 'array') return unknown(`${targetName}.push expected an array`)
-      pushedArrays.push({...readLoopPush(child.expression, context), arrayName: targetName, length: source.length})
+      pushedArrays.push({...readLoopPush(child.expression, loopContext), arrayName: targetName, length: source.length})
       continue
     }
 
     if (ts.isExpressionStatement(child) && ts.isBinaryExpression(child.expression) && child.expression.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) {
       if (!ts.isIdentifier(child.expression.left)) return unknown('Running-sum loop expected a simple += target')
       const targetName = child.expression.left.text
-      const increment = evaluateExpression(child.expression.right, {...context, env: new Map(context.env).set(loopItemName, unknown(`${loopItemName} value is not tracked`))})
+      const increment = evaluateExpression(child.expression.right, loopContext)
       if (increment.kind !== 'number') return unknown('Running-sum loop increment expected a number')
       pendingAdds.set(targetName, increment)
       continue
@@ -515,6 +635,8 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
     context.env.set(push.arrayName, {
       ...target,
       length: push.length,
+      elements: null,
+      element: push.element,
       summary: mergeArraySummary(target.summary, sequenceSummaryFromLoopPush(push, updates.get(push.topName ?? ''), context)),
     })
   }
@@ -525,18 +647,19 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
 type LoopPush = {
   arrayName: string
   length: NumberValue
+  element: Value | null
   topName: string | null
   height: NumberValue | null
 }
 
 function readLoopPush(expression: ts.CallExpression, context: EvalContext): Omit<LoopPush, 'arrayName' | 'length'> {
   const row = expression.arguments[0]
-  if (row == null || !ts.isObjectLiteralExpression(row)) return {topName: null, height: null}
+  if (row == null || !ts.isObjectLiteralExpression(row)) return {element: null, topName: null, height: null}
   const topExpression = objectPropertyExpression(row, 'top')
   const heightExpression = objectPropertyExpression(row, 'height')
   const topName = topExpression != null && ts.isIdentifier(topExpression) ? topExpression.text : null
   const height = heightExpression == null ? null : evaluateExpression(heightExpression, context)
-  return {topName, height: height?.kind === 'number' ? height : null}
+  return {element: evaluateExpression(row, context), topName, height: height?.kind === 'number' ? height : null}
 }
 
 function objectPropertyExpression(expression: ts.ObjectLiteralExpression, name: string): ts.Expression | null {
@@ -601,6 +724,7 @@ function evaluateExpression(expression: ts.Expression, context: EvalContext): Va
   if (ts.isCallExpression(expression)) return evaluateCall(expression, context)
   if (ts.isPropertyAccessExpression(expression)) return evaluatePropertyAccess(expression, context)
   if (ts.isElementAccessExpression(expression)) return evaluateElementAccess(expression, context)
+  if (ts.isNonNullExpression(expression)) return evaluateExpression(expression.expression, context)
   if (ts.isObjectLiteralExpression(expression)) return evaluateObjectLiteral(expression, context)
   if (ts.isArrayLiteralExpression(expression)) return evaluateArrayLiteral(expression, context)
   return unknown(`Unsupported expression: ${expression.getText(context.program.sourceFile)}`)
@@ -1018,7 +1142,7 @@ function evaluatePropertyAccess(expression: ts.PropertyAccessExpression, context
   const target = evaluateExpression(expression.expression, context)
   if (target.kind === 'array' && expression.name.text === 'length') return target.length
   if (target.kind !== 'object') return unknown(`Property access ${expression.name.text} expected an object`)
-  return target.props.get(expression.name.text) ?? unknown(`Unknown property ${expression.name.text}`)
+  return target.props.get(expression.name.text) ?? (target.expr == null ? unknown(`Unknown property ${expression.name.text}`) : unknownNumber(`${target.expr}.${expression.name.text}`))
 }
 
 function evaluateElementAccess(expression: ts.ElementAccessExpression, context: EvalContext): Value {
@@ -1030,7 +1154,7 @@ function evaluateElementAccess(expression: ts.ElementAccessExpression, context: 
   const lower = proveComparison(index, '>=', numberValue(0, 0, true, '0', linearConstant(0)), context.assumptions)
   const upper = proveComparison(index, '<', target.length, context.assumptions)
   if (lower.status !== 'pass' || upper.status !== 'pass') return unknown(`Array index ${formatRange(index)} was not proven inside length ${formatRange(target.length)}`)
-  if (target.elements == null) return unknown('Array element values are not tracked')
+  if (target.elements == null) return target.element ?? unknown('Array element values are not tracked')
   const start = Math.max(0, Math.ceil(index.min))
   const end = Math.min(target.elements.length - 1, Math.floor(index.max))
   if (start > end) return unknown(`Array index ${formatRange(index)} has no possible element`)
@@ -1058,6 +1182,7 @@ function evaluateObjectLiteral(expression: ts.ObjectLiteralExpression, context: 
 function evaluateArrayLiteral(expression: ts.ArrayLiteralExpression, context: EvalContext): Value {
   let length = numberValue(0, 0, true, '0', linearConstant(0))
   let elements: Value[] | null = []
+  let elementValue: Value | null = null
 
   for (const element of expression.elements) {
     if (ts.isSpreadElement(element)) {
@@ -1067,6 +1192,7 @@ function evaluateArrayLiteral(expression: ts.ArrayLiteralExpression, context: Ev
       if (nextLength.kind !== 'number') return nextLength
       length = nextLength
       elements = elements == null || spreadValue.elements == null ? null : [...elements, ...spreadValue.elements]
+      elementValue = mergeElementValue(elementValue, spreadValue.element)
       continue
     }
 
@@ -1075,9 +1201,10 @@ function evaluateArrayLiteral(expression: ts.ArrayLiteralExpression, context: Ev
     if (nextLength.kind !== 'number') return nextLength
     length = nextLength
     if (elements != null) elements.push(value)
+    elementValue = mergeElementValue(elementValue, value)
   }
 
-  return {kind: 'array', length, elements, expr: null, summary: null}
+  return {kind: 'array', length, elements, element: elementValue, expr: null, summary: null}
 }
 
 type Truth = 'true' | 'false' | 'maybe'
@@ -1229,6 +1356,7 @@ function proveMathLemma(left: NumberValue, op: ComparisonOperator, right: Number
   if ((op === '<' || op === '<=') && provesFloorDivisionBelowCount(left.expr, right, assumptions)) return 'true'
   if ((op === '<' || op === '<=') && provesModuloBelowDivisor(left.expr, right.expr, assumptions)) return 'true'
   if ((op === '>=' || op === '>') && provesRunningSumAtLeastStart(left.expr, right.expr, assumptions)) return op === '>=' ? 'true' : 'maybe'
+  if ((op === '>=' || op === '>') && provesRunningSumMinusTrailingGapAtLeastStart(left.expr, right.expr, assumptions)) return op === '>=' ? 'true' : 'maybe'
   if (provesPositiveMonotone(left.expr, op, right.expr, assumptions)) return 'true'
   return 'maybe'
 }
@@ -1272,6 +1400,26 @@ function provesRunningSumAtLeastStart(leftExpr: string, rightExpr: string, assum
   const args = callArgs(leftExpr, 'runningSum')
   if (args == null || args.length !== 3 || !sameExpressionText(args[0]!, rightExpr)) return false
   return provesExprNonNegative(args[1]!, false, assumptions) && provesExprNonNegative(args[2]!, false, assumptions)
+}
+
+function provesRunningSumMinusTrailingGapAtLeastStart(leftExpr: string, rightExpr: string, assumptions: LinearConstraint[]) {
+  const trailingGap = binaryExpression(leftExpr, '-')
+  if (trailingGap == null) return false
+  const args = callArgs(trailingGap.left, 'runningSum')
+  if (args == null || args.length !== 3 || !sameExpressionText(args[0]!, rightExpr)) return false
+  const count = args[1]!
+  const increment = args[2]!
+  const gap = trailingGap.right
+  if (!hasComparisonFact(count, '>=', '1', assumptions)) return false
+  if (!provesExprNonNegative(gap, false, assumptions)) return false
+  if (sameExpressionText(increment, gap)) return true
+  const incrementSum = binaryExpression(increment, '+')
+  if (incrementSum == null) return false
+  const base =
+    sameExpressionText(incrementSum.left, gap) ? incrementSum.right
+      : sameExpressionText(incrementSum.right, gap) ? incrementSum.left
+        : null
+  return base != null && provesExprNonNegative(base, false, assumptions)
 }
 
 function provesPositiveMonotone(leftExpr: string, op: ComparisonOperator, rightExpr: string, assumptions: LinearConstraint[]) {
@@ -1425,14 +1573,18 @@ function moduloExpression(text: string): {left: string; right: string} | null {
   return binaryExpression(text, '%')
 }
 
-function binaryExpression(text: string, op: '*' | '/' | '%'): {left: string; right: string} | null {
+function binaryExpression(text: string, op: '*' | '/' | '%' | '+' | '-'): {left: string; right: string} | null {
   const expression = unwrapExpression(parseExpression(text))
   if (!ts.isBinaryExpression(expression)) return null
   const expected = op === '*'
     ? ts.SyntaxKind.AsteriskToken
     : op === '/'
       ? ts.SyntaxKind.SlashToken
-      : ts.SyntaxKind.PercentToken
+      : op === '%'
+        ? ts.SyntaxKind.PercentToken
+        : op === '+'
+          ? ts.SyntaxKind.PlusToken
+          : ts.SyntaxKind.MinusToken
   if (expression.operatorToken.kind !== expected) return null
   return {left: expression.left.getText(), right: expression.right.getText()}
 }
@@ -1684,6 +1836,12 @@ function mergeArraySummary(left: ArraySummary | null, right: ArraySummary | null
   }
 }
 
+function mergeElementValue(left: Value | null, right: Value | null): Value | null {
+  if (left == null) return right
+  if (right == null) return left
+  return joinValues(left, right)
+}
+
 function sameArraySummary(left: ArraySummary | null, right: ArraySummary | null) {
   if (left === right) return true
   if (left == null || right == null) return false
@@ -1702,6 +1860,11 @@ function formatArraySummary(value: ArrayValue) {
   return lines.length === 0 ? 'no sequence facts' : lines.join(', ')
 }
 
+function linearNameForExpression(text: string) {
+  const domainPath = parseDomainPathText(text)
+  return domainPath?.segments.some(segment => segment.kind === 'item') === true ? domainPathSyntheticName(text) : text
+}
+
 function numberValue(min: number, max: number, isInteger: boolean, expr: string | null, linear: LinearExpr | null = null, cases: NumberCase[] | null = null): NumberValue {
   const clean = linear == null ? null : cleanLinear(linear)
   if (clean != null && clean.terms.size === 0 && Number.isFinite(clean.constant)) {
@@ -1717,16 +1880,25 @@ function unknownNumber(name: string): NumberValue {
     max: Number.POSITIVE_INFINITY,
     isInteger: false,
     expr: name,
-    linear: linearVariable(name),
+    linear: linearVariable(linearNameForExpression(name)),
     cases: null,
   }
 }
 
-function unknownArray(name: string, length: NumberValue = unknownNumber(`${name}.length`)): ArrayValue {
+function unknownObject(name: string): ObjectValue {
+  return {
+    kind: 'object',
+    props: new Map(),
+    expr: name,
+  }
+}
+
+function unknownArray(name: string, length: NumberValue = unknownNumber(`${name}.length`), element: Value | null = null): ArrayValue {
   return {
     kind: 'array',
     length,
     elements: null,
+    element,
     expr: name,
     summary: null,
   }
@@ -1767,6 +1939,7 @@ function valueWithAssumptions(value: Value, assumptions: LinearConstraint[]): Va
       ...value,
       length: valueWithAssumptions(value.length, assumptions) as NumberValue,
       elements: value.elements == null ? null : value.elements.map(element => valueWithAssumptions(element, assumptions)),
+      element: value.element == null ? null : valueWithAssumptions(value.element, assumptions),
       summary: value.summary == null ? null : {
         ...value.summary,
         lastBottom: value.summary.lastBottom == null ? null : valueWithAssumptions(value.summary.lastBottom, assumptions) as NumberValue,
@@ -2037,6 +2210,7 @@ function joinValues(left: Value, right: Value): Value {
       elements: left.elements != null && right.elements != null && left.elements.length === right.elements.length
         ? left.elements.map((leftElement, index) => joinValues(leftElement, right.elements![index]!))
         : null,
+      element: mergeElementValue(left.element, right.element),
       expr: left.expr != null && left.expr === right.expr ? left.expr : null,
       summary: sameArraySummary(left.summary, right.summary) ? left.summary : null,
     }

@@ -1,5 +1,19 @@
 import * as ts from 'typescript'
 
+export type LayoutDomainPath = {
+  root: string
+  segments: LayoutDomainPathSegment[]
+}
+
+export type LayoutDomainPathSegment =
+  | {kind: 'prop'; name: string}
+  | {kind: 'item'}
+
+export type ParsedLayoutExpression = {
+  expression: ts.Expression
+  domainPaths: Map<string, LayoutDomainPath>
+}
+
 export type LayoutSpec =
   | {
       kind: 'given-range'
@@ -39,6 +53,9 @@ export type LayoutSpec =
     }
 
 export type ComparisonOperator = '==' | '>=' | '<=' | '>' | '<'
+
+const identifierPattern = '[A-Za-z_$][\\w$]*'
+const domainPathPattern = new RegExp(`${identifierPattern}(?:(?:\\.${identifierPattern})|(?:\\[\\]))+`, 'g')
 
 export function parseLayoutSpecs(sourceText: string, node: ts.Node): LayoutSpec[] {
   const commentRanges = ts.getLeadingCommentRanges(sourceText, node.pos) ?? []
@@ -143,12 +160,56 @@ function parseCheckAtom(line: string): Extract<LayoutSpec, {kind: 'check-atom'}>
 }
 
 export function parseExpression(text: string): ts.Expression {
-  const sourceFile = ts.createSourceFile('layout-spec-expression.ts', `const value = ${text}`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  return parseLayoutExpression(text).expression
+}
+
+export function parseLayoutExpression(text: string): ParsedLayoutExpression {
+  const domainPaths = new Map<string, LayoutDomainPath>()
+  const sourceText = text.replace(domainPathPattern, match => {
+    if (!match.includes('[]')) return match
+    const domainPath = parseDomainPathText(match)
+    if (domainPath == null) return match
+    const synthetic = domainPathSyntheticName(match)
+    domainPaths.set(synthetic, domainPath)
+    return synthetic
+  })
+  const sourceFile = ts.createSourceFile('layout-spec-expression.ts', `const value = ${sourceText}`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const parseDiagnostics = (sourceFile as ts.SourceFile & {parseDiagnostics: readonly ts.Diagnostic[]}).parseDiagnostics
   if (parseDiagnostics.length > 0 || sourceFile.statements.length !== 1) throw new Error(`Could not parse @layout expression: ${text}`)
   const statement = sourceFile.statements[0]
   if (statement == null || !ts.isVariableStatement(statement)) throw new Error(`Could not parse @layout expression: ${text}`)
   const declaration = statement.declarationList.declarations[0]
   if (declaration == null || declaration.initializer == null) throw new Error(`Could not parse @layout expression: ${text}`)
-  return declaration.initializer
+  return {expression: declaration.initializer, domainPaths}
+}
+
+export function parseDomainPathText(text: string): LayoutDomainPath | null {
+  const match = new RegExp(`^(${identifierPattern})((?:\\.${identifierPattern}|\\[\\])*)$`).exec(text)
+  if (match == null) return null
+  const root = match[1]!
+  const suffix = match[2]!
+  const segments: LayoutDomainPathSegment[] = []
+  let index = 0
+  while (index < suffix.length) {
+    if (suffix.startsWith('[]', index)) {
+      segments.push({kind: 'item'})
+      index += 2
+      continue
+    }
+    if (suffix[index] !== '.') return null
+    const next = new RegExp(`^\\.(${identifierPattern})`).exec(suffix.slice(index))
+    if (next == null) return null
+    segments.push({kind: 'prop', name: next[1]!})
+    index += next[0].length
+  }
+  return {root, segments}
+}
+
+export function domainPathSyntheticName(text: string) {
+  const parts = text
+    .replaceAll('[]', '.__item')
+    .split('.')
+    .filter(part => part.length > 0)
+    .map(part => part.replace(/[^\w$]/g, '_'))
+  return `__layout_domain_${parts.join('_')}`
 }

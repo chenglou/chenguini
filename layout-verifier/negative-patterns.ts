@@ -160,6 +160,41 @@ export function negativeLastBottomNeedsHeightInRows(items: number[], top: number
 }
 
 /** @layout
+ * given item.height: number[-20, 40]
+ * result.height >= 0
+ */
+export function negativeObjectFieldDomainTooWide(item: {height: number}) {
+  return {height: item.height}
+}
+
+/** @layout
+ * given items.length: int[1, 50]
+ * given index: int[0, 49]
+ * given index < items.length
+ * result: number[0, 40]
+ */
+export function negativePerItemFieldNeedsDomain(items: {height: number}[], index: number) {
+  return items[index]!.height
+}
+
+/** @layout
+ * given items.length: int[1, 50]
+ * given items[].height: number[-40, 40]
+ * given top: number[0, 1000]
+ * result.bottom >= top
+ * monotone(result.rows.top)
+ */
+export function negativeRunningSumPerItemHeightNeedsNonNegative(items: {height: number}[], top: number) {
+  const rows = []
+  let y = top
+  for (const item of items) {
+    rows.push({top: y, height: item.height})
+    y += item.height
+  }
+  return {rows, bottom: y}
+}
+
+/** @layout
  * given value: number[0, 10]
  * result: number[0, 10]
  */

@@ -205,6 +205,62 @@ export function runningSumLoop(items: number[], top: number, step: number, gap: 
 }
 
 /** @layout
+ * given item.height: number[0, 40]
+ * given item.top: number[0, 1000]
+ * result.bottom >= item.top
+ * result.height: number[0, 40]
+ */
+export function objectFieldDomain(item: {top: number; height: number}) {
+  return {height: item.height, bottom: item.top + item.height}
+}
+
+/** @layout
+ * given child.x: number[0, 1000]
+ * given child.w: number[0, 500]
+ * given parent.x: number[0, 1000]
+ * given parent.w: number[0, 2000]
+ * given child.x >= parent.x
+ * given child.x + child.w <= parent.x + parent.w
+ * result.right <= parent.x + parent.w
+ */
+export function rectInsideAsFieldMath(child: {x: number; w: number}, parent: {x: number; w: number}) {
+  return {right: child.x + child.w, parentRight: parent.x + parent.w}
+}
+
+/** @layout
+ * given items.length: int[1, 50]
+ * given items[].height: number[0, 40]
+ * given index: int[0, 49]
+ * given index < items.length
+ * result: number[0, 40]
+ */
+export function indexedPerItemField(items: {height: number}[], index: number) {
+  return items[index]!.height
+}
+
+/** @layout
+ * given items.length: int[1, 50]
+ * given items[].height: number[0, 40]
+ * given top: number[0, 1000]
+ * given gap: number[0, 10]
+ * result.rows.length == items.length
+ * result.rows[].height: number[0, 40]
+ * result.bottom >= top
+ * monotone(result.rows.top)
+ * contiguousY(result.rows, gap)
+ * lastBottom(result.rows) == result.bottom
+ */
+export function runningSumLoopPerItemHeight(items: {height: number}[], top: number, gap: number) {
+  const rows = []
+  let y = top
+  for (const item of items) {
+    rows.push({top: y, height: item.height})
+    y += item.height + gap
+  }
+  return {rows, bottom: y - gap}
+}
+
+/** @layout
  * given width: number[0, 1000]
  * result.capped: number[0, 320]
  * result.overflow >= 0

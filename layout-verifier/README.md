@@ -205,7 +205,12 @@ It is not a full linear solver. It reduces a few known non-negative facts, bound
 Supported today:
 
 - `given items.length: int[0, 100]`
+- `given row.height: number[0, 40]`
+- `given items[]: number[0, 400]`
+- `given items[].height: number[0, 40]`
 - reading `items.length`
+- reading object fields with declared domains
+- reading `items[index].height` after `0 <= index < items.length`
 - array literal length
 - array literal element values
 - `[...items, value]` length
@@ -227,8 +232,7 @@ function keepIndex(items: number[], index: number) {
 
 Not supported yet:
 
-- `items[].height`
-- object element domains
+- relational per-item domains like `cells[].start + cells[].span <= columnCount`
 - general array mutation
 - arbitrary indexed values from unknown arrays
 
@@ -239,20 +243,21 @@ The first loop primitive is this shape:
 ```ts
 /** @layout
  * given items.length: int[1, 50]
+ * given items[].height: number[0, 40]
  * given top: number[0, 1000]
- * given rowHeight: number[0, 40]
  * given gap: number[0, 10]
  * result.rows.length == items.length
+ * result.rows[].height: number[0, 40]
  * monotone(result.rows.top)
  * contiguousY(result.rows, gap)
  * lastBottom(result.rows) == result.bottom
  */
-function stackRows(items: Item[], top: number, rowHeight: number, gap: number) {
+function stackRows(items: Item[], top: number, gap: number) {
   const rows = []
   let y = top
   for (const item of items) {
-    rows.push({top: y, height: rowHeight, source: item})
-    y += rowHeight + gap
+    rows.push({top: y, height: item.height, source: item})
+    y += item.height + gap
   }
   return {rows, bottom: y - gap}
 }
@@ -265,9 +270,9 @@ It proves:
 - `contiguousY(rows, gap)`, when the increment is `height + gap`
 - `lastBottom(rows)`, when the input length is known non-empty and each pushed row has `top` and `height`
 
-It also accepts `y += rowHeight`, which means `contiguousY(rows, 0)`.
+It also accepts a scalar row height and `y += rowHeight`, which means `contiguousY(rows, 0)`.
 
-It does not yet read `item.height` or prove facts about conditional rows.
+It does not yet prove facts about conditional rows.
 
 ## Results
 

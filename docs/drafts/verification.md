@@ -82,9 +82,9 @@ Good spec:
 
 ```ts
 /** @layout
- * given items[].height >= 0
- * given gap >= 0
- * sameLength(result, items)
+ * given items[].height: number[0, 1000]
+ * given gap: number[0, 100]
+ * result.length == items.length
  * contiguousY(result, gap)
  */
 ```
@@ -172,13 +172,13 @@ This layer knows `.length`, array literal length, literal indexing, spread appen
 const rows = []
 let y = top
 for (const item of items) {
-  rows.push({top: y, height: rowHeight, source: item})
-  y += rowHeight + gap
+  rows.push({top: y, height: item.height, source: item})
+  y += item.height + gap
 }
 return {rows, bottom: y - gap}
 ```
 
-This is enough to prove `rows.length == items.length`, `monotone(rows.top)`, `contiguousY(rows, gap)`, and `lastBottom(rows) == bottom`. The loop shape is still intentionally narrow. It handles scalar row heights, not yet `item.height` domains.
+This is enough to prove `rows.length == items.length`, `rows[].height` ranges, `monotone(rows.top)`, `contiguousY(rows, gap)`, and `lastBottom(rows) == bottom`. The loop shape is still intentionally narrow. It handles per-item field ranges, not conditional rows or relational per-item facts.
 
 ## Atoms
 
