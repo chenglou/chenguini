@@ -64,7 +64,49 @@ UNKNOWN layout-verifier/negative-patterns.ts:negativeFloorHitIndexNeedsUpperBoun
     cellSize <= 100
     count >= 1
     count <= 10
+    pointer >= (count * cellSize)
   missing: given floor((pointer / cellSize)) < count
+UNKNOWN layout-verifier/negative-patterns.ts:negativeScaleNeedsNonNegativeFactor: result.scaled <= result.limit
+  number[-2000, 2000] as (content * scale) <= number[-2000, 2000] as (available * scale) was not proven
+  need: (content * scale) <= (available * scale)
+  known:
+    number[-2000, 2000] as (content * scale)
+    number[-2000, 2000] as (available * scale)
+    content >= 0
+    content <= 1000
+    available >= 0
+    available <= 1000
+    scale >= -2
+    scale <= 2
+    given content <= available
+  missing: given (content * scale) <= (available * scale)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeModuloNeedsPositiveCount: result < count
+  Modulo is only supported for non-negative values and positive divisors
+UNKNOWN layout-verifier/negative-patterns.ts:negativeGuardNeedsReturnOnSmallSide: result >= minWidth
+  number[0, 1000] as width >= number[0, 1000] as minWidth was not proven
+  need: width >= minWidth
+  known:
+    number[0, 1000] as width
+    number[0, 1000] as minWidth
+    width >= 0
+    width <= 1000
+    minWidth >= 0
+    minWidth <= 1000
+    -minWidth + width <= 0
+  missing: given width >= minWidth
+UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumNeedsNonNegativeStep: result.bottom >= top
+  number[-Infinity, Infinity] as runningSum(top, items.length, step) >= number[0, 1000] as top was not proven
+  need: runningSum(top, items.length, step) >= top
+  known:
+    number[-Infinity, Infinity] as runningSum(top, items.length, step)
+    number[0, 1000] as top
+    items.length >= 0
+    items.length <= 50
+    top >= 0
+    top <= 1000
+    step >= -40
+    step <= 40
+  missing: given runningSum(top, items.length, step) >= top
 FAIL layout-verifier/negative-patterns.ts:negativeCallGiven: call negativeNeedsSmallValue(value): given value: number[0, 10]
   caller has number[0, 20] as value
   callee needs value: number[0, 10]

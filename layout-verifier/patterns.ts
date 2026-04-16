@@ -1,8 +1,6 @@
 // Runnable checker pattern specimen. `bun run verify:layout` must run this file.
 //
 // Queued patterns:
-// - running `y` loops
-// - `sameLength`
 // - `contiguousY`
 // - `monotone`
 // - `lastBottom`
@@ -137,6 +135,75 @@ export function ceilDivisionCoversTotal(total: number, count: number) {
 export function floorHitIndexInsideCount(pointer: number, cellSize: number, count: number) {
   const maxPointer = count * cellSize
   return pointer < maxPointer ? Math.floor(pointer / cellSize) : Math.floor(pointer / cellSize)
+}
+
+/** @layout
+ * given content: number[0, 1000]
+ * given available: number[0, 1000]
+ * given scale: number[0, 8]
+ * given content <= available
+ * result.scaled <= result.limit
+ * result.swapped <= result.limit
+ */
+export function positiveScaleKeepsOrder(content: number, available: number, scale: number) {
+  return {
+    scaled: content * scale,
+    swapped: scale * content,
+    limit: available * scale,
+  }
+}
+
+/** @layout
+ * given content: number[0, 1000]
+ * given available: number[0, 1000]
+ * given columns: int[1, 12]
+ * given content <= available
+ * result.cell <= result.maxCell
+ */
+export function positiveDivisionKeepsOrder(content: number, available: number, columns: number) {
+  return {
+    cell: content / columns,
+    maxCell: available / columns,
+  }
+}
+
+/** @layout
+ * given index: int[0, 10000]
+ * given count: int[1, 1000]
+ * result: int[0, 999]
+ * result < count
+ */
+export function moduloWrapsInsideCount(index: number, count: number) {
+  return index % count
+}
+
+/** @layout
+ * given width: number[0, 1000]
+ * given minWidth: number[0, 1000]
+ * result >= minWidth
+ */
+export function guardReturnKeepsMinimum(width: number, minWidth: number) {
+  if (width < minWidth) return minWidth
+  return width
+}
+
+/** @layout
+ * given items.length: int[0, 50]
+ * given top: number[0, 1000]
+ * given step: number[0, 40]
+ * given gap: number[0, 10]
+ * result.rows.length == items.length
+ * result.bottom: number[0, 3500]
+ * result.bottom >= top
+ */
+export function runningSumLoop(items: number[], top: number, step: number, gap: number) {
+  const rows = []
+  let y = top
+  for (const item of items) {
+    rows.push({top: y, source: item})
+    y += step + gap
+  }
+  return {rows, bottom: y}
 }
 
 /** @layout

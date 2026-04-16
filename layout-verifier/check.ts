@@ -440,17 +440,34 @@ function evaluateFunctionBody(fn: ts.FunctionDeclaration, context: EvalContext):
   if (fn.body == null) return unknown(`Function ${fn.name?.text ?? '<anonymous>'} has no body`)
   const localEnv = new Map(context.env)
   const localContext: EvalContext = {...context, env: localEnv}
+  return evaluateStatements(fn.body.statements, localContext)
+}
 
-  for (const statement of fn.body.statements) {
+function evaluateStatements(statements: ts.NodeArray<ts.Statement>, context: EvalContext, startIndex = 0): Value {
+  for (let index = startIndex; index < statements.length; index++) {
+    const statement = statements[index]!
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
-        bindVariableDeclaration(declaration, localContext)
+        bindVariableDeclaration(declaration, context)
       }
       continue
     }
+    if (ts.isForOfStatement(statement)) {
+      const result = evaluateForOfStatement(statement, context)
+      if (result != null) return result
+      continue
+    }
+    if (ts.isExpressionStatement(statement)) {
+      const result = applyExpressionStatement(statement.expression, context)
+      if (result != null) return result
+      continue
+    }
+    if (ts.isIfStatement(statement)) {
+      return evaluateIfStatement(statement, context, statements, index + 1)
+    }
     if (ts.isReturnStatement(statement)) {
       if (statement.expression == null) return unknown('Return without expression')
-      return evaluateExpression(statement.expression, localContext)
+      return evaluateExpression(statement.expression, context)
     }
     return unknown(`Unsupported statement in ${context.stack.at(-1) ?? '<unknown>'}: ${statement.getText(context.program.sourceFile)}`)
   }
@@ -465,6 +482,122 @@ function bindVariableDeclaration(declaration: ts.VariableDeclaration, context: E
     return
   }
   context.env.set(declaration.name.text, evaluateExpression(declaration.initializer, context))
+}
+
+function applyExpressionStatement(expression: ts.Expression, context: EvalContext): Value | null {
+  if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusEqualsToken) {
+    return unknown(`Unsupported expression statement: ${expression.getText(context.program.sourceFile)}`)
+  }
+  if (!ts.isIdentifier(expression.left)) return unknown(`Unsupported assignment target: ${expression.left.getText(context.program.sourceFile)}`)
+  const current = context.env.get(expression.left.text)
+  const increment = evaluateExpression(expression.right, context)
+  if (current == null || current.kind !== 'number' || increment.kind !== 'number') return unknown('+= expected numbers')
+  const next = evaluateNumberBinary(ts.SyntaxKind.PlusToken, current, increment)
+  context.env.set(expression.left.text, next)
+  return null
+}
+
+function evaluateIfStatement(statement: ts.IfStatement, context: EvalContext, statements: ts.NodeArray<ts.Statement>, nextIndex: number): Value {
+  const condition = evaluateConditionFacts(statement.expression, context)
+  if (condition.truth === 'true') return evaluateBranchStatement(statement.thenStatement, context)
+  if (condition.truth === 'false') {
+    return statement.elseStatement == null ? evaluateStatements(statements, context, nextIndex) : evaluateBranchStatement(statement.elseStatement, context)
+  }
+
+  const trueValue = valueWithAssumptions(
+    evaluateBranchStatement(statement.thenStatement, contextWithAssumptions(context, condition.trueAssumptions)),
+    condition.trueAssumptions,
+  )
+  const falseValue = statement.elseStatement == null
+    ? valueWithAssumptions(
+      evaluateStatements(statements, contextWithAssumptions(context, condition.falseAssumptions), nextIndex),
+      condition.falseAssumptions,
+    )
+    : valueWithAssumptions(
+      evaluateBranchStatement(statement.elseStatement, contextWithAssumptions(context, condition.falseAssumptions)),
+      condition.falseAssumptions,
+    )
+  return joinValues(trueValue, falseValue)
+}
+
+function evaluateBranchStatement(statement: ts.Statement, context: EvalContext): Value {
+  if (ts.isReturnStatement(statement)) {
+    if (statement.expression == null) return unknown('Return without expression')
+    return evaluateExpression(statement.expression, context)
+  }
+  if (!ts.isBlock(statement)) return unknown(`Unsupported branch statement: ${statement.getText(context.program.sourceFile)}`)
+  const localContext: EvalContext = {...context, env: new Map(context.env)}
+  for (const child of statement.statements) {
+    if (ts.isVariableStatement(child)) {
+      for (const declaration of child.declarationList.declarations) bindVariableDeclaration(declaration, localContext)
+      continue
+    }
+    if (ts.isExpressionStatement(child)) {
+      const result = applyExpressionStatement(child.expression, localContext)
+      if (result != null) return result
+      continue
+    }
+    if (ts.isReturnStatement(child)) {
+      if (child.expression == null) return unknown('Return without expression')
+      return evaluateExpression(child.expression, localContext)
+    }
+    return unknown(`Unsupported branch statement: ${child.getText(context.program.sourceFile)}`)
+  }
+  return unknown('Branch did not return')
+}
+
+function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalContext): Value | null {
+  if (!ts.isVariableDeclarationList(statement.initializer)) return unknown('Only for-of variable declarations are supported')
+  const declaration = statement.initializer.declarations[0]
+  if (declaration == null || !ts.isIdentifier(declaration.name)) return unknown('Only simple for-of variables are supported')
+  const source = evaluateExpression(statement.expression, context)
+  if (source.kind !== 'array') return unknown('For-of source expected an array')
+  if (!ts.isBlock(statement.statement)) return unknown('Only block for-of bodies are supported')
+
+  const loopItemName = declaration.name.text
+  const pushedArrays = new Map<string, NumberValue>()
+  const pendingAdds = new Map<string, NumberValue>()
+
+  for (const child of statement.statement.statements) {
+    if (ts.isExpressionStatement(child) && isPushCall(child.expression)) {
+      const targetName = child.expression.expression.expression.text
+      const target = context.env.get(targetName)
+      if (target == null || target.kind !== 'array') return unknown(`${targetName}.push expected an array`)
+      pushedArrays.set(targetName, source.length)
+      continue
+    }
+
+    if (ts.isExpressionStatement(child) && ts.isBinaryExpression(child.expression) && child.expression.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) {
+      if (!ts.isIdentifier(child.expression.left)) return unknown('Running-sum loop expected a simple += target')
+      const targetName = child.expression.left.text
+      const increment = evaluateExpression(child.expression.right, {...context, env: new Map(context.env).set(loopItemName, unknown(`${loopItemName} value is not tracked`))})
+      if (increment.kind !== 'number') return unknown('Running-sum loop increment expected a number')
+      pendingAdds.set(targetName, increment)
+      continue
+    }
+
+    return unknown(`Unsupported for-of body statement: ${child.getText(context.program.sourceFile)}`)
+  }
+
+  for (const [targetName, length] of pushedArrays) {
+    const target = context.env.get(targetName)
+    if (target?.kind === 'array') context.env.set(targetName, {...target, length})
+  }
+
+  for (const [targetName, increment] of pendingAdds) {
+    const start = context.env.get(targetName)
+    if (start == null || start.kind !== 'number') return unknown('Running-sum loop target expected a number')
+    context.env.set(targetName, runningSumNumber(start, source.length, increment))
+  }
+
+  return null
+}
+
+function isPushCall(expression: ts.Expression): expression is ts.CallExpression & {expression: ts.PropertyAccessExpression & {expression: ts.Identifier}} {
+  return ts.isCallExpression(expression)
+    && ts.isPropertyAccessExpression(expression.expression)
+    && ts.isIdentifier(expression.expression.expression)
+    && expression.expression.name.text === 'push'
 }
 
 function evaluateExpression(expression: ts.Expression, context: EvalContext): Value {
@@ -529,6 +662,8 @@ function evaluatePlainNumberBinary(op: ts.SyntaxKind, left: NumberValue, right: 
       return multiplyNumbers(left, right)
     case ts.SyntaxKind.SlashToken:
       return divideNumbers(left, right)
+    case ts.SyntaxKind.PercentToken:
+      return moduloNumbers(left, right)
     case ts.SyntaxKind.AsteriskAsteriskToken:
       return powerNumbers(left, right)
     default:
@@ -558,16 +693,22 @@ function combineNumberCases(
 }
 
 function evaluateConditional(expression: ts.ConditionalExpression, context: EvalContext): Value {
-  const truth = evaluateCondition(expression.condition, context)
-  switch (truth) {
+  const condition = evaluateConditionFacts(expression.condition, context)
+  switch (condition.truth) {
     case 'true':
       return evaluateExpression(expression.whenTrue, context)
     case 'false':
       return evaluateExpression(expression.whenFalse, context)
     case 'maybe':
       return joinValues(
-        evaluateExpression(expression.whenTrue, context),
-        evaluateExpression(expression.whenFalse, context),
+        valueWithAssumptions(
+          evaluateExpression(expression.whenTrue, contextWithAssumptions(context, condition.trueAssumptions)),
+          condition.trueAssumptions,
+        ),
+        valueWithAssumptions(
+          evaluateExpression(expression.whenFalse, contextWithAssumptions(context, condition.falseAssumptions)),
+          condition.falseAssumptions,
+        ),
       )
   }
 }
@@ -944,17 +1085,40 @@ function evaluateArrayLiteral(expression: ts.ArrayLiteralExpression, context: Ev
 
 type Truth = 'true' | 'false' | 'maybe'
 
-function evaluateCondition(expression: ts.Expression, context: EvalContext): Truth {
-  if (!ts.isBinaryExpression(expression)) return 'maybe'
+function evaluateConditionFacts(expression: ts.Expression, context: EvalContext): {truth: Truth; trueAssumptions: LinearConstraint[]; falseAssumptions: LinearConstraint[]} {
+  if (!ts.isBinaryExpression(expression)) return {truth: 'maybe', trueAssumptions: [], falseAssumptions: []}
   const op = expression.operatorToken.kind
-  if (!isComparisonSyntax(op)) return 'maybe'
+  if (!isComparisonSyntax(op)) return {truth: 'maybe', trueAssumptions: [], falseAssumptions: []}
   const left = evaluateExpression(expression.left, context)
   const right = evaluateExpression(expression.right, context)
-  if (left.kind !== 'number' || right.kind !== 'number') return 'maybe'
-  const status = proveComparison(left, syntaxToComparison(op), right, context.assumptions)
-  if (status.status === 'pass') return 'true'
-  if (status.status === 'fail') return 'false'
-  return 'maybe'
+  if (left.kind !== 'number' || right.kind !== 'number') return {truth: 'maybe', trueAssumptions: [], falseAssumptions: []}
+  const comparison = syntaxToComparison(op)
+  const trueFact = comparisonConstraint(left, comparison, right)
+  const falseComparison = negatedComparison(comparison)
+  const falseFact = falseComparison == null ? null : comparisonConstraint(left, falseComparison, right)
+  const status = proveComparison(left, comparison, right, context.assumptions)
+  if (status.status === 'pass') return {truth: 'true', trueAssumptions: trueFact == null ? [] : [trueFact], falseAssumptions: falseFact == null ? [] : [falseFact]}
+  if (status.status === 'fail') return {truth: 'false', trueAssumptions: trueFact == null ? [] : [trueFact], falseAssumptions: falseFact == null ? [] : [falseFact]}
+  return {
+    truth: 'maybe',
+    trueAssumptions: trueFact == null ? [] : [trueFact],
+    falseAssumptions: falseFact == null ? [] : [falseFact],
+  }
+}
+
+function negatedComparison(op: ComparisonOperator): ComparisonOperator | null {
+  switch (op) {
+    case '==':
+      return null
+    case '>=':
+      return '<'
+    case '<=':
+      return '>'
+    case '>':
+      return '<='
+    case '<':
+      return '>='
+  }
 }
 
 function isComparisonSyntax(kind: ts.SyntaxKind) {
@@ -1062,34 +1226,87 @@ function proveComparisonPlain(left: NumberValue, op: ComparisonOperator, right: 
 }
 
 function proveMathLemma(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]): Truth {
-  if (left.expr == null) return 'maybe'
-  if ((op === '>=' || op === '>') && right.expr != null && left.expr === `ceil(${right.expr})`) return op === '>=' ? 'true' : 'maybe'
-  if ((op === '<=' || op === '<') && right.expr != null && left.expr === `floor(${right.expr})`) return op === '<=' ? 'true' : 'maybe'
-  if ((op === '<=' || op === '<') && right.expr === `ceil(${left.expr})`) return op === '<=' ? 'true' : 'maybe'
-  if ((op === '>=' || op === '>') && right.expr === `floor(${left.expr})`) return op === '>=' ? 'true' : 'maybe'
-
-  if ((op === '>=' || op === '>') && right.expr != null && provesCeilDivisionCovers(left.expr, right.expr, assumptions)) return op === '>=' ? 'true' : 'maybe'
-  if ((op === '<' || op === '<=') && right.expr != null && provesFloorDivisionBelowCount(left.expr, right, assumptions)) return 'true'
+  if (left.expr == null || right.expr == null) return 'maybe'
+  if (provesRoundingFact(left.expr, op, right.expr)) return 'true'
+  if ((op === '>=' || op === '>') && provesCeilDivisionCovers(left.expr, right.expr, assumptions)) return op === '>=' ? 'true' : 'maybe'
+  if ((op === '<' || op === '<=') && provesFloorDivisionBelowCount(left.expr, right, assumptions)) return 'true'
+  if ((op === '<' || op === '<=') && provesModuloBelowDivisor(left.expr, right.expr, assumptions)) return 'true'
+  if ((op === '>=' || op === '>') && provesRunningSumAtLeastStart(left.expr, right.expr, assumptions)) return op === '>=' ? 'true' : 'maybe'
+  if (provesPositiveMonotone(left.expr, op, right.expr, assumptions)) return 'true'
   return 'maybe'
 }
 
+function provesRoundingFact(leftExpr: string, op: ComparisonOperator, rightExpr: string) {
+  const leftCeil = callArg(leftExpr, 'ceil')
+  if ((op === '>=' || op === '>') && leftCeil != null && sameExpressionText(leftCeil, rightExpr)) return op === '>='
+  const leftFloor = callArg(leftExpr, 'floor')
+  if ((op === '<=' || op === '<') && leftFloor != null && sameExpressionText(leftFloor, rightExpr)) return op === '<='
+  const rightCeil = callArg(rightExpr, 'ceil')
+  if ((op === '<=' || op === '<') && rightCeil != null && sameExpressionText(leftExpr, rightCeil)) return op === '<='
+  const rightFloor = callArg(rightExpr, 'floor')
+  if ((op === '>=' || op === '>') && rightFloor != null && sameExpressionText(leftExpr, rightFloor)) return op === '>='
+  return false
+}
+
 function provesCeilDivisionCovers(leftExpr: string, rightExpr: string, assumptions: LinearConstraint[]) {
-  const match = /^\(ceil\(\((.+) \/ (.+)\)\) \* (.+)\)$/.exec(leftExpr)
-  if (match == null) return false
-  const total = match[1]!.trim()
-  const count = match[2]!.trim()
-  const multiplier = match[3]!.trim()
-  if (count !== multiplier || total !== rightExpr) return false
+  const shape = ceilDivisionProduct(leftExpr)
+  if (shape == null) return false
+  const {total, count} = shape
+  if (!sameExpressionText(total, rightExpr)) return false
   return provesExprNonNegative(total, false, assumptions) && provesExprNonNegative(count, true, assumptions)
 }
 
 function provesFloorDivisionBelowCount(leftExpr: string, right: NumberValue, assumptions: LinearConstraint[]) {
-  const match = /^floor\(\((.+) \/ (.+)\)\)$/.exec(leftExpr)
-  if (match == null || right.expr == null || !right.isInteger) return false
-  const pointer = match[1]!.trim()
-  const cell = match[2]!.trim()
+  if (right.expr == null || !right.isInteger) return false
+  const shape = floorDivision(leftExpr)
+  if (shape == null) return false
+  const {left: pointer, right: cell} = shape
   if (!provesExprNonNegative(cell, true, assumptions)) return false
   return hasComparisonFact(pointer, '<', `(${right.expr} * ${cell})`, assumptions) || hasComparisonFact(pointer, '<', `(${cell} * ${right.expr})`, assumptions)
+}
+
+function provesModuloBelowDivisor(leftExpr: string, rightExpr: string, assumptions: LinearConstraint[]) {
+  const shape = moduloExpression(leftExpr)
+  if (shape == null || !sameExpressionText(shape.right, rightExpr)) return false
+  return provesExprNonNegative(shape.left, false, assumptions) && provesExprNonNegative(shape.right, true, assumptions)
+}
+
+function provesRunningSumAtLeastStart(leftExpr: string, rightExpr: string, assumptions: LinearConstraint[]) {
+  const args = callArgs(leftExpr, 'runningSum')
+  if (args == null || args.length !== 3 || !sameExpressionText(args[0]!, rightExpr)) return false
+  return provesExprNonNegative(args[1]!, false, assumptions) && provesExprNonNegative(args[2]!, false, assumptions)
+}
+
+function provesPositiveMonotone(leftExpr: string, op: ComparisonOperator, rightExpr: string, assumptions: LinearConstraint[]) {
+  if (op === '<=' || op === '<') return provesPositiveMonotoneLess(leftExpr, op, rightExpr, assumptions)
+  if (op === '>=') return provesPositiveMonotoneLess(rightExpr, '<=', leftExpr, assumptions)
+  if (op === '>') return provesPositiveMonotoneLess(rightExpr, '<', leftExpr, assumptions)
+  return false
+}
+
+function provesPositiveMonotoneLess(leftExpr: string, op: '<=' | '<', rightExpr: string, assumptions: LinearConstraint[]) {
+  const leftDivision = binaryExpression(leftExpr, '/')
+  const rightDivision = binaryExpression(rightExpr, '/')
+  if (leftDivision != null && rightDivision != null && sameExpressionText(leftDivision.right, rightDivision.right)) {
+    return provesExprNonNegative(leftDivision.right, true, assumptions) && hasComparisonFact(leftDivision.left, op, rightDivision.left, assumptions)
+  }
+
+  const leftProduct = productFactors(leftExpr)
+  const rightProduct = productFactors(rightExpr)
+  if (leftProduct == null || rightProduct == null) return false
+  for (let leftIndex = 0; leftIndex < leftProduct.length; leftIndex++) {
+    for (let rightIndex = 0; rightIndex < rightProduct.length; rightIndex++) {
+      const leftFactor = leftProduct[leftIndex]!
+      const rightFactor = rightProduct[rightIndex]!
+      if (!sameExpressionText(leftFactor, rightFactor)) continue
+      const factorIsPositive = provesExprNonNegative(leftFactor, op === '<', assumptions)
+      if (!factorIsPositive) continue
+      const leftBase = productText(leftProduct.filter((_, index) => index !== leftIndex))
+      const rightBase = productText(rightProduct.filter((_, index) => index !== rightIndex))
+      if (hasComparisonFact(leftBase, op, rightBase, assumptions)) return true
+    }
+  }
+  return false
 }
 
 function provesExprNonNegative(expression: string, strict: boolean, assumptions: LinearConstraint[]) {
@@ -1098,7 +1315,147 @@ function provesExprNonNegative(expression: string, strict: boolean, assumptions:
 }
 
 function hasComparisonFact(leftExpr: string, op: ComparisonOperator, rightExpr: string, assumptions: LinearConstraint[]) {
-  return assumptions.some(assumption => assumption.leftExpr === leftExpr && assumption.op === op && assumption.rightExpr === rightExpr)
+  for (const assumption of assumptions) {
+    if (assumption.leftExpr == null || assumption.rightExpr == null) continue
+    if (sameExpressionText(assumption.leftExpr, leftExpr) && sameExpressionText(assumption.rightExpr, rightExpr) && comparisonImplies(assumption.op, op)) return true
+    if (sameExpressionText(assumption.leftExpr, rightExpr) && sameExpressionText(assumption.rightExpr, leftExpr) && comparisonImplies(flipComparison(assumption.op), op)) return true
+  }
+
+  const leftLinear = linearFromExpressionText(leftExpr)
+  const rightLinear = linearFromExpressionText(rightExpr)
+  if (leftLinear == null || rightLinear == null) return false
+  return compareLinear(
+    numberValue(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, false, leftExpr, leftLinear),
+    op,
+    numberValue(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, false, rightExpr, rightLinear),
+    assumptions,
+  ) === 'true'
+}
+
+function comparisonImplies(actual: ComparisonOperator, needed: ComparisonOperator) {
+  if (actual === needed) return true
+  if (actual === '==') return needed === '>=' || needed === '<='
+  if (actual === '>') return needed === '>='
+  if (actual === '<') return needed === '<='
+  return false
+}
+
+function flipComparison(op: ComparisonOperator): ComparisonOperator {
+  switch (op) {
+    case '==':
+      return '=='
+    case '>=':
+      return '<='
+    case '<=':
+      return '>='
+    case '>':
+      return '<'
+    case '<':
+      return '>'
+  }
+}
+
+function sameExpressionText(left: string, right: string) {
+  return expressionKeyFromText(left) === expressionKeyFromText(right)
+}
+
+function expressionKeyFromText(text: string): string {
+  try {
+    return expressionKey(parseExpression(text))
+  } catch {
+    return `text:${text}`
+  }
+}
+
+function expressionKey(expression: ts.Expression): string {
+  const current = unwrapExpression(expression)
+  const linear = linearFromExpression(current)
+  if (linear != null) return `linear:${linearKey(linear)}`
+  if (ts.isIdentifier(current)) return `id:${current.text}`
+  if (ts.isNumericLiteral(current)) return `number:${Number(current.text)}`
+  if (ts.isPropertyAccessExpression(current)) return `prop:${expressionKey(current.expression)}.${current.name.text}`
+  if (ts.isCallExpression(current)) return `call:${callName(current.expression)}(${current.arguments.map(argument => expressionKey(argument)).join(',')})`
+  if (ts.isPrefixUnaryExpression(current)) return `prefix:${current.operator}:${expressionKey(current.operand)}`
+  if (ts.isBinaryExpression(current)) {
+    const op = current.operatorToken.kind
+    if (op === ts.SyntaxKind.AsteriskToken) return `product:${productFactorsFromExpression(current).map(text => expressionKeyFromText(text)).sort().join('*')}`
+    return `binary:${ts.SyntaxKind[op]}:${expressionKey(current.left)}:${expressionKey(current.right)}`
+  }
+  return `text:${current.getText()}`
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression
+  while (ts.isParenthesizedExpression(current)) current = current.expression
+  return current
+}
+
+function callName(expression: ts.Expression): string {
+  if (ts.isIdentifier(expression)) return expression.text
+  if (ts.isPropertyAccessExpression(expression)) return `${callName(expression.expression)}.${expression.name.text}`
+  return expression.getText()
+}
+
+function callArgs(text: string, name: string): string[] | null {
+  const expression = unwrapExpression(parseExpression(text))
+  if (!ts.isCallExpression(expression) || callName(expression.expression) !== name) return null
+  return expression.arguments.map(argument => argument.getText())
+}
+
+function callArg(text: string, name: string): string | null {
+  const args = callArgs(text, name)
+  return args != null && args.length === 1 ? args[0]! : null
+}
+
+function ceilDivisionProduct(text: string): {total: string; count: string} | null {
+  const product = binaryExpression(text, '*')
+  if (product == null) return null
+  for (const [maybeCeil, maybeCount] of [[product.left, product.right], [product.right, product.left]] as const) {
+    const ceilArg = callArg(maybeCeil, 'ceil')
+    if (ceilArg == null) continue
+    const division = binaryExpression(ceilArg, '/')
+    if (division != null && sameExpressionText(division.right, maybeCount)) return {total: division.left, count: division.right}
+  }
+  return null
+}
+
+function floorDivision(text: string): {left: string; right: string} | null {
+  const floorArg = callArg(text, 'floor')
+  return floorArg == null ? null : binaryExpression(floorArg, '/')
+}
+
+function moduloExpression(text: string): {left: string; right: string} | null {
+  return binaryExpression(text, '%')
+}
+
+function binaryExpression(text: string, op: '*' | '/' | '%'): {left: string; right: string} | null {
+  const expression = unwrapExpression(parseExpression(text))
+  if (!ts.isBinaryExpression(expression)) return null
+  const expected = op === '*'
+    ? ts.SyntaxKind.AsteriskToken
+    : op === '/'
+      ? ts.SyntaxKind.SlashToken
+      : ts.SyntaxKind.PercentToken
+  if (expression.operatorToken.kind !== expected) return null
+  return {left: expression.left.getText(), right: expression.right.getText()}
+}
+
+function productFactors(text: string): string[] | null {
+  const expression = unwrapExpression(parseExpression(text))
+  const factors = productFactorsFromExpression(expression)
+  return factors.length <= 1 ? null : factors
+}
+
+function productFactorsFromExpression(expression: ts.Expression): string[] {
+  const current = unwrapExpression(expression)
+  if (!ts.isBinaryExpression(current) || current.operatorToken.kind !== ts.SyntaxKind.AsteriskToken) return [current.getText()]
+  return [...productFactorsFromExpression(current.left), ...productFactorsFromExpression(current.right)]
+}
+
+function productText(factors: string[]) {
+  if (factors.length === 0) return '1'
+  if (factors.length === 1) return factors[0]!
+  return factors.map(factor => `(${factor})`).join(' * ')
 }
 
 function rangeFailureReason(value: NumberValue, min: number, max: number, requireInteger: boolean, assumptions: LinearConstraint[]) {
@@ -1350,6 +1707,33 @@ function withNumberCases(value: NumberValue, cases: NumberCase[] | null): Number
   return {...value, cases: cases.map(choice => ({value: plainNumber(choice.value), assumptions: choice.assumptions}))}
 }
 
+function valueWithAssumptions(value: Value, assumptions: LinearConstraint[]): Value {
+  if (assumptions.length === 0) return value
+  if (value.kind === 'number') {
+    return withNumberCases(value, numberBranches(value).map(branch => ({
+      value: branch.value,
+      assumptions: mergeAssumptions(branch.assumptions, assumptions),
+    })))
+  }
+  if (value.kind === 'object') {
+    const props = new Map<string, Value>()
+    for (const [name, prop] of value.props) props.set(name, valueWithAssumptions(prop, assumptions))
+    return {...value, props}
+  }
+  if (value.kind === 'array') {
+    return {
+      ...value,
+      length: valueWithAssumptions(value.length, assumptions) as NumberValue,
+      elements: value.elements == null ? null : value.elements.map(element => valueWithAssumptions(element, assumptions)),
+    }
+  }
+  return value
+}
+
+function contextWithAssumptions(context: EvalContext, assumptions: LinearConstraint[]): EvalContext {
+  return assumptions.length === 0 ? context : {...context, assumptions: mergeAssumptions(context.assumptions, assumptions)}
+}
+
 function mergeAssumptions(...groups: LinearConstraint[][]): LinearConstraint[] {
   return groups.flat()
 }
@@ -1381,6 +1765,7 @@ function linearFromExpressionText(text: string): LinearExpr | null {
 function linearFromExpression(expression: ts.Expression): LinearExpr | null {
   if (ts.isNumericLiteral(expression)) return linearConstant(Number(expression.text))
   if (ts.isIdentifier(expression)) return linearVariable(expression.text)
+  if (ts.isPropertyAccessExpression(expression)) return linearVariable(expression.getText())
   if (ts.isParenthesizedExpression(expression)) return linearFromExpression(expression.expression)
   if (ts.isPrefixUnaryExpression(expression)) {
     const operand = linearFromExpression(expression.operand)
@@ -1539,6 +1924,33 @@ function divideNumbers(left: NumberValue, right: NumberValue): Value {
   return numberValue(Math.min(...quotients), Math.max(...quotients), false, binaryExpr(left, '/', right), right.min === right.max ? linearScale(left.linear, 1 / right.min) : null)
 }
 
+function moduloNumbers(left: NumberValue, right: NumberValue): Value {
+  if (right.min <= 0 || left.min < 0) return unknown('Modulo is only supported for non-negative values and positive divisors')
+  const max = left.isInteger && right.isInteger ? Math.max(0, Math.ceil(right.max) - 1) : right.max
+  return numberValue(0, max, left.isInteger && right.isInteger, binaryExpr(left, '%', right))
+}
+
+function runningSumNumber(start: NumberValue, count: NumberValue, increment: NumberValue): NumberValue {
+  if (count.min < 0 || increment.min < 0) return numberValue(
+    Number.NEGATIVE_INFINITY,
+    Number.POSITIVE_INFINITY,
+    false,
+    start.expr != null && count.expr != null && increment.expr != null ? `runningSum(${start.expr}, ${count.expr}, ${increment.expr})` : null,
+  )
+  const deltas = [
+    count.min * increment.min,
+    count.min * increment.max,
+    count.max * increment.min,
+    count.max * increment.max,
+  ]
+  return numberValue(
+    start.min + Math.min(...deltas),
+    start.max + Math.max(...deltas),
+    start.isInteger && count.isInteger && increment.isInteger,
+    start.expr != null && count.expr != null && increment.expr != null ? `runningSum(${start.expr}, ${count.expr}, ${increment.expr})` : null,
+  )
+}
+
 function powerNumbers(left: NumberValue, right: NumberValue): Value {
   if (right.min !== right.max) return unknown('Non-constant exponent is unsupported')
   if (right.min === 2 && left.min >= 0) return numberValue(left.min ** 2, left.max ** 2, left.isInteger, binaryExpr(left, '**', right))
@@ -1550,13 +1962,15 @@ function joinValues(left: Value, right: Value): Value {
   if (left.kind === 'unknown') return left
   if (right.kind === 'unknown') return right
   if (left.kind === 'number' && right.kind === 'number') {
-    return numberValue(
+    const joined = numberValue(
       Math.min(left.min, right.min),
       Math.max(left.max, right.max),
       left.isInteger && right.isInteger,
       left.expr != null && right.expr != null && left.expr === right.expr ? left.expr : null,
       left.linear != null && right.linear != null && sameLinear(left.linear, right.linear) ? left.linear : null,
     )
+    if (left.cases == null && right.cases == null) return joined
+    return withNumberCases(joined, [...numberBranches(left), ...numberBranches(right)])
   }
   if (left.kind === 'object' && right.kind === 'object') {
     const keys = new Set([...left.props.keys(), ...right.props.keys()])

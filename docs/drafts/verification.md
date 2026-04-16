@@ -135,7 +135,22 @@ function cellCapacity(total: number, count: number) {
 }
 ```
 
-Useful facts: `ceil(x) >= x`, `floor(x) <= x`, `ceil(total / count) * count >= total` when `total >= 0` and `count > 0`, and `floor(pointer / cellSize) < count` when `pointer < count * cellSize`, `cellSize > 0`, and `count` is an integer.
+Useful facts: `ceil(x) >= x`, `floor(x) <= x`, `ceil(total / count) * count >= total` when `total >= 0` and `count > 0`, `floor(pointer / cellSize) < count` when `pointer < count * cellSize`, and `index % count < count` when `index >= 0` and `count > 0`.
+
+Prefer reducers over new atoms when the code is just ordinary math:
+
+```ts
+/** @layout
+ * given content <= available
+ * given scale: number[0, 8]
+ * result <= available * scale
+ */
+function scaledWidth(content: number, available: number, scale: number) {
+  return scale * content
+}
+```
+
+The checker should normalize harmless expression shape differences, say `scale * content` vs `content * scale`, and preserve order through multiplication or division by known-positive values. These are not userland proof atoms. They are just arithmetic facts that make regular annotations go further.
 
 Array facts should be its own small layer:
 
@@ -151,7 +166,19 @@ function keepIndex(items: Item[], index: number) {
 }
 ```
 
-This layer knows `.length`, array literal length, literal indexing, and spread append length. It should not own row contiguity. The running-sum loop can use these facts later, but it should be recognized as a separate layout shape.
+This layer knows `.length`, array literal length, literal indexing, spread append length, and the first append-only running-sum loop:
+
+```ts
+const rows = []
+let y = top
+for (const item of items) {
+  rows.push({top: y, source: item})
+  y += step + gap
+}
+return {rows, bottom: y}
+```
+
+This is enough to prove `rows.length == items.length` and `bottom >= top` when `step + gap >= 0`. It does not yet prove row contiguity or `lastBottom(rows)`.
 
 ## Atoms
 

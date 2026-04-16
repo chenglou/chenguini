@@ -76,6 +76,55 @@ export function negativeFloorHitIndexNeedsUpperBound(pointer: number, cellSize: 
 }
 
 /** @layout
+ * given content: number[0, 1000]
+ * given available: number[0, 1000]
+ * given scale: number[-2, 2]
+ * given content <= available
+ * result.scaled <= result.limit
+ */
+export function negativeScaleNeedsNonNegativeFactor(content: number, available: number, scale: number) {
+  return {
+    scaled: content * scale,
+    limit: available * scale,
+  }
+}
+
+/** @layout
+ * given index: int[0, 10000]
+ * given count: int[0, 1000]
+ * result < count
+ */
+export function negativeModuloNeedsPositiveCount(index: number, count: number) {
+  return index % count
+}
+
+/** @layout
+ * given width: number[0, 1000]
+ * given minWidth: number[0, 1000]
+ * result >= minWidth
+ */
+export function negativeGuardNeedsReturnOnSmallSide(width: number, minWidth: number) {
+  if (width > minWidth) return width
+  return width
+}
+
+/** @layout
+ * given items.length: int[0, 50]
+ * given top: number[0, 1000]
+ * given step: number[-40, 40]
+ * result.bottom >= top
+ */
+export function negativeRunningSumNeedsNonNegativeStep(items: number[], top: number, step: number) {
+  const rows = []
+  let y = top
+  for (const item of items) {
+    rows.push({top: y, source: item})
+    y += step
+  }
+  return {rows, bottom: y}
+}
+
+/** @layout
  * given value: number[0, 10]
  * result: number[0, 10]
  */

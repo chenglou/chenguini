@@ -8,8 +8,8 @@
 
 ## Next Work
 
-- Recognize the first running-sum loop. E.g. `let y = top; rows.push({top: y, height}); y += height + gap` should prove row tops move forward when heights and gap are non-negative.
-- Add append-only array facts needed by that loop: `sameLength(result, items)`, `monotone(rows.map(row => row.top))`, `contiguousY(rows, gap)`, and `lastBottom(rows)`.
+- Extend the running-sum loop past the first shape. It now proves append length and `bottom >= top`; next it should handle `item.height`, row contiguity, and `lastBottom(rows)`.
+- Add append-only array facts needed by richer loops: `monotone(rows.map(row => row.top))`, `contiguousY(rows, gap)`, and `lastBottom(rows)`.
 - Add geometry atoms after the loop facts exist: `rectInside(child, parent)`, `rectEquals(a, b)`, `nonOverlapX(rects)`, and `nonOverlapY(rects)`.
 - Improve geometry messages once atoms exist. A failed `rectInside` should name the overflowing edge.
 - Add module/import summaries. Same-file inlining is enough for now, but real helpers need summaries across files, and the report should say when a summary was trusted.
@@ -25,13 +25,15 @@
 - Linear reduction is intentionally tiny and bounded. It is not a general linear solver.
 - Calls must be direct named calls. No method calls except the hardcoded `Math.*` subset.
 - Parameters must be simple names. No destructuring, rest params, or defaults.
-- The checker only handles the small pure subset it can inline. No side effects, mutation reasoning, loops, or callbacks.
+- The checker only handles the small pure subset it can inline. Side effects are still out, except the recognized append-only running-sum loop.
 - Top-level `given` lines are still assumptions unless a same-file caller proves them.
 - Math choice facts are local and bounded. They prove immediate `Math.min` / `Math.max` / clamp relations, not full branch correlation across arbitrary fields.
-- Integer helper facts are narrow known shapes, e.g. `ceil(total / count) * count >= total` and `floor(pointer / cellSize) < count`, not a general nonlinear arithmetic solver.
-- The array domain only tracks `.length`, literal elements, spread append length, and numeric index bounds. No `rows[].height` or mutation facts yet.
+- Integer helper facts are narrow known shapes, e.g. `ceil(total / count) * count >= total`, `floor(pointer / cellSize) < count`, and `index % count < count`, not a general nonlinear arithmetic solver.
+- Positive scale/divide facts only preserve order through matching expressions with a known non-negative or positive factor. They are not polynomial reasoning.
+- Branch facts only flow through ternaries and return-style `if` guards.
+- The array domain only tracks `.length`, literal elements, spread append length, running-sum append length, and numeric index bounds. No `rows[].height` or mutation facts yet.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.
 - No overloads, generics, TS type narrowing, or type-system integration.
 - No object precondition domains yet, so no `rows[].height`.
-- Branch-local proof is limited to the current simple ternary/comparison path analysis.
+- Running-sum loops do not yet read per-item domains such as `items[].height`.
