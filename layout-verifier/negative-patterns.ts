@@ -56,6 +56,26 @@ export function negativeArrayLengthCallGiven(items: number[]) {
 }
 
 /** @layout
+ * given total: int[0, 6000]
+ * given count: int[1, 200]
+ * result >= total
+ */
+export function negativeFloorDivisionDoesNotCoverTotal(total: number, count: number) {
+  return Math.floor(total / count) * count
+}
+
+/** @layout
+ * given pointer: number[0, 1000]
+ * given cellSize: int[1, 100]
+ * given count: int[1, 10]
+ * result < count
+ */
+export function negativeFloorHitIndexNeedsUpperBound(pointer: number, cellSize: number, count: number) {
+  const maxPointer = count * cellSize
+  return pointer < maxPointer ? Math.floor(pointer / cellSize) : Math.floor(pointer / cellSize)
+}
+
+/** @layout
  * given value: number[0, 10]
  * result: number[0, 10]
  */

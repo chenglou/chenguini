@@ -112,9 +112,11 @@ type LinearExpr = {
 }
 
 type LinearConstraint = {
-  diff: LinearExpr
+  diff: LinearExpr | null
   op: ComparisonOperator
   text?: string
+  leftExpr?: string
+  rightExpr?: string
   source?: 'range' | 'comparison' | 'derived'
 }
 
@@ -1048,6 +1050,8 @@ function proveComparison(left: Value, op: ComparisonOperator, right: Value, assu
 
 function proveComparisonPlain(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]): {status: LayoutCheckStatus; reason?: string} {
   if (op === '==' && left.expr != null && right.expr != null && left.expr === right.expr) return {status: 'pass'}
+  const mathTruth = proveMathLemma(left, op, right, assumptions)
+  if (mathTruth === 'true') return {status: 'pass'}
   const truth = compareRanges(left, op, right)
   if (truth === 'true') return {status: 'pass'}
   if (truth === 'false') return {status: 'fail', reason: comparisonFailureReason(left, op, right, assumptions, 'is false')}
@@ -1055,6 +1059,46 @@ function proveComparisonPlain(left: NumberValue, op: ComparisonOperator, right: 
   if (linearTruth === 'true') return {status: 'pass'}
   if (linearTruth === 'false') return {status: 'fail', reason: comparisonFailureReason(left, op, right, assumptions, 'is false by exact linear facts')}
   return {status: 'unknown', reason: comparisonFailureReason(left, op, right, assumptions, 'was not proven')}
+}
+
+function proveMathLemma(left: NumberValue, op: ComparisonOperator, right: NumberValue, assumptions: LinearConstraint[]): Truth {
+  if (left.expr == null) return 'maybe'
+  if ((op === '>=' || op === '>') && right.expr != null && left.expr === `ceil(${right.expr})`) return op === '>=' ? 'true' : 'maybe'
+  if ((op === '<=' || op === '<') && right.expr != null && left.expr === `floor(${right.expr})`) return op === '<=' ? 'true' : 'maybe'
+  if ((op === '<=' || op === '<') && right.expr === `ceil(${left.expr})`) return op === '<=' ? 'true' : 'maybe'
+  if ((op === '>=' || op === '>') && right.expr === `floor(${left.expr})`) return op === '>=' ? 'true' : 'maybe'
+
+  if ((op === '>=' || op === '>') && right.expr != null && provesCeilDivisionCovers(left.expr, right.expr, assumptions)) return op === '>=' ? 'true' : 'maybe'
+  if ((op === '<' || op === '<=') && right.expr != null && provesFloorDivisionBelowCount(left.expr, right, assumptions)) return 'true'
+  return 'maybe'
+}
+
+function provesCeilDivisionCovers(leftExpr: string, rightExpr: string, assumptions: LinearConstraint[]) {
+  const match = /^\(ceil\(\((.+) \/ (.+)\)\) \* (.+)\)$/.exec(leftExpr)
+  if (match == null) return false
+  const total = match[1]!.trim()
+  const count = match[2]!.trim()
+  const multiplier = match[3]!.trim()
+  if (count !== multiplier || total !== rightExpr) return false
+  return provesExprNonNegative(total, false, assumptions) && provesExprNonNegative(count, true, assumptions)
+}
+
+function provesFloorDivisionBelowCount(leftExpr: string, right: NumberValue, assumptions: LinearConstraint[]) {
+  const match = /^floor\(\((.+) \/ (.+)\)\)$/.exec(leftExpr)
+  if (match == null || right.expr == null || !right.isInteger) return false
+  const pointer = match[1]!.trim()
+  const cell = match[2]!.trim()
+  if (!provesExprNonNegative(cell, true, assumptions)) return false
+  return hasComparisonFact(pointer, '<', `(${right.expr} * ${cell})`, assumptions) || hasComparisonFact(pointer, '<', `(${cell} * ${right.expr})`, assumptions)
+}
+
+function provesExprNonNegative(expression: string, strict: boolean, assumptions: LinearConstraint[]) {
+  const linear = linearFromExpressionText(expression)
+  return linear != null && provesNonNegative(linear, strict, assumptions)
+}
+
+function hasComparisonFact(leftExpr: string, op: ComparisonOperator, rightExpr: string, assumptions: LinearConstraint[]) {
+  return assumptions.some(assumption => assumption.leftExpr === leftExpr && assumption.op === op && assumption.rightExpr === rightExpr)
 }
 
 function rangeFailureReason(value: NumberValue, min: number, max: number, requireInteger: boolean, assumptions: LinearConstraint[]) {
@@ -1148,7 +1192,15 @@ function singleLinearBound(linear: LinearExpr) {
 
 function comparisonConstraint(left: NumberValue, op: ComparisonOperator, right: NumberValue, text?: string, source: LinearConstraint['source'] = 'derived'): LinearConstraint | null {
   const diff = linearSubtract(left.linear, right.linear)
-  return diff == null ? null : {diff, op, source, ...(text == null ? {} : {text})}
+  if (diff == null && left.expr == null && right.expr == null && text == null) return null
+  return {
+    diff,
+    op,
+    source,
+    ...(left.expr == null ? {} : {leftExpr: left.expr}),
+    ...(right.expr == null ? {} : {rightExpr: right.expr}),
+    ...(text == null ? {} : {text}),
+  }
 }
 
 function comparisonFactFromSpec(spec: Extract<LayoutSpec, {kind: 'given-comparison'}>, context: EvalContext): LinearConstraint | null {
@@ -1225,6 +1277,7 @@ function reduceToNonNegative(
 }
 
 function nonNegativeFacts(assumption: LinearConstraint): NonNegativeFact[] {
+  if (assumption.diff == null) return []
   switch (assumption.op) {
     case '==':
       return [
@@ -1315,6 +1368,49 @@ function linearConstant(value: number): LinearExpr {
 
 function linearVariable(name: string): LinearExpr {
   return {constant: 0, terms: new Map([[name, 1]])}
+}
+
+function linearFromExpressionText(text: string): LinearExpr | null {
+  try {
+    return linearFromExpression(parseExpression(text))
+  } catch {
+    return null
+  }
+}
+
+function linearFromExpression(expression: ts.Expression): LinearExpr | null {
+  if (ts.isNumericLiteral(expression)) return linearConstant(Number(expression.text))
+  if (ts.isIdentifier(expression)) return linearVariable(expression.text)
+  if (ts.isParenthesizedExpression(expression)) return linearFromExpression(expression.expression)
+  if (ts.isPrefixUnaryExpression(expression)) {
+    const operand = linearFromExpression(expression.operand)
+    if (operand == null) return null
+    if (expression.operator === ts.SyntaxKind.MinusToken) return linearScaleExact(operand, -1)
+    if (expression.operator === ts.SyntaxKind.PlusToken) return operand
+    return null
+  }
+  if (!ts.isBinaryExpression(expression)) return null
+  const left = linearFromExpression(expression.left)
+  const right = linearFromExpression(expression.right)
+  switch (expression.operatorToken.kind) {
+    case ts.SyntaxKind.PlusToken:
+      return linearAdd(left, right)
+    case ts.SyntaxKind.MinusToken:
+      return linearSubtract(left, right)
+    case ts.SyntaxKind.AsteriskToken: {
+      const leftValue = numericLiteralValue(expression.left)
+      const rightValue = numericLiteralValue(expression.right)
+      if (leftValue != null) return linearScale(right, leftValue)
+      if (rightValue != null) return linearScale(left, rightValue)
+      return null
+    }
+    case ts.SyntaxKind.SlashToken: {
+      const rightValue = numericLiteralValue(expression.right)
+      return rightValue == null || rightValue === 0 ? null : linearScale(left, 1 / rightValue)
+    }
+    default:
+      return null
+  }
 }
 
 function linearAdd(left: LinearExpr | null, right: LinearExpr | null): LinearExpr | null {
@@ -1508,6 +1604,11 @@ function formatRange(value: NumberValue) {
 }
 
 function formatLinearConstraint(constraint: LinearConstraint) {
+  if (constraint.diff == null) {
+    const left = constraint.leftExpr ?? '?'
+    const right = constraint.rightExpr ?? '?'
+    return `${left} ${constraint.op} ${right}`
+  }
   switch (constraint.op) {
     case '>=':
       return `${formatLinear(constraint.diff)} >= 0`

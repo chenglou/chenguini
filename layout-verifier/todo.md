@@ -28,6 +28,7 @@
 - The checker only handles the small pure subset it can inline. No side effects, mutation reasoning, loops, or callbacks.
 - Top-level `given` lines are still assumptions unless a same-file caller proves them.
 - Math choice facts are local and bounded. They prove immediate `Math.min` / `Math.max` / clamp relations, not full branch correlation across arbitrary fields.
+- Integer helper facts are narrow known shapes, e.g. `ceil(total / count) * count >= total` and `floor(pointer / cellSize) < count`, not a general nonlinear arithmetic solver.
 - The array domain only tracks `.length`, literal elements, spread append length, and numeric index bounds. No `rows[].height` or mutation facts yet.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.

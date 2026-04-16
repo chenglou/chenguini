@@ -122,6 +122,21 @@ function cappedOverflow(width: number) {
 
 The checker proves this by splitting `Math.min`: either `capped == width`, or `capped == 320` and `width >= 320`. Keep this tiny and local. Do not turn it into a general path engine until ordinary layout code needs that.
 
+Teach standard math helpers their ordinary layout facts before adding new atoms:
+
+```ts
+/** @layout
+ * given total: int[0, 6000]
+ * given count: int[1, 200]
+ * result >= total
+ */
+function cellCapacity(total: number, count: number) {
+  return Math.ceil(total / count) * count
+}
+```
+
+Useful facts: `ceil(x) >= x`, `floor(x) <= x`, `ceil(total / count) * count >= total` when `total >= 0` and `count > 0`, and `floor(pointer / cellSize) < count` when `pointer < count * cellSize`, `cellSize > 0`, and `count` is an integer.
+
 Array facts should be its own small layer:
 
 ```ts

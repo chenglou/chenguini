@@ -89,6 +89,10 @@ export function ternaryBranchJoin(value: number) {
  * given value: number[2, 8]
  * result.floorValue: int[1, 4]
  * result.ceilValue: int[1, 4]
+ * result.floorValue <= value / 2
+ * value / 2 >= result.floorValue
+ * result.ceilValue >= value / 2
+ * value / 2 <= result.ceilValue
  * result.roundValue: int[1, 4]
  * result.truncValue: int[1, 4]
  * result.sqrtValue: number[1, 3]
@@ -111,6 +115,28 @@ export function mathSubset(value: number) {
     minValue: Math.min(value, 4),
     maxValue: Math.max(value, 4),
   }
+}
+
+/** @layout
+ * given total: int[0, 6000]
+ * given count: int[1, 200]
+ * result >= total
+ */
+export function ceilDivisionCoversTotal(total: number, count: number) {
+  return Math.ceil(total / count) * count
+}
+
+/** @layout
+ * given pointer: number[0, 100000]
+ * given cellSize: int[1, 1000]
+ * given count: int[1, 1000]
+ * given pointer < count * cellSize
+ * result >= 0
+ * result < count
+ */
+export function floorHitIndexInsideCount(pointer: number, cellSize: number, count: number) {
+  const maxPointer = count * cellSize
+  return pointer < maxPointer ? Math.floor(pointer / cellSize) : Math.floor(pointer / cellSize)
 }
 
 /** @layout

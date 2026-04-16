@@ -41,6 +41,30 @@ FAIL layout-verifier/negative-patterns.ts:negativeArrayLengthCallGiven: call neg
   caller has int[0, 20] as items.length
   callee needs items.length: int[0, 10]
   missing: items.length <= 10
+UNKNOWN layout-verifier/negative-patterns.ts:negativeFloorDivisionDoesNotCoverTotal: result >= total
+  int[0, 1200000] as (floor((total / count)) * count) >= int[0, 6000] as total was not proven
+  need: (floor((total / count)) * count) >= total
+  known:
+    int[0, 1200000] as (floor((total / count)) * count)
+    int[0, 6000] as total
+    total >= 0
+    total <= 6000
+    count >= 1
+    count <= 200
+  missing: given (floor((total / count)) * count) >= total
+UNKNOWN layout-verifier/negative-patterns.ts:negativeFloorHitIndexNeedsUpperBound: result < count
+  int[0, 1000] as floor((pointer / cellSize)) < int[1, 10] as count was not proven
+  need: floor((pointer / cellSize)) < count
+  known:
+    int[0, 1000] as floor((pointer / cellSize))
+    int[1, 10] as count
+    pointer >= 0
+    pointer <= 1000
+    cellSize >= 1
+    cellSize <= 100
+    count >= 1
+    count <= 10
+  missing: given floor((pointer / cellSize)) < count
 FAIL layout-verifier/negative-patterns.ts:negativeCallGiven: call negativeNeedsSmallValue(value): given value: number[0, 10]
   caller has number[0, 20] as value
   callee needs value: number[0, 10]
