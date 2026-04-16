@@ -107,6 +107,14 @@ UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumNeedsNonNegativeS
     step >= -40
     step <= 40
   missing: given runningSum(top, items.length, step) >= top
+UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumNeedsNonNegativeStep: monotone(result.rows.top)
+  monotone(result.rows.top) was not inferred
+  known: contiguousY(0)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeContiguousYNeedsMatchingGap: contiguousY(result.rows, otherGap)
+  contiguousY(result.rows, otherGap) was not inferred
+  known: monotone(.top), contiguousY(gap), lastBottom = number[-10, 3500] as (runningSum(top, items.length, (step + gap)) - gap)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeLastBottomNeedsHeightInRows: lastBottom(result.rows) == result.bottom
+  lastBottom was not inferred
 FAIL layout-verifier/negative-patterns.ts:negativeCallGiven: call negativeNeedsSmallValue(value): given value: number[0, 10]
   caller has number[0, 20] as value
   callee needs value: number[0, 10]

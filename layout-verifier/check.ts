@@ -52,6 +52,13 @@ type ArrayValue = {
   length: NumberValue
   elements: Value[] | null
   expr: string | null
+  summary: ArraySummary | null
+}
+
+type ArraySummary = {
+  monotoneProps: string[]
+  contiguousY: {gapExpr: string}[]
+  lastBottom: NumberValue | null
 }
 
 type UnknownValue = {
@@ -233,6 +240,10 @@ function specMentionsArrayParam(name: string, specs: LayoutSpec[]) {
       if (expressionMentionsArrayParam(parseExpression(spec.expression), name)) return true
       continue
     }
+    if (spec.kind === 'check-atom') {
+      if (spec.args.some(arg => expressionMentionsArrayParam(parseExpression(arg), name))) return true
+      continue
+    }
     if (expressionMentionsArrayParam(parseExpression(spec.left), name) || expressionMentionsArrayParam(parseExpression(spec.right), name)) return true
   }
   return false
@@ -267,7 +278,7 @@ function verifyCheckSpec(
   functionName: string,
   baseEnv: Map<string, Value>,
   result: Value,
-  spec: Extract<LayoutSpec, {kind: 'check-range'} | {kind: 'check-comparison'}>,
+  spec: Extract<LayoutSpec, {kind: 'check-range'} | {kind: 'check-comparison'} | {kind: 'check-atom'}>,
   checks: LayoutCheck[],
   assumptions: LinearConstraint[],
 ): LayoutCheck {
@@ -287,6 +298,8 @@ function verifyCheckSpec(
     }
   }
 
+  if (spec.kind === 'check-atom') return verifyAtomSpec(file, functionName, spec, context)
+
   const left = evaluateSpecExpression(spec.left, context)
   const right = evaluateSpecExpression(spec.right, context)
   const status = proveComparison(left, spec.op, right, context.assumptions)
@@ -302,6 +315,45 @@ function verifyCheckSpec(
 function evaluateSpecExpression(text: string, context: EvalContext): Value {
   const expression = parseExpression(text)
   return evaluateExpression(expression, context)
+}
+
+function verifyAtomSpec(file: string, functionName: string, spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): LayoutCheck {
+  const status = proveAtomSpec(spec, context)
+  return {
+    file,
+    functionName,
+    text: spec.text,
+    status: status.status,
+    ...(status.reason == null ? {} : {reason: status.reason}),
+  }
+}
+
+function proveAtomSpec(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
+  switch (spec.name) {
+    case 'monotone':
+      return proveMonotoneAtom(spec, context)
+    case 'contiguousY':
+      return proveContiguousYAtom(spec, context)
+    default:
+      return {status: 'unknown', reason: `Unknown layout atom ${spec.name}`}
+  }
+}
+
+function proveMonotoneAtom(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
+  const target = sequencePropArgument(spec.args, context)
+  if (target == null) return {status: 'unknown', reason: 'monotone expects result.rows.top or monotone(result.rows, top)'}
+  if (target.array.summary?.monotoneProps.some(prop => prop === target.prop) === true) return {status: 'pass'}
+  return {status: 'unknown', reason: `${spec.text} was not inferred\nknown: ${formatArraySummary(target.array)}`}
+}
+
+function proveContiguousYAtom(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
+  if (spec.args.length !== 2) return {status: 'unknown', reason: 'contiguousY expects contiguousY(rows, gap)'}
+  const rows = evaluateSpecExpression(spec.args[0]!, context)
+  const gap = evaluateSpecExpression(spec.args[1]!, context)
+  if (rows.kind !== 'array') return {status: 'unknown', reason: 'contiguousY expected an array'}
+  if (gap.kind !== 'number' || gap.expr == null) return {status: 'unknown', reason: 'contiguousY expected a known gap expression'}
+  if (rows.summary?.contiguousY.some(fact => sameExpressionText(fact.gapExpr, gap.expr!)) === true) return {status: 'pass'}
+  return {status: 'unknown', reason: `${spec.text} was not inferred\nknown: ${formatArraySummary(rows)}`}
 }
 
 function evaluateFunctionBody(fn: ts.FunctionDeclaration, context: EvalContext): Value {
@@ -423,7 +475,7 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
   if (!ts.isBlock(statement.statement)) return unknown('Only block for-of bodies are supported')
 
   const loopItemName = declaration.name.text
-  const pushedArrays = new Map<string, NumberValue>()
+  const pushedArrays: LoopPush[] = []
   const pendingAdds = new Map<string, NumberValue>()
 
   for (const child of statement.statement.statements) {
@@ -431,7 +483,7 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
       const targetName = child.expression.expression.expression.text
       const target = context.env.get(targetName)
       if (target == null || target.kind !== 'array') return unknown(`${targetName}.push expected an array`)
-      pushedArrays.set(targetName, source.length)
+      pushedArrays.push({...readLoopPush(child.expression, context), arrayName: targetName, length: source.length})
       continue
     }
 
@@ -447,18 +499,86 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
     return unknown(`Unsupported for-of body statement: ${child.getText(context.program.sourceFile)}`)
   }
 
-  for (const [targetName, length] of pushedArrays) {
-    const target = context.env.get(targetName)
-    if (target?.kind === 'array') context.env.set(targetName, {...target, length})
-  }
+  const updates = new Map<string, {start: NumberValue; increment: NumberValue; end: NumberValue}>()
 
   for (const [targetName, increment] of pendingAdds) {
     const start = context.env.get(targetName)
     if (start == null || start.kind !== 'number') return unknown('Running-sum loop target expected a number')
-    context.env.set(targetName, runningSumNumber(start, source.length, increment))
+    const end = runningSumNumber(start, source.length, increment)
+    context.env.set(targetName, end)
+    updates.set(targetName, {start, increment, end})
+  }
+
+  for (const push of pushedArrays) {
+    const target = context.env.get(push.arrayName)
+    if (target?.kind !== 'array') continue
+    context.env.set(push.arrayName, {
+      ...target,
+      length: push.length,
+      summary: mergeArraySummary(target.summary, sequenceSummaryFromLoopPush(push, updates.get(push.topName ?? ''), context)),
+    })
   }
 
   return null
+}
+
+type LoopPush = {
+  arrayName: string
+  length: NumberValue
+  topName: string | null
+  height: NumberValue | null
+}
+
+function readLoopPush(expression: ts.CallExpression, context: EvalContext): Omit<LoopPush, 'arrayName' | 'length'> {
+  const row = expression.arguments[0]
+  if (row == null || !ts.isObjectLiteralExpression(row)) return {topName: null, height: null}
+  const topExpression = objectPropertyExpression(row, 'top')
+  const heightExpression = objectPropertyExpression(row, 'height')
+  const topName = topExpression != null && ts.isIdentifier(topExpression) ? topExpression.text : null
+  const height = heightExpression == null ? null : evaluateExpression(heightExpression, context)
+  return {topName, height: height?.kind === 'number' ? height : null}
+}
+
+function objectPropertyExpression(expression: ts.ObjectLiteralExpression, name: string): ts.Expression | null {
+  for (const property of expression.properties) {
+    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) continue
+    if (property.name.text === name) return property.initializer
+  }
+  return null
+}
+
+function sequenceSummaryFromLoopPush(
+  push: LoopPush,
+  update: {start: NumberValue; increment: NumberValue; end: NumberValue} | undefined,
+  context: EvalContext,
+): ArraySummary | null {
+  if (push.topName == null || push.height == null || update == null) return null
+  const summary: ArraySummary = {monotoneProps: [], contiguousY: [], lastBottom: null}
+  if (update.increment.min >= 0) summary.monotoneProps.push('top')
+
+  const gapExpr = update.increment.expr == null || push.height.expr == null ? null : contiguousGapExpr(update.increment.expr, push.height.expr)
+  if (gapExpr == null) return summary.monotoneProps.length === 0 ? null : summary
+
+  summary.contiguousY.push({gapExpr})
+  if (push.length.min >= 1) summary.lastBottom = lastBottomFromLoopEnd(update.end, gapExpr, context)
+  return summary
+}
+
+function contiguousGapExpr(incrementExpr: string, heightExpr: string): string | null {
+  if (sameExpressionText(incrementExpr, heightExpr)) return '0'
+  const expression = unwrapExpression(parseExpression(incrementExpr))
+  if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusToken) return null
+  if (sameExpressionText(expression.left.getText(), heightExpr)) return expression.right.getText()
+  if (sameExpressionText(expression.right.getText(), heightExpr)) return expression.left.getText()
+  return null
+}
+
+function lastBottomFromLoopEnd(end: NumberValue, gapExpr: string, context: EvalContext): NumberValue | null {
+  if (sameExpressionText(gapExpr, '0')) return end
+  const gap = evaluateSpecExpression(gapExpr, context)
+  if (gap.kind !== 'number') return null
+  const value = evaluateNumberBinary(ts.SyntaxKind.MinusToken, end, gap)
+  return value.kind === 'number' ? value : null
 }
 
 function isPushCall(expression: ts.Expression): expression is ts.CallExpression & {expression: ts.PropertyAccessExpression & {expression: ts.Identifier}} {
@@ -582,6 +702,7 @@ function evaluateConditional(expression: ts.ConditionalExpression, context: Eval
 }
 
 function evaluateCall(expression: ts.CallExpression, context: EvalContext): Value {
+  if (ts.isIdentifier(expression.expression) && expression.expression.text === 'lastBottom') return evaluateLastBottomCall(expression, context)
   if (ts.isPropertyAccessExpression(expression.expression)) {
     const target = expression.expression
     if (ts.isIdentifier(target.expression) && target.expression.text === 'Math') {
@@ -614,6 +735,14 @@ function evaluateCall(expression: ts.CallExpression, context: EvalContext): Valu
     checks: context.checks,
     assumptions: context.assumptions,
   })
+}
+
+function evaluateLastBottomCall(expression: ts.CallExpression, context: EvalContext): Value {
+  const targetExpression = expression.arguments[0]
+  if (targetExpression == null || expression.arguments.length !== 1) return unknown('lastBottom expects one array')
+  const target = evaluateExpression(targetExpression, context)
+  if (target.kind !== 'array') return unknown('lastBottom expected an array')
+  return target.summary?.lastBottom ?? unknown('lastBottom was not inferred')
 }
 
 function verifyCallGivenSpecs(
@@ -948,7 +1077,7 @@ function evaluateArrayLiteral(expression: ts.ArrayLiteralExpression, context: Ev
     if (elements != null) elements.push(value)
   }
 
-  return {kind: 'array', length, elements, expr: null}
+  return {kind: 'array', length, elements, expr: null, summary: null}
 }
 
 type Truth = 'true' | 'false' | 'maybe'
@@ -1529,6 +1658,50 @@ function nonNumberReason(value: ObjectValue | ArrayValue | UnknownValue) {
   return value.kind === 'array' ? 'Expected a number, got an array' : 'Expected a number, got an object'
 }
 
+function sequencePropArgument(args: string[], context: EvalContext): {array: ArrayValue; prop: string} | null {
+  if (args.length === 1) {
+    const expression = unwrapExpression(parseExpression(args[0]!))
+    if (!ts.isPropertyAccessExpression(expression)) return null
+    const array = evaluateExpression(expression.expression, context)
+    return array.kind === 'array' ? {array, prop: expression.name.text} : null
+  }
+  if (args.length === 2) {
+    const array = evaluateSpecExpression(args[0]!, context)
+    const propExpression = unwrapExpression(parseExpression(args[1]!))
+    if (array.kind !== 'array' || !ts.isIdentifier(propExpression)) return null
+    return {array, prop: propExpression.text}
+  }
+  return null
+}
+
+function mergeArraySummary(left: ArraySummary | null, right: ArraySummary | null): ArraySummary | null {
+  if (left == null) return right
+  if (right == null) return left
+  return {
+    monotoneProps: [...new Set([...left.monotoneProps, ...right.monotoneProps])],
+    contiguousY: [...left.contiguousY, ...right.contiguousY].filter((fact, index, facts) => facts.findIndex(other => sameExpressionText(other.gapExpr, fact.gapExpr)) === index),
+    lastBottom: right.lastBottom ?? left.lastBottom,
+  }
+}
+
+function sameArraySummary(left: ArraySummary | null, right: ArraySummary | null) {
+  if (left === right) return true
+  if (left == null || right == null) return false
+  if ((left.lastBottom?.expr ?? null) !== (right.lastBottom?.expr ?? null)) return false
+  if (left.monotoneProps.join('|') !== right.monotoneProps.join('|')) return false
+  if (left.contiguousY.length !== right.contiguousY.length) return false
+  return left.contiguousY.every((fact, index) => sameExpressionText(fact.gapExpr, right.contiguousY[index]!.gapExpr))
+}
+
+function formatArraySummary(value: ArrayValue) {
+  if (value.summary == null) return 'no sequence facts'
+  const lines: string[] = []
+  for (const prop of value.summary.monotoneProps) lines.push(`monotone(.${prop})`)
+  for (const fact of value.summary.contiguousY) lines.push(`contiguousY(${fact.gapExpr})`)
+  if (value.summary.lastBottom != null) lines.push(`lastBottom = ${formatRange(value.summary.lastBottom)}`)
+  return lines.length === 0 ? 'no sequence facts' : lines.join(', ')
+}
+
 function numberValue(min: number, max: number, isInteger: boolean, expr: string | null, linear: LinearExpr | null = null, cases: NumberCase[] | null = null): NumberValue {
   const clean = linear == null ? null : cleanLinear(linear)
   if (clean != null && clean.terms.size === 0 && Number.isFinite(clean.constant)) {
@@ -1555,6 +1728,7 @@ function unknownArray(name: string, length: NumberValue = unknownNumber(`${name}
     length,
     elements: null,
     expr: name,
+    summary: null,
   }
 }
 
@@ -1593,6 +1767,10 @@ function valueWithAssumptions(value: Value, assumptions: LinearConstraint[]): Va
       ...value,
       length: valueWithAssumptions(value.length, assumptions) as NumberValue,
       elements: value.elements == null ? null : value.elements.map(element => valueWithAssumptions(element, assumptions)),
+      summary: value.summary == null ? null : {
+        ...value.summary,
+        lastBottom: value.summary.lastBottom == null ? null : valueWithAssumptions(value.summary.lastBottom, assumptions) as NumberValue,
+      },
     }
   }
   return value
@@ -1860,6 +2038,7 @@ function joinValues(left: Value, right: Value): Value {
         ? left.elements.map((leftElement, index) => joinValues(leftElement, right.elements![index]!))
         : null,
       expr: left.expr != null && left.expr === right.expr ? left.expr : null,
+      summary: sameArraySummary(left.summary, right.summary) ? left.summary : null,
     }
   }
   return unknown('Branches returned incompatible value shapes')

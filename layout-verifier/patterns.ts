@@ -1,9 +1,6 @@
 // Runnable checker pattern specimen. `bun run verify:layout` must run this file.
 //
 // Queued patterns:
-// - `contiguousY`
-// - `monotone`
-// - `lastBottom`
 // - `rectInside`
 // - `rectEquals`
 // - `nonOverlapX` / `nonOverlapY`
@@ -188,22 +185,23 @@ export function guardReturnKeepsMinimum(width: number, minWidth: number) {
 }
 
 /** @layout
- * given items.length: int[0, 50]
+ * given items.length: int[1, 50]
  * given top: number[0, 1000]
  * given step: number[0, 40]
  * given gap: number[0, 10]
  * result.rows.length == items.length
- * result.bottom: number[0, 3500]
- * result.bottom >= top
+ * monotone(result.rows.top)
+ * contiguousY(result.rows, gap)
+ * lastBottom(result.rows) == result.bottom
  */
 export function runningSumLoop(items: number[], top: number, step: number, gap: number) {
   const rows = []
   let y = top
   for (const item of items) {
-    rows.push({top: y, source: item})
+    rows.push({top: y, height: step, source: item})
     y += step + gap
   }
-  return {rows, bottom: y}
+  return {rows, bottom: y - gap}
 }
 
 /** @layout

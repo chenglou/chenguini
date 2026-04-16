@@ -31,6 +31,12 @@ export type LayoutSpec =
       right: string
       text: string
     }
+  | {
+      kind: 'check-atom'
+      name: string
+      args: string[]
+      text: string
+    }
 
 export type ComparisonOperator = '==' | '>=' | '<=' | '>' | '<'
 
@@ -119,7 +125,21 @@ function parseLayoutSpecLine(line: string): LayoutSpec {
     }
   }
 
+  const checkAtom = parseCheckAtom(line)
+  if (checkAtom != null) return checkAtom
+
   throw new Error(`Unsupported @layout line: ${line}`)
+}
+
+function parseCheckAtom(line: string): Extract<LayoutSpec, {kind: 'check-atom'}> | null {
+  const expression = parseExpression(line)
+  if (!ts.isCallExpression(expression) || !ts.isIdentifier(expression.expression)) return null
+  return {
+    kind: 'check-atom',
+    name: expression.expression.text,
+    args: expression.arguments.map(argument => argument.getText()),
+    text: line,
+  }
 }
 
 export function parseExpression(text: string): ts.Expression {

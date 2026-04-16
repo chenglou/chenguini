@@ -172,13 +172,13 @@ This layer knows `.length`, array literal length, literal indexing, spread appen
 const rows = []
 let y = top
 for (const item of items) {
-  rows.push({top: y, source: item})
-  y += step + gap
+  rows.push({top: y, height: rowHeight, source: item})
+  y += rowHeight + gap
 }
-return {rows, bottom: y}
+return {rows, bottom: y - gap}
 ```
 
-This is enough to prove `rows.length == items.length` and `bottom >= top` when `step + gap >= 0`. It does not yet prove row contiguity or `lastBottom(rows)`.
+This is enough to prove `rows.length == items.length`, `monotone(rows.top)`, `contiguousY(rows, gap)`, and `lastBottom(rows) == bottom`. The loop shape is still intentionally narrow. It handles scalar row heights, not yet `item.height` domains.
 
 ## Atoms
 

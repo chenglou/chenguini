@@ -8,8 +8,8 @@
 
 ## Next Work
 
-- Extend the running-sum loop past the first shape. It now proves append length and `bottom >= top`; next it should handle `item.height`, row contiguity, and `lastBottom(rows)`.
-- Add append-only array facts needed by richer loops: `monotone(rows.map(row => row.top))`, `contiguousY(rows, gap)`, and `lastBottom(rows)`.
+- Extend the running-sum loop past scalar row heights. It now proves append length, `monotone(result.rows.top)`, `contiguousY(result.rows, gap)`, and `lastBottom(result.rows)`.
+- Add append-only array facts needed by richer loops: per-item height domains such as `items[].height`, conditional rows, and empty-list `lastBottom` handling.
 - Add geometry atoms after the loop facts exist: `rectInside(child, parent)`, `rectEquals(a, b)`, `nonOverlapX(rects)`, and `nonOverlapY(rects)`.
 - Improve geometry messages once atoms exist. A failed `rectInside` should name the overflowing edge.
 - Add module/import summaries. Same-file inlining is enough for now, but real helpers need summaries across files, and the report should say when a summary was trusted.
@@ -31,9 +31,10 @@
 - Integer helper facts are narrow known shapes, e.g. `ceil(total / count) * count >= total`, `floor(pointer / cellSize) < count`, and `index % count < count`, not a general nonlinear arithmetic solver.
 - Positive scale/divide facts only preserve order through matching expressions with a known non-negative or positive factor. They are not polynomial reasoning.
 - Branch facts only flow through ternaries and return-style `if` guards.
-- The array domain only tracks `.length`, literal elements, spread append length, running-sum append length, and numeric index bounds. No `rows[].height` or mutation facts yet.
+- The array domain only tracks `.length`, literal elements, spread append length, running-sum sequence facts, and numeric index bounds. No `items[].height` or mutation facts yet.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.
 - No overloads, generics, TS type narrowing, or type-system integration.
 - No object precondition domains yet, so no `rows[].height`.
+- Running-sum `lastBottom` currently needs a non-empty input length.
 - Running-sum loops do not yet read per-item domains such as `items[].height`.
