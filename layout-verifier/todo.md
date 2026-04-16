@@ -1,22 +1,35 @@
 # Layout Verifier Todo
 
-- Keep the active checker static-only: no browser runs, runtime traces, sampled sweeps, or committed fixture evidence.
-- Work through [patterns.ts](./patterns.ts) without restating its list here.
-- Add helper summaries only for opaque boundaries, and report which summary was trusted.
-- Keep improving messages as new atoms land. Geometry facts should show the relevant edges, overflow amount, or crossing boxes.
-- Use temporary mutation/red probes to decide which atoms to add next; keep them out of the committed guarantee report.
+- Keep the checker static-only: no browser runs, runtime traces, sampled sweeps, or committed fixture evidence.
+- Prefer reducers, interval facts, and source inference before adding a new atom.
+- Keep [patterns.ts](./patterns.ts) as the runnable catalog. Add one positive pattern and one negative expected message for each new proof shape.
+- Keep reports honest about assumptions. Top-level `given` lines are trusted; same-file helper `given` lines are proved at call sites.
+- Add helper summaries only for opaque boundaries, and report when a summary was trusted.
 
 ## Next Work
 
-- Extend the running-sum loop past scalar row heights. It now proves append length, `monotone(result.rows.top)`, `contiguousY(result.rows, gap)`, and `lastBottom(result.rows)`.
-- Add append-only array facts needed by richer loops: per-item height domains such as `items[].height`, conditional rows, and empty-list `lastBottom` handling.
-- Add geometry atoms after the loop facts exist: `rectInside(child, parent)`, `rectEquals(a, b)`, `nonOverlapX(rects)`, and `nonOverlapY(rects)`.
-- Improve geometry messages once atoms exist. A failed `rectInside` should name the overflowing edge.
-- Add module/import summaries. Same-file inlining is enough for now, but real helpers need summaries across files, and the report should say when a summary was trusted.
-- Add Pretext-facing text facts: line width fits, fragments are ordered, fragments cover a text range, and selection rects come from the paint fragments.
-- Add the `life-calendar` hard numeric examples as small patterns: positive-domain `Math.sqrt`, `Math.ceil`, integer facts after `ceil`, `**`, and half-open grid hit testing.
-- Add column/row width reasoning later: table columns, grids, flex-like width negotiation, and cells that cover multiple columns.
-- Keep adding one positive pattern and one negative checker case for each new proof shape.
+- Add per-item domains, e.g. `items[].height: number[0, 40]`, so running-sum loops can use `item.height` instead of only scalar `rowHeight`.
+- Add object element domains, e.g. rows with known `top`, `height`, `left`, `width`. This is the real unlock for richer arrays and geometry.
+- Extend append-only array inference beyond the first running-sum loop: `push`, conditional push, append length, and facts that survive simple branches.
+- Handle empty-list `lastBottom`. Today `lastBottom(rows)` needs a non-empty input length.
+- Decide the smallest geometry surface. First try plain field comparisons like `child.x >= parent.x` and `child.x + child.w <= parent.x + parent.w`; add `rectInside(child, parent)` only if the repeated shape deserves a name.
+- If geometry atoms land, support field naming without forcing one app shape too hard. `x/y/w/h` vs `x/y/width/height` should be a deliberate choice, not an accident.
+- Improve geometry messages once geometry exists. A failed inside check should name the edge, e.g. `child.x + child.w <= parent.x + parent.w`.
+- Add module/import summaries. Same-file inlining is enough for now, but real helper libraries need summaries across files.
+- Make top-level assumptions loud in machine output. A contextless caller should see which `given` facts were trusted, not proved.
+- Add Pretext-facing text facts: line width fits offered width, fragments are ordered, fragments cover a text range, line ranges cover rendered text, and selection rects reuse paint fragments.
+- Add column/row width reasoning only after array/object domains exist: table columns, grids, flex-like width negotiation, and cells spanning multiple columns.
+- Keep failure messages improving as the proof surface grows. Missing facts should point at the smallest useful assumption, e.g. `padding >= 0`.
+- Keep the README and verification docs synced with the runnable pattern surface. No feature should exist only in folklore.
+
+## Made Less Urgent
+
+- New numeric atoms are less urgent. `ceil(total / count) * count >= total`, floor hit-testing, modulo bounds, positive scale/divide order, and local `Math.min` / `Math.max` branch facts now cover a lot of ordinary layout math.
+- Life-calendar numeric work is less scary. Positive `Math.sqrt`, non-negative square, ceil coverage, and half-open grid hit testing are now reducer/pattern work, not a new primitive family.
+- Clamp-specific atoms are less needed. A userland clamp helper can be checked through same-file calls plus `Math.min` / `Math.max` facts.
+- `sameLength` as a primitive is less needed for now. We can often prove `result.rows.length == items.length` directly from append/running-sum inference.
+- Small geometry facts may not need atoms. Many inside/center cases can start as ordinary comparisons with relational `given`s.
+- Exhaustive integer sweeps should stay out. The new reducers make static proofs tractable enough that sweeps would mostly add unit-test-shaped complexity.
 
 ## Current Limitations
 
@@ -31,10 +44,10 @@
 - Integer helper facts are narrow known shapes, e.g. `ceil(total / count) * count >= total`, `floor(pointer / cellSize) < count`, and `index % count < count`, not a general nonlinear arithmetic solver.
 - Positive scale/divide facts only preserve order through matching expressions with a known non-negative or positive factor. They are not polynomial reasoning.
 - Branch facts only flow through ternaries and return-style `if` guards.
-- The array domain only tracks `.length`, literal elements, spread append length, running-sum sequence facts, and numeric index bounds. No `items[].height` or mutation facts yet.
+- The array domain only tracks `.length`, literal elements, spread append length, running-sum sequence facts, and numeric index bounds.
+- No `items[].height`, `rows[].height`, or object element precondition domains yet.
+- Running-sum `lastBottom` currently needs a non-empty input length.
+- Running-sum loops do not yet read per-item domains such as `items[].height`.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.
 - No overloads, generics, TS type narrowing, or type-system integration.
-- No object precondition domains yet, so no `rows[].height`.
-- Running-sum `lastBottom` currently needs a non-empty input length.
-- Running-sum loops do not yet read per-item domains such as `items[].height`.
