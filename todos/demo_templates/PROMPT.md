@@ -22,7 +22,7 @@ Default rule:
 - start from `reference-app`
 - only pull from `gesture-stack` if the interaction needs drag, flick, release settle, or special depth during motion
 
-Copy the smallest complete slice that works, then trim. Put `@layout` facts beside pure geometry helpers when the task has static layout truth.
+Copy the smallest complete slice that works, then trim. Put `@fit` facts beside pure geometry helpers when the task has static layout truth.
 
 Do not invent a fresh architecture if one of the template slices already fits.
 

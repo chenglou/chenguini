@@ -76,9 +76,9 @@ End with the fragile seams.
 
 Good:
 
-- `@layout` says grid columns stay in `int[1, 7]`
-- `@layout` says a centered item uses `(container - containee) / 2`
-- `@layout` says stacked row tops are contiguous once that atom exists
+- `@fit` says grid columns stay in `int[1, 7]`
+- `@fit` says a centered item uses `(container - containee) / 2`
+- `@fit` says stacked row tops are contiguous once that atom exists
 - browser-boundary truths like hash, native selection, and storage stay product requirements, not verifier evidence
 
 This keeps the spec tied to source-owned geometry instead of drifting into verifier transport details.
@@ -89,7 +89,7 @@ Don't repeat repo-wide verifier machinery in every spec.
 
 That means the demo spec should not keep re-explaining:
 
-- the `@layout` grammar
+- Freerange's `@fit` grammar
 - report statuses
 - why unsupported facts become `unknown`
 - why sampled inputs do not count

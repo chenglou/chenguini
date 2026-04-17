@@ -4,8 +4,7 @@
   "scripts": {
     "start": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./demos/*/index.html --host=$HOST:$PORT",
     "start:templates": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./drafts/demo_templates/*/index.html --host=$HOST:$PORT",
-    "check": "tsgo && oxlint --type-aware demos layout-verifier --ignore-pattern '*.js'",
-    "verify:layout": "bun layout-verifier/test.ts"
+    "check": "tsgo && oxlint --type-aware demos --ignore-pattern '*.js'"
   },
   "devDependencies": {
     "@typescript/native-preview": "latest",

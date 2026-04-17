@@ -68,8 +68,8 @@ Use this exact data:
 
 ## Static Facts To State
 
-- <one @layout fact for a pure geometry helper>
-- <one @layout fact for a hit rect, row, text, or sizing helper>
+- <one @fit fact for a pure geometry helper>
+- <one @fit fact for a hit rect, row, text, or sizing helper>
 - <one product boundary that is intentionally not verifier evidence>
 - <one product boundary that is intentionally not verifier evidence>
 ````
@@ -85,7 +85,7 @@ Keep these exact unless you have a very good reason not to:
 
 Leave these in shared docs, not the per-demo packet:
 
-- the `@layout` grammar
+- Freerange's `@fit` grammar
 - report statuses
 - why unsupported facts become `unknown`
 - why sampled inputs do not count

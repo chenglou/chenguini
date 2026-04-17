@@ -7,7 +7,7 @@ The short version is:
 - docs are the doctrine
 - one thin demo packet carries the exact product truth
 - `todos/demo_templates/` is the architecture surface
-- static `@layout` facts live beside pure geometry helpers
+- static `@fit` facts live beside pure geometry helpers
 - extra prompt guidance is optional and mostly affects shape, not correctness
 
 For the exact default packet, see `../../todos/minimum-viable-demo-spec.md`.
@@ -35,7 +35,7 @@ Use this order:
 2. read `docs/drafts/layout-geometry.md`
 3. read any one extra domain doc that really matters, e.g. `Scrolling.md` or `Input.md`
 4. read the demo packet
-5. add `@layout` facts for pure geometry seams when relevant
+5. add `@fit` facts for pure geometry seams when relevant
 6. implement the demo
 7. validate from the main thread
 
@@ -151,7 +151,7 @@ So:
 What feels solid now:
 
 - fresh stateless workers can recreate these demos from repo knowledge without reading `demos/`
-- layout guarantees should come from static `@layout` facts, not page-owned reports
+- layout guarantees should come from static `@fit` facts, not page-owned reports
 - the thin packet is the right default for `gpt-5.4 xhigh`
 - templates help architecture shape
 - extra prompt guidance helps architecture shape a bit more

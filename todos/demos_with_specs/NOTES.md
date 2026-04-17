@@ -11,7 +11,7 @@ The best split right now is:
 - docs are the doctrine
 - one thin demo packet carries the exact product truth
 - `todos/demo_templates/` is the architecture surface
-- static `@layout` facts live beside pure geometry helpers
+- static `@fit` facts live beside pure geometry helpers
 - extra extraction guidance stays in worker prompts
 
 If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
@@ -32,7 +32,7 @@ If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
 
 - stable
 - docs plus thin spec are enough
-- its geometry helpers are good candidates for small `@layout` facts
+- its geometry helpers are good candidates for small `@fit` facts
 
 ### `photo-gallery`
 

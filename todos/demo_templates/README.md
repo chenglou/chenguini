@@ -54,7 +54,7 @@ Tell the worker something like:
 
 Good:
 
-- "Use `reference-app` for scheduler, state, scrolling, and DOM cache shape. Pull only drag/release logic from `gesture-stack`. Put `@layout` facts near pure helpers."
+- "Use `reference-app` for scheduler, state, scrolling, and DOM cache shape. Pull only drag/release logic from `gesture-stack`. Put `@fit` facts near pure helpers."
 
 Bad:
 
