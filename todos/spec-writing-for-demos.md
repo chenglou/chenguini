@@ -76,9 +76,9 @@ End with the fragile seams.
 
 Good:
 
-- `@fit` says grid columns stay in `int[1, 7]`
-- `@fit` says a centered item uses `(container - containee) / 2`
-- `@fit` says stacked row tops are contiguous once that atom exists
+- a static fact says grid columns stay in `int[1, 7]`
+- a static fact says a centered item uses `(container - containee) / 2`
+- a static fact says stacked row tops are contiguous once that fact exists
 - browser-boundary truths like hash, native selection, and storage stay product requirements, not verifier evidence
 
 This keeps the spec tied to source-owned geometry instead of drifting into verifier transport details.
@@ -89,7 +89,7 @@ Don't repeat repo-wide verifier machinery in every spec.
 
 That means the demo spec should not keep re-explaining:
 
-- Freerange's `@fit` grammar
+- the static-fact annotation grammar
 - report statuses
 - why unsupported facts become `unknown`
 - why sampled inputs do not count

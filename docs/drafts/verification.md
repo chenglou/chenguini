@@ -54,6 +54,24 @@ Good options:
 
 Use the simplest one that can really catch the bug you care about.
 
+## Static Facts Are One Oracle
+
+If the guarantee is source-owned arithmetic, state it beside the helper and check it without opening the page.
+
+Good:
+
+- column count stays in `int[1, 7]`
+- centered offset uses `(container - containee) / 2`
+- stacked row tops advance by previous height plus gap
+- every measured line width fits the offered width
+
+Bad:
+
+- using a browser run as evidence for pure helper math
+- forcing native selection, scroll physics, or storage behavior into a source-only proof
+
+Use static facts for app-owned geometry. Use browser reports for browser-owned seams.
+
 ## Demos Usually Want Two Layers
 
 Public demos usually want:

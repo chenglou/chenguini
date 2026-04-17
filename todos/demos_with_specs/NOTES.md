@@ -11,7 +11,7 @@ The best split right now is:
 - docs are the doctrine
 - one thin demo packet carries the exact product truth
 - `todos/demo_templates/` is the architecture surface
-- static `@fit` facts live beside pure geometry helpers
+- static facts live beside pure geometry helpers
 - extra extraction guidance stays in worker prompts
 
 If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
@@ -19,8 +19,8 @@ If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
 ## Current Conclusions
 
 - Fresh stateless workers can recreate these demos from repo knowledge without reading `demos/`.
-- The static verifier shape in `docs/drafts/verification.md` is now the active guarantee path.
-- Browser automation notes are research, not the default verifier path.
+- Static facts are the active guarantee path for source-owned geometry.
+- Browser automation stays for browser-owned seams and semantic page reports.
 - For `gpt-5.4 xhigh`, the thin default packet in `todos/minimum-viable-demo-spec.md` is the right default.
 - Templates help architecture shape more than they have proven pass-rate.
 - Extra extraction guidance is a shape nudge, not a correctness unlock.
@@ -32,7 +32,7 @@ If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
 
 - stable
 - docs plus thin spec are enough
-- its geometry helpers are good candidates for small `@fit` facts
+- its geometry helpers are good candidates for small static facts
 
 ### `photo-gallery`
 
