@@ -286,6 +286,25 @@ export function localLoopAnnotation(items: {height: number}[], top: number, gap:
 }
 
 /** @layout
+ * given items.length: int[1, 50]
+ * given items[].height: number[0, 40]
+ * given top: number[0, 1000]
+ * given gap: number[0, 10]
+ * given parent.bottom: number[4000, 5000]
+ * result.rows[].top <= parent.bottom
+ * result.rows[].top + result.rows[].height <= parent.bottom
+ */
+export function wildcardRowsFitParent(items: {height: number}[], top: number, gap: number, parent: {bottom: number}) {
+  const rows = []
+  let y = top
+  for (const item of items) {
+    rows.push({top: y, height: item.height})
+    y += item.height + gap
+  }
+  return {rows, bottom: y - gap, parent}
+}
+
+/** @layout
  * given width: number[0, 1000]
  * result.capped: number[0, 320]
  * result.overflow >= 0

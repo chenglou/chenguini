@@ -145,6 +145,26 @@ UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumPerItemHeightNeed
 UNKNOWN layout-verifier/negative-patterns.ts:negativeLocalLoopAnnotationNeedsNonNegativeItem > loop: nondecreasing(rows.top)
   nondecreasing(rows.top) was not inferred
   known: spaced(0), lastEnd = number[-Infinity, Infinity] as runningSum(top, items.length, items[].height)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeWildcardRowsNeedParentBottom: result.rows[].top + result.rows[].height <= parent.bottom
+  wildcard comparison means every result.rows[] item must satisfy: result.rows[].top + result.rows[].height <= parent.bottom
+  number[0, 3540] as (rows[].top + items[].height) <= number[0, 2000] as parent.bottom was not proven
+  need: (rows[].top + items[].height) <= parent.bottom
+  known:
+    number[0, 3540] as (rows[].top + items[].height)
+    number[0, 2000] as parent.bottom
+    items.length >= 1
+    items.length <= 50
+    items[].height >= 0
+    items[].height <= 40
+    top >= 0
+    top <= 1000
+    gap >= 0
+    gap <= 10
+    parent.bottom >= 0
+    parent.bottom <= 2000
+  missing: given (rows[].top + items[].height) <= parent.bottom
+UNKNOWN layout-verifier/negative-patterns.ts:negativeWildcardComparisonNeedsScalar: result.rows[].top <= result.boxes[].bottom
+  Wildcard comparisons support one wildcard side and one scalar side
 FAIL layout-verifier/negative-patterns.ts:negativeCallGiven: call negativeNeedsSmallValue(value): given value: number[0, 10]
   caller has number[0, 20] as value
   callee needs value: number[0, 10]

@@ -214,6 +214,33 @@ export function negativeLocalLoopAnnotationNeedsNonNegativeItem(items: {height: 
 }
 
 /** @layout
+ * given items.length: int[1, 50]
+ * given items[].height: number[0, 40]
+ * given top: number[0, 1000]
+ * given gap: number[0, 10]
+ * given parent.bottom: number[0, 2000]
+ * result.rows[].top + result.rows[].height <= parent.bottom
+ */
+export function negativeWildcardRowsNeedParentBottom(items: {height: number}[], top: number, gap: number, parent: {bottom: number}) {
+  const rows = []
+  let y = top
+  for (const item of items) {
+    rows.push({top: y, height: item.height})
+    y += item.height + gap
+  }
+  return {rows, bottom: y - gap, parent}
+}
+
+/** @layout
+ * given rows[].top: number[0, 10]
+ * given boxes[].bottom: number[0, 10]
+ * result.rows[].top <= result.boxes[].bottom
+ */
+export function negativeWildcardComparisonNeedsScalar(rows: {top: number}[], boxes: {bottom: number}[]) {
+  return {rows, boxes}
+}
+
+/** @layout
  * given value: number[0, 10]
  * result: number[0, 10]
  */

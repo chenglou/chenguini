@@ -82,6 +82,11 @@ type ArraySummary = {
   lastEnd: NumberValue | null
 }
 
+type WildcardUse =
+  | {kind: 'none'}
+  | {kind: 'one'; collection: string}
+  | {kind: 'unsupported'; reason: string}
+
 type UnknownValue = {
   kind: 'unknown'
   reason: string
@@ -424,16 +429,58 @@ function verifyCheckSpec(
 
   if (spec.kind === 'check-atom') return verifyAtomSpec(file, functionName, spec, context)
 
+  const wildcardCheck = checkWildcardComparisonShape(spec.left, spec.right)
+  if (wildcardCheck.kind === 'unsupported') {
+    return {file, functionName, text: spec.text, status: 'unknown', reason: wildcardCheck.reason}
+  }
+
   const left = evaluateSpecExpression(spec.left, context)
   const right = evaluateSpecExpression(spec.right, context)
   const status = proveComparison(left, spec.op, right, context.assumptions)
+  const reason = wildcardCheck.kind === 'one' && status.status !== 'pass' && status.reason != null
+    ? `wildcard comparison means every ${wildcardCheck.collection}[] item must satisfy: ${spec.text}\n${status.reason}`
+    : status.reason
   return {
     file,
     functionName,
     text: spec.text,
     status: status.status,
-    ...(status.reason == null ? {} : {reason: status.reason}),
+    ...(reason == null ? {} : {reason}),
   }
+}
+
+function checkWildcardComparisonShape(left: string, right: string): WildcardUse {
+  const leftUse = wildcardUse(left)
+  if (leftUse.kind === 'unsupported') return leftUse
+  const rightUse = wildcardUse(right)
+  if (rightUse.kind === 'unsupported') return rightUse
+
+  if (leftUse.kind === 'one' && rightUse.kind === 'one') {
+    return {kind: 'unsupported', reason: 'Wildcard comparisons support one wildcard side and one scalar side'}
+  }
+  return leftUse.kind === 'one' ? leftUse : rightUse
+}
+
+function wildcardUse(text: string): WildcardUse {
+  const collections = new Set<string>()
+  for (const domainPath of parseLayoutExpression(text).domainPaths.values()) {
+    const itemCount = domainPath.segments.filter(segment => segment.kind === 'item').length
+    if (itemCount === 0) continue
+    if (itemCount > 1) return {kind: 'unsupported', reason: `Nested wildcard paths are not supported yet: ${text}`}
+    collections.add(domainPathCollectionText(domainPath))
+  }
+  if (collections.size === 0) return {kind: 'none'}
+  if (collections.size > 1) return {kind: 'unsupported', reason: `Wildcard comparisons support one collection at a time: ${text}`}
+  return {kind: 'one', collection: [...collections][0]!}
+}
+
+function domainPathCollectionText(domainPath: LayoutDomainPath) {
+  const parts = [domainPath.root]
+  for (const segment of domainPath.segments) {
+    if (segment.kind === 'item') break
+    parts.push(segment.name)
+  }
+  return parts.join('.')
 }
 
 function evaluateSpecExpression(text: string, context: EvalContext): Value {
@@ -647,12 +694,13 @@ function evaluateForOfStatement(statement: ts.ForOfStatement, context: EvalConte
   for (const push of pushedArrays) {
     const target = context.env.get(push.arrayName)
     if (target?.kind !== 'array') continue
+    const update = updates.get(push.topName ?? '')
     context.env.set(push.arrayName, {
       ...target,
       length: push.length,
       elements: null,
-      element: push.element,
-      summary: mergeArraySummary(target.summary, sequenceSummaryFromLoopPush(push, updates.get(push.topName ?? ''), context)),
+      element: loopElementFromPush(push, update),
+      summary: mergeArraySummary(target.summary, sequenceSummaryFromLoopPush(push, update, context)),
     })
   }
 
@@ -713,6 +761,30 @@ function objectPropertyExpression(expression: ts.ObjectLiteralExpression, name: 
     if (property.name.text === name) return property.initializer
   }
   return null
+}
+
+function loopElementFromPush(
+  push: LoopPush,
+  update: {start: NumberValue; increment: NumberValue; end: NumberValue} | undefined,
+): Value | null {
+  if (push.element?.kind !== 'object' || push.topName == null || update == null) return push.element
+  const props = new Map(push.element.props)
+  props.set('top', loopCursorElementValue(update, `${push.arrayName}[].top`))
+  return {...push.element, props}
+}
+
+function loopCursorElementValue(
+  update: {start: NumberValue; increment: NumberValue; end: NumberValue},
+  expr: string,
+): NumberValue {
+  if (update.increment.min < 0) return unknownNumber(expr)
+  return numberValue(
+    update.start.min,
+    update.end.max,
+    update.start.isInteger && update.increment.isInteger,
+    expr,
+    linearVariable(linearNameForExpression(expr)),
+  )
 }
 
 function sequenceSummaryFromLoopPush(

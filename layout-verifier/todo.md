@@ -8,7 +8,7 @@
 
 ## Next Work
 
-- Add relational per-item domains, e.g. `cells[].start + cells[].span <= columnCount`, so table/grid indexing can avoid new atoms.
+- Extend wildcard comparisons to two collection sides only when zip/cross-product semantics are explicit.
 - Support nested wildcard paths in comparisons, e.g. `params.rows[].height >= params.minRowHeight`.
 - Extend append-only array inference beyond the first running-sum loop: `push`, conditional push, append length, and facts that survive simple branches.
 - Add a total extent helper for empty sequences, likely `extentEnd(rows, empty)`. Today `lastEnd(rows)` needs a non-empty input length.
@@ -48,7 +48,8 @@
 - Positive scale/divide facts only preserve order through matching expressions with a known non-negative or positive factor. They are not polynomial reasoning.
 - Branch facts only flow through ternaries and return-style `if` guards.
 - The array domain only tracks `.length`, literal elements, spread append length, running-sum sequence facts, and numeric index bounds.
-- Per-item domains support simple field/range facts like `items[].height: number[0, 40]`, but not relational per-item facts yet.
+- Per-item domains support simple field/range facts like `items[].height: number[0, 40]` and one wildcard collection compared with a scalar expression.
+- Wildcard comparisons do not support two collection sides or nested wildcard paths yet.
 - Running-sum `lastEnd` currently needs a non-empty input length; use a future `extentEnd(rows, empty)` for maybe-empty rows.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.

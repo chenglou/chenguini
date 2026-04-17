@@ -231,6 +231,7 @@ Supported today:
 - `given row.height: number[0, 40]`
 - `given items[]: number[0, 400]`
 - `given items[].height: number[0, 40]`
+- wildcard comparisons with one collection side and one scalar side, e.g. `rows[].top + rows[].height <= parent.bottom`
 - reading `items.length`
 - reading object fields with declared domains
 - reading `items[index].height` after `0 <= index < items.length`
@@ -255,7 +256,8 @@ function keepIndex(items: number[], index: number) {
 
 Not supported yet:
 
-- relational per-item domains like `cells[].start + cells[].span <= columnCount`
+- two wildcard collections in one comparison, e.g. `rows[].top <= boxes[].bottom`
+- nested wildcard paths like `sections[].rows[].height`
 - general array mutation
 - arbitrary indexed values from unknown arrays
 

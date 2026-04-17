@@ -198,7 +198,7 @@ for (const item of items) {
 return {rows, bottom: y - gap}
 ```
 
-This is enough to prove `rows.length == items.length`, `rows[].height` ranges, `nondecreasing(rows.top)`, `spaced(rows, gap)`, and `lastEnd(rows) == bottom`. The loop shape is still intentionally narrow. It handles per-item field ranges, not conditional rows or relational per-item facts.
+This is enough to prove `rows.length == items.length`, `rows[].height` ranges, `rows[].top + rows[].height <= parent.bottom`, `nondecreasing(rows.top)`, `spaced(rows, gap)`, and `lastEnd(rows) == bottom`. The loop shape is still intentionally narrow. It handles one wildcard collection against scalar facts, not conditional rows or zip-style comparisons between two arrays.
 
 ## Atoms
 
