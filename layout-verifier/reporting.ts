@@ -23,9 +23,9 @@ export type ReportLinearConstraint = {
 
 export type ReportArrayValue = {
   summary: {
-    monotoneProps: string[]
-    contiguousY: {gapExpr: string}[]
-    lastBottom: ReportNumberValue | null
+    nondecreasingProps: string[]
+    spaced: {gapExpr: string}[]
+    lastEnd: ReportNumberValue | null
   } | null
 }
 
@@ -82,9 +82,9 @@ export function comparisonNeed(left: ReportNumberValue, op: ComparisonOperator, 
 export function formatArraySummary(value: ReportArrayValue) {
   if (value.summary == null) return 'no sequence facts'
   const lines: string[] = []
-  for (const prop of value.summary.monotoneProps) lines.push(`monotone(.${prop})`)
-  for (const fact of value.summary.contiguousY) lines.push(`contiguousY(${fact.gapExpr})`)
-  if (value.summary.lastBottom != null) lines.push(`lastBottom = ${formatRange(value.summary.lastBottom)}`)
+  for (const prop of value.summary.nondecreasingProps) lines.push(`nondecreasing(.${prop})`)
+  for (const fact of value.summary.spaced) lines.push(`spaced(${fact.gapExpr})`)
+  if (value.summary.lastEnd != null) lines.push(`lastEnd = ${formatRange(value.summary.lastEnd)}`)
   return lines.length === 0 ? 'no sequence facts' : lines.join(', ')
 }
 

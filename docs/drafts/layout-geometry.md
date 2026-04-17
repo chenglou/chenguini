@@ -21,7 +21,7 @@ Then state the intended geometry:
 ```ts
 /** @layout
  * given rows[].height >= 0
- * contiguousY(result.boxes, gap)
+ * spaced(result.boxes, gap)
  */
 ```
 
@@ -36,7 +36,7 @@ Good facts to state:
 - `rectEquals(hitArea, layoutBox)`
 - `rectInside(promptBox, layoutBox)`
 - `sameLength(result.items, sources)`
-- `result.contentHeight == lastBottom(result.rows) + bottomGap`
+- `result.contentHeight == lastEnd(result.rows) + bottomGap`
 - `nonOverlapX(row.items.map(item => item.layoutBox))`
 
 Bad:

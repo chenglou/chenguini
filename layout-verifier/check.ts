@@ -77,9 +77,9 @@ type ArrayValue = {
 }
 
 type ArraySummary = {
-  monotoneProps: string[]
-  contiguousY: {gapExpr: string}[]
-  lastBottom: NumberValue | null
+  nondecreasingProps: string[]
+  spaced: {gapExpr: string}[]
+  lastEnd: NumberValue | null
 }
 
 type UnknownValue = {
@@ -458,29 +458,29 @@ function verifyAtomSpec(file: string, functionName: string, spec: Extract<Layout
 
 function proveAtomSpec(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
   switch (spec.name) {
-    case 'monotone':
-      return proveMonotoneAtom(spec, context)
-    case 'contiguousY':
-      return proveContiguousYAtom(spec, context)
+    case 'nondecreasing':
+      return proveNondecreasingAtom(spec, context)
+    case 'spaced':
+      return proveSpacedAtom(spec, context)
     default:
       return {status: 'unknown', reason: `Unknown layout atom ${spec.name}`}
   }
 }
 
-function proveMonotoneAtom(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
+function proveNondecreasingAtom(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
   const target = sequencePropArgument(spec.args, context)
-  if (target == null) return {status: 'unknown', reason: 'monotone expects result.rows.top or monotone(result.rows, top)'}
-  if (target.array.summary?.monotoneProps.some(prop => prop === target.prop) === true) return {status: 'pass'}
+  if (target == null) return {status: 'unknown', reason: 'nondecreasing expects result.rows.top'}
+  if (target.array.summary?.nondecreasingProps.some(prop => prop === target.prop) === true) return {status: 'pass'}
   return {status: 'unknown', reason: `${spec.text} was not inferred\nknown: ${formatArraySummary(target.array)}`}
 }
 
-function proveContiguousYAtom(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
-  if (spec.args.length !== 2) return {status: 'unknown', reason: 'contiguousY expects contiguousY(rows, gap)'}
+function proveSpacedAtom(spec: Extract<LayoutSpec, {kind: 'check-atom'}>, context: EvalContext): {status: LayoutCheckStatus; reason?: string} {
+  if (spec.args.length !== 2) return {status: 'unknown', reason: 'spaced expects spaced(rows, gap)'}
   const rows = evaluateSpecExpression(spec.args[0]!, context)
   const gap = evaluateSpecExpression(spec.args[1]!, context)
-  if (rows.kind !== 'array') return {status: 'unknown', reason: 'contiguousY expected an array'}
-  if (gap.kind !== 'number' || gap.expr == null) return {status: 'unknown', reason: 'contiguousY expected a known gap expression'}
-  if (rows.summary?.contiguousY.some(fact => sameExpressionText(fact.gapExpr, gap.expr!)) === true) return {status: 'pass'}
+  if (rows.kind !== 'array') return {status: 'unknown', reason: 'spaced expected an array'}
+  if (gap.kind !== 'number' || gap.expr == null) return {status: 'unknown', reason: 'spaced expected a known gap expression'}
+  if (rows.summary?.spaced.some(fact => sameExpressionText(fact.gapExpr, gap.expr!)) === true) return {status: 'pass'}
   return {status: 'unknown', reason: `${spec.text} was not inferred\nknown: ${formatArraySummary(rows)}`}
 }
 
@@ -721,18 +721,18 @@ function sequenceSummaryFromLoopPush(
   context: EvalContext,
 ): ArraySummary | null {
   if (push.topName == null || push.height == null || update == null) return null
-  const summary: ArraySummary = {monotoneProps: [], contiguousY: [], lastBottom: null}
-  if (update.increment.min >= 0) summary.monotoneProps.push('top')
+  const summary: ArraySummary = {nondecreasingProps: [], spaced: [], lastEnd: null}
+  if (update.increment.min >= 0) summary.nondecreasingProps.push('top')
 
-  const gapExpr = update.increment.expr == null || push.height.expr == null ? null : contiguousGapExpr(update.increment.expr, push.height.expr)
-  if (gapExpr == null) return summary.monotoneProps.length === 0 ? null : summary
+  const gapExpr = update.increment.expr == null || push.height.expr == null ? null : spacedGapExpr(update.increment.expr, push.height.expr)
+  if (gapExpr == null) return summary.nondecreasingProps.length === 0 ? null : summary
 
-  summary.contiguousY.push({gapExpr})
-  if (push.length.min >= 1) summary.lastBottom = lastBottomFromLoopEnd(update.end, gapExpr, context)
+  summary.spaced.push({gapExpr})
+  if (push.length.min >= 1) summary.lastEnd = lastEndFromLoopEnd(update.end, gapExpr, context)
   return summary
 }
 
-function contiguousGapExpr(incrementExpr: string, heightExpr: string): string | null {
+function spacedGapExpr(incrementExpr: string, heightExpr: string): string | null {
   if (sameExpressionText(incrementExpr, heightExpr)) return '0'
   const expression = unwrapExpression(parseExpression(incrementExpr))
   if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusToken) return null
@@ -741,7 +741,7 @@ function contiguousGapExpr(incrementExpr: string, heightExpr: string): string | 
   return null
 }
 
-function lastBottomFromLoopEnd(end: NumberValue, gapExpr: string, context: EvalContext): NumberValue | null {
+function lastEndFromLoopEnd(end: NumberValue, gapExpr: string, context: EvalContext): NumberValue | null {
   if (sameExpressionText(gapExpr, '0')) return end
   const gap = evaluateSpecExpression(gapExpr, context)
   if (gap.kind !== 'number') return null
@@ -871,7 +871,7 @@ function evaluateConditional(expression: ts.ConditionalExpression, context: Eval
 }
 
 function evaluateCall(expression: ts.CallExpression, context: EvalContext): Value {
-  if (ts.isIdentifier(expression.expression) && expression.expression.text === 'lastBottom') return evaluateLastBottomCall(expression, context)
+  if (ts.isIdentifier(expression.expression) && expression.expression.text === 'lastEnd') return evaluateLastEndCall(expression, context)
   if (ts.isPropertyAccessExpression(expression.expression)) {
     const target = expression.expression
     if (ts.isIdentifier(target.expression) && target.expression.text === 'Math') {
@@ -906,12 +906,12 @@ function evaluateCall(expression: ts.CallExpression, context: EvalContext): Valu
   })
 }
 
-function evaluateLastBottomCall(expression: ts.CallExpression, context: EvalContext): Value {
+function evaluateLastEndCall(expression: ts.CallExpression, context: EvalContext): Value {
   const targetExpression = expression.arguments[0]
-  if (targetExpression == null || expression.arguments.length !== 1) return unknown('lastBottom expects one array')
+  if (targetExpression == null || expression.arguments.length !== 1) return unknown('lastEnd expects one array')
   const target = evaluateExpression(targetExpression, context)
-  if (target.kind !== 'array') return unknown('lastBottom expected an array')
-  return target.summary?.lastBottom ?? unknown('lastBottom was not inferred')
+  if (target.kind !== 'array') return unknown('lastEnd expected an array')
+  return target.summary?.lastEnd ?? unknown('lastEnd was not inferred')
 }
 
 function verifyCallGivenSpecs(
@@ -1812,28 +1812,20 @@ function nonNumberReason(value: ObjectValue | ArrayValue | UnknownValue) {
 }
 
 function sequencePropArgument(args: string[], context: EvalContext): {array: ArrayValue; prop: string} | null {
-  if (args.length === 1) {
-    const expression = unwrapExpression(parseExpression(args[0]!))
-    if (!ts.isPropertyAccessExpression(expression)) return null
-    const array = evaluateExpression(expression.expression, context)
-    return array.kind === 'array' ? {array, prop: expression.name.text} : null
-  }
-  if (args.length === 2) {
-    const array = evaluateSpecExpression(args[0]!, context)
-    const propExpression = unwrapExpression(parseExpression(args[1]!))
-    if (array.kind !== 'array' || !ts.isIdentifier(propExpression)) return null
-    return {array, prop: propExpression.text}
-  }
-  return null
+  if (args.length !== 1) return null
+  const expression = unwrapExpression(parseExpression(args[0]!))
+  if (!ts.isPropertyAccessExpression(expression)) return null
+  const array = evaluateExpression(expression.expression, context)
+  return array.kind === 'array' ? {array, prop: expression.name.text} : null
 }
 
 function mergeArraySummary(left: ArraySummary | null, right: ArraySummary | null): ArraySummary | null {
   if (left == null) return right
   if (right == null) return left
   return {
-    monotoneProps: [...new Set([...left.monotoneProps, ...right.monotoneProps])],
-    contiguousY: [...left.contiguousY, ...right.contiguousY].filter((fact, index, facts) => facts.findIndex(other => sameExpressionText(other.gapExpr, fact.gapExpr)) === index),
-    lastBottom: right.lastBottom ?? left.lastBottom,
+    nondecreasingProps: [...new Set([...left.nondecreasingProps, ...right.nondecreasingProps])],
+    spaced: [...left.spaced, ...right.spaced].filter((fact, index, facts) => facts.findIndex(other => sameExpressionText(other.gapExpr, fact.gapExpr)) === index),
+    lastEnd: right.lastEnd ?? left.lastEnd,
   }
 }
 
@@ -1846,10 +1838,10 @@ function mergeElementValue(left: Value | null, right: Value | null): Value | nul
 function sameArraySummary(left: ArraySummary | null, right: ArraySummary | null) {
   if (left === right) return true
   if (left == null || right == null) return false
-  if ((left.lastBottom?.expr ?? null) !== (right.lastBottom?.expr ?? null)) return false
-  if (left.monotoneProps.join('|') !== right.monotoneProps.join('|')) return false
-  if (left.contiguousY.length !== right.contiguousY.length) return false
-  return left.contiguousY.every((fact, index) => sameExpressionText(fact.gapExpr, right.contiguousY[index]!.gapExpr))
+  if ((left.lastEnd?.expr ?? null) !== (right.lastEnd?.expr ?? null)) return false
+  if (left.nondecreasingProps.join('|') !== right.nondecreasingProps.join('|')) return false
+  if (left.spaced.length !== right.spaced.length) return false
+  return left.spaced.every((fact, index) => sameExpressionText(fact.gapExpr, right.spaced[index]!.gapExpr))
 }
 
 function linearNameForExpression(text: string) {
@@ -1934,7 +1926,7 @@ function valueWithAssumptions(value: Value, assumptions: LinearConstraint[]): Va
       element: value.element == null ? null : valueWithAssumptions(value.element, assumptions),
       summary: value.summary == null ? null : {
         ...value.summary,
-        lastBottom: value.summary.lastBottom == null ? null : valueWithAssumptions(value.summary.lastBottom, assumptions) as NumberValue,
+        lastEnd: value.summary.lastEnd == null ? null : valueWithAssumptions(value.summary.lastEnd, assumptions) as NumberValue,
       },
     }
   }

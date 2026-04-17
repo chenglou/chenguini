@@ -53,7 +53,7 @@ Those can be useful while designing a fact, but the committed report should only
 Good:
 
 - `result.cols: int[1, 7]` passes from a range proof
-- `result.contentHeight == lastBottom(result.rows)` reports `unknown` until the checker understands that row loop
+- `result.contentHeight == lastEnd(result.rows)` reports `unknown` until the checker understands that row loop
 - `rectInside(promptBox, layoutBox)` fails if the source proves the prompt can overflow
 
 Bad:
@@ -85,7 +85,7 @@ Good spec:
  * given items[].height: number[0, 1000]
  * given gap: number[0, 100]
  * result.length == items.length
- * contiguousY(result, gap)
+ * spaced(result, gap)
  */
 ```
 
@@ -97,9 +97,9 @@ let y = top
 /** @layout-loop
  * given items[].height: number[0, 40]
  * rows.length == items.length
- * monotone(rows.top)
- * contiguousY(rows, gap)
- * lastBottom(rows) == y - gap
+ * nondecreasing(rows.top)
+ * spaced(rows, gap)
+ * lastEnd(rows) == y - gap
  */
 for (const item of items) {
   rows.push({top: y, height: item.height})
@@ -109,7 +109,7 @@ for (const item of items) {
 
 This is the same spec language, just closer to the code that earns it. Loop `given` facts are still trusted assumptions, and loop checks name locals directly instead of `result`.
 
-The checker can learn `contiguousY` by recognizing the running `y` loop. If it cannot, it reports `unknown`. Do not rewrite the app into `contiguousYBuilder(...)` just to satisfy the checker.
+The checker can learn `spaced` by recognizing the running `y` loop. If it cannot, it reports `unknown`. Do not rewrite the app into proof-shaped runtime helpers.
 
 Relational preconditions should read like the layout fact they mean:
 
@@ -198,7 +198,7 @@ for (const item of items) {
 return {rows, bottom: y - gap}
 ```
 
-This is enough to prove `rows.length == items.length`, `rows[].height` ranges, `monotone(rows.top)`, `contiguousY(rows, gap)`, and `lastBottom(rows) == bottom`. The loop shape is still intentionally narrow. It handles per-item field ranges, not conditional rows or relational per-item facts.
+This is enough to prove `rows.length == items.length`, `rows[].height` ranges, `nondecreasing(rows.top)`, `spaced(rows, gap)`, and `lastEnd(rows) == bottom`. The loop shape is still intentionally narrow. It handles per-item field ranges, not conditional rows or relational per-item facts.
 
 ## Atoms
 
@@ -207,10 +207,10 @@ Start with a small owned vocabulary:
 - `rectInside(child, parent)`
 - `rectEquals(a, b)`
 - `nonOverlapX(rects)` / `nonOverlapY(rects)`
-- `monotone(values)`
-- `contiguousY(rows, gap)`
+- `nondecreasing(values)`
+- `spaced(rows, gap)`
 - `sameLength(a, b)`
-- `lastBottom(rows)`
+- `lastEnd(rows)` as an expression helper
 - `coversOffsets(fragments, textRange)`
 - `columnWidthsFitCells(widths, cells)`
 

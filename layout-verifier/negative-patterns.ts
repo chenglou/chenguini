@@ -113,7 +113,7 @@ export function negativeGuardNeedsReturnOnSmallSide(width: number, minWidth: num
  * given top: number[0, 1000]
  * given step: number[-40, 40]
  * result.bottom >= top
- * monotone(result.rows.top)
+ * nondecreasing(result.rows.top)
  */
 export function negativeRunningSumNeedsNonNegativeStep(items: number[], top: number, step: number) {
   const rows = []
@@ -131,9 +131,9 @@ export function negativeRunningSumNeedsNonNegativeStep(items: number[], top: num
  * given step: number[0, 40]
  * given gap: number[0, 10]
  * given otherGap: number[20, 30]
- * contiguousY(result.rows, otherGap)
+ * spaced(result.rows, otherGap)
  */
-export function negativeContiguousYNeedsMatchingGap(items: number[], top: number, step: number, gap: number, otherGap: number) {
+export function negativeSpacedNeedsMatchingGap(items: number[], top: number, step: number, gap: number, otherGap: number) {
   const rows = []
   let y = top
   for (const item of items) {
@@ -147,9 +147,9 @@ export function negativeContiguousYNeedsMatchingGap(items: number[], top: number
  * given items.length: int[1, 50]
  * given top: number[0, 1000]
  * given step: number[0, 40]
- * lastBottom(result.rows) == result.bottom
+ * lastEnd(result.rows) == result.bottom
  */
-export function negativeLastBottomNeedsHeightInRows(items: number[], top: number, step: number) {
+export function negativeLastEndNeedsHeightInRows(items: number[], top: number, step: number) {
   const rows = []
   let y = top
   for (const item of items) {
@@ -182,7 +182,7 @@ export function negativePerItemFieldNeedsDomain(items: {height: number}[], index
  * given items[].height: number[-40, 40]
  * given top: number[0, 1000]
  * result.bottom >= top
- * monotone(result.rows.top)
+ * nondecreasing(result.rows.top)
  */
 export function negativeRunningSumPerItemHeightNeedsNonNegative(items: {height: number}[], top: number) {
   const rows = []
@@ -204,7 +204,7 @@ export function negativeLocalLoopAnnotationNeedsNonNegativeItem(items: {height: 
   let y = top
   /** @layout-loop
    * given items[].height: number[-40, 40]
-   * monotone(rows.top)
+   * nondecreasing(rows.top)
    */
   for (const item of items) {
     rows.push({top: y, height: item.height})

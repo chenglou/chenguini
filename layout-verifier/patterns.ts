@@ -190,9 +190,9 @@ export function guardReturnKeepsMinimum(width: number, minWidth: number) {
  * given step: number[0, 40]
  * given gap: number[0, 10]
  * result.rows.length == items.length
- * monotone(result.rows.top)
- * contiguousY(result.rows, gap)
- * lastBottom(result.rows) == result.bottom
+ * nondecreasing(result.rows.top)
+ * spaced(result.rows, gap)
+ * lastEnd(result.rows) == result.bottom
  */
 export function runningSumLoop(items: number[], top: number, step: number, gap: number) {
   const rows = []
@@ -246,9 +246,9 @@ export function indexedPerItemField(items: {height: number}[], index: number) {
  * result.rows.length == items.length
  * result.rows[].height: number[0, 40]
  * result.bottom >= top
- * monotone(result.rows.top)
- * contiguousY(result.rows, gap)
- * lastBottom(result.rows) == result.bottom
+ * nondecreasing(result.rows.top)
+ * spaced(result.rows, gap)
+ * lastEnd(result.rows) == result.bottom
  */
 export function runningSumLoopPerItemHeight(items: {height: number}[], top: number, gap: number) {
   const rows = []
@@ -274,9 +274,9 @@ export function localLoopAnnotation(items: {height: number}[], top: number, gap:
    * given items[].height: number[0, 40]
    * rows.length == items.length
    * rows[].height: number[0, 40]
-   * monotone(rows.top)
-   * contiguousY(rows, gap)
-   * lastBottom(rows) == y - gap
+   * nondecreasing(rows.top)
+   * spaced(rows, gap)
+   * lastEnd(rows) == y - gap
    */
   for (const item of items) {
     rows.push({top: y, height: item.height})

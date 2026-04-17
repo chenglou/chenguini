@@ -11,7 +11,7 @@
 - Add relational per-item domains, e.g. `cells[].start + cells[].span <= columnCount`, so table/grid indexing can avoid new atoms.
 - Support nested wildcard paths in comparisons, e.g. `params.rows[].height >= params.minRowHeight`.
 - Extend append-only array inference beyond the first running-sum loop: `push`, conditional push, append length, and facts that survive simple branches.
-- Handle empty-list `lastBottom`. Today `lastBottom(rows)` needs a non-empty input length.
+- Add a total extent helper for empty sequences, likely `extentEnd(rows, empty)`. Today `lastEnd(rows)` needs a non-empty input length.
 - Decide the smallest geometry surface. First try plain field comparisons like `child.x >= parent.x` and `child.x + child.w <= parent.x + parent.w`; add `rectInside(child, parent)` only if the repeated shape deserves a name.
 - If geometry atoms land, support field naming without forcing one app shape too hard. `x/y/w/h` vs `x/y/width/height` should be a deliberate choice, not an accident.
 - Improve geometry messages once geometry exists. A failed inside check should name the edge, e.g. `child.x + child.w <= parent.x + parent.w`.
@@ -49,7 +49,7 @@
 - Branch facts only flow through ternaries and return-style `if` guards.
 - The array domain only tracks `.length`, literal elements, spread append length, running-sum sequence facts, and numeric index bounds.
 - Per-item domains support simple field/range facts like `items[].height: number[0, 40]`, but not relational per-item facts yet.
-- Running-sum `lastBottom` currently needs a non-empty input length.
+- Running-sum `lastEnd` currently needs a non-empty input length; use a future `extentEnd(rows, empty)` for maybe-empty rows.
 - Wide intervals can still fail or become `unknown` even when a richer relation would prove the fact.
 - No module/import graph tracking.
 - No overloads, generics, TS type narrowing, or type-system integration.

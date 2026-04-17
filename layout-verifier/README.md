@@ -50,9 +50,9 @@ function stackRows(items: {height: number}[], top: number, gap: number) {
    * given items[].height: number[0, 40]
    * rows.length == items.length
    * rows[].height: number[0, 40]
-   * monotone(rows.top)
-   * contiguousY(rows, gap)
-   * lastBottom(rows) == y - gap
+   * nondecreasing(rows.top)
+   * spaced(rows, gap)
+   * lastEnd(rows) == y - gap
    */
   for (const item of items) {
     rows.push({top: y, height: item.height})
@@ -91,13 +91,12 @@ Supported comparison operators: `==`, `>=`, `<=`, `>`, `<`.
 Sequence atoms:
 
 ```ts
-monotone(result.rows.top)
-monotone(result.rows, top)
-contiguousY(result.rows, gap)
-lastBottom(result.rows) == result.bottom
+nondecreasing(result.rows.top)
+spaced(result.rows, gap)
+lastEnd(result.rows) == result.bottom
 ```
 
-Only `monotone` and `contiguousY` are atoms today. `lastBottom(rows)` is an expression helper, so use it inside a comparison.
+Only `nondecreasing` and `spaced` are atoms today. `lastEnd(rows)` is an expression helper, so use it inside a comparison.
 
 ## What `given` Does
 
@@ -272,9 +271,9 @@ The first loop primitive is this shape:
  * given gap: number[0, 10]
  * result.rows.length == items.length
  * result.rows[].height: number[0, 40]
- * monotone(result.rows.top)
- * contiguousY(result.rows, gap)
- * lastBottom(result.rows) == result.bottom
+ * nondecreasing(result.rows.top)
+ * spaced(result.rows, gap)
+ * lastEnd(result.rows) == result.bottom
  */
 function stackRows(items: Item[], top: number, gap: number) {
   const rows = []
@@ -290,11 +289,11 @@ function stackRows(items: Item[], top: number, gap: number) {
 It proves:
 
 - `rows.length == items.length`
-- `monotone(rows.top)`, when the increment is non-negative
-- `contiguousY(rows, gap)`, when the increment is `height + gap`
-- `lastBottom(rows)`, when the input length is known non-empty and each pushed row has `top` and `height`
+- `nondecreasing(rows.top)`, when the increment is non-negative
+- `spaced(rows, gap)`, when the increment is `height + gap`
+- `lastEnd(rows)`, when the input length is known non-empty and each pushed row has `top` and `height`
 
-It also accepts a scalar row height and `y += rowHeight`, which means `contiguousY(rows, 0)`.
+It also accepts a scalar row height and `y += rowHeight`, which means `spaced(rows, 0)`.
 
 It does not yet prove facts about conditional rows.
 

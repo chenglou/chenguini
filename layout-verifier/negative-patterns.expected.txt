@@ -107,14 +107,14 @@ UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumNeedsNonNegativeS
     step >= -40
     step <= 40
   missing: given runningSum(top, items.length, step) >= top
-UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumNeedsNonNegativeStep: monotone(result.rows.top)
-  monotone(result.rows.top) was not inferred
-  known: contiguousY(0)
-UNKNOWN layout-verifier/negative-patterns.ts:negativeContiguousYNeedsMatchingGap: contiguousY(result.rows, otherGap)
-  contiguousY(result.rows, otherGap) was not inferred
-  known: monotone(.top), contiguousY(gap), lastBottom = number[-10, 3500] as (runningSum(top, items.length, (step + gap)) - gap)
-UNKNOWN layout-verifier/negative-patterns.ts:negativeLastBottomNeedsHeightInRows: lastBottom(result.rows) == result.bottom
-  lastBottom was not inferred
+UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumNeedsNonNegativeStep: nondecreasing(result.rows.top)
+  nondecreasing(result.rows.top) was not inferred
+  known: spaced(0)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeSpacedNeedsMatchingGap: spaced(result.rows, otherGap)
+  spaced(result.rows, otherGap) was not inferred
+  known: nondecreasing(.top), spaced(gap), lastEnd = number[-10, 3500] as (runningSum(top, items.length, (step + gap)) - gap)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeLastEndNeedsHeightInRows: lastEnd(result.rows) == result.bottom
+  lastEnd was not inferred
 UNKNOWN layout-verifier/negative-patterns.ts:negativeObjectFieldDomainTooWide: result.height >= 0
   number[-20, 40] as item.height >= int[0, 0] as 0 was not proven
   need: item.height >= 0
@@ -139,12 +139,12 @@ UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumPerItemHeightNeed
     top >= 0
     top <= 1000
   missing: given runningSum(top, items.length, items[].height) >= top
-UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumPerItemHeightNeedsNonNegative: monotone(result.rows.top)
-  monotone(result.rows.top) was not inferred
-  known: contiguousY(0), lastBottom = number[-Infinity, Infinity] as runningSum(top, items.length, items[].height)
-UNKNOWN layout-verifier/negative-patterns.ts:negativeLocalLoopAnnotationNeedsNonNegativeItem > loop: monotone(rows.top)
-  monotone(rows.top) was not inferred
-  known: contiguousY(0), lastBottom = number[-Infinity, Infinity] as runningSum(top, items.length, items[].height)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeRunningSumPerItemHeightNeedsNonNegative: nondecreasing(result.rows.top)
+  nondecreasing(result.rows.top) was not inferred
+  known: spaced(0), lastEnd = number[-Infinity, Infinity] as runningSum(top, items.length, items[].height)
+UNKNOWN layout-verifier/negative-patterns.ts:negativeLocalLoopAnnotationNeedsNonNegativeItem > loop: nondecreasing(rows.top)
+  nondecreasing(rows.top) was not inferred
+  known: spaced(0), lastEnd = number[-Infinity, Infinity] as runningSum(top, items.length, items[].height)
 FAIL layout-verifier/negative-patterns.ts:negativeCallGiven: call negativeNeedsSmallValue(value): given value: number[0, 10]
   caller has number[0, 20] as value
   callee needs value: number[0, 10]
