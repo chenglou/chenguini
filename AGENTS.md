@@ -8,9 +8,9 @@ This repo documents all the code patterns we want to codify for a new era of UI 
 
 When we refactor code, from inside this repo or elsewhere, whenever you encounter a new code pattern that isn't found in the docs, or if you hesitate with the structuring of code, loudly alert **NEW PATTERN DETECTED**. Then diligently add to/modify them in `docs/drafts` and tell me about the modifications. Note that docs are **generalizable** lessons. Do NOT put one-offs in there unless they're representatve of an entire category of problems. The context is: we're trying to purely use these docs as specs to regenerate future demos, so it wouldn't be good to overfit to the current demos since that'd be cheating. If you object to what's in `docs/`, please raise this loudly too.
 
-**Important:** after you're done with a feature, and have enough holistic vision, make sure you do a pass over all the files again and see if you can simplify anything. Don't change things for the sake of, but if there are simplifications, YELL "I DID A HOLISTIC PASS AND FOUND SIMPLIFICATIONS".
+**Important:** after you're done with a feature, and have enough holistic vision, make sure you do a pass over all the files again and see if you can simplify anything. Don't change things for the sake of, but if there are simplifications, YELL **I DID A HOLISTIC PASS AND FOUND SIMPLIFICATIONS** with a brief summary.
 
-**Important:** do NOT monkey-patch. If you find yourself solving the symptom instead of the root cause, YELL "I SOLVED THE ROOT CAUSE NOT JUST THE SYMPTOM".
+**Important:** do NOT monkey-patch. If you find yourself solving the symptom instead of the root cause, YELL **I SOLVED THE ROOT CAUSE NOT JUST THE SYMPTOM** with a brief summary.
 
 ## Docs Tone
 - Preserve the author's tone in docs and drafts. Prefer concise, slightly personal phrasing over generic explanatory filler.
