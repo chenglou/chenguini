@@ -12,12 +12,12 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
 }
 
 /** @fit
- * given px: number[0, 1000000]
- * given py: number[0, 1000000]
- * given blockSize: number[1, 1000]
- * given countX: int[1, 1000]
+ * given px: 0..1000000
+ * given py: 0..1000000
+ * given blockSize: 1..1000
+ * given countX: int 1..1000
  * given px < countX * blockSize
- * result: int[0, 1001000000]
+ * result: int 0..1001000000
  * result >= 0
  */
 function hitIndexInside(px: number, py: number, blockSize: number, countX: number) {

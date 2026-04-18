@@ -39,8 +39,8 @@ export type AnchorLayoutResult = {
 }
 
 /** @fit
- * given y: number[0, 100000]
- * given gapTop: number[0, 1000]
+ * given y: 0..100000
+ * given gapTop: 0..1000
  * result >= y
  * result == y + gapTop
  */
@@ -49,8 +49,8 @@ function anchorHeaderY(y: number, gapTop: number) {
 }
 
 /** @fit
- * given y: number[0, 100000]
- * given gapTop: number[0, 1000]
+ * given y: 0..100000
+ * given gapTop: 0..1000
  * result >= y
  * result == y + gapTop + headerHeight + headerGapBottom
  */
@@ -59,7 +59,7 @@ function anchorItemsStartY(y: number, gapTop: number) {
 }
 
 /** @fit
- * given y: number[0, 100000]
+ * given y: 0..100000
  * result >= y
  * result == y + itemHeight
  */
@@ -68,9 +68,9 @@ function anchorNextItemY(y: number) {
 }
 
 /** @fit
- * given scrollTop: number[0, 100000]
- * given y: number[0, 100000]
- * given prevY: number[0, 100000]
+ * given scrollTop: 0..100000
+ * given y: 0..100000
+ * given prevY: 0..100000
  * result == scrollTop + (y - prevY)
  */
 function adjustScrollTopForAnchor(scrollTop: number, y: number, prevY: number) {

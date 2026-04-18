@@ -92,9 +92,9 @@ export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[])
 }
 
 /** @fit
- * given min: number[-100000, 100000]
- * given v: number[-100000, 100000]
- * given max: number[-100000, 100000]
+ * given min: -100000..100000
+ * given v: -100000..100000
+ * given max: -100000..100000
  * given max >= min
  * result >= min
  * result <= max
@@ -104,10 +104,10 @@ function clamp(min: number, v: number, max: number) {
 }
 
 /** @fit
- * given containerSizeX: number[320, 2000]
+ * given containerSizeX: 320..2000
  * result.cols >= 1
- * result.cols: int[1, 7]
- * result.boxMaxSizeX: number[0, 2000]
+ * result.cols: int 1..7
+ * result.boxMaxSizeX: 0..2000
  */
 export function colsBoxMaxSizeXF(containerSizeX: number) {
   const boxMinSizeX = 220
@@ -219,13 +219,13 @@ export function getLineLayout(
 }
 
 /** @fit
- * given x: number[-10000, 10000]
- * given y: number[-10000, 10000]
- * given imageSizeX: number[0, 10000]
- * given imageSizeY: number[0, 10000]
- * given promptLayout.width: number[0, 10000]
- * given promptLayout.visibleHeight: number[0, 10000]
- * given promptLineHeight: number[0, 1000]
+ * given x: -10000..10000
+ * given y: -10000..10000
+ * given imageSizeX: 0..10000
+ * given imageSizeY: 0..10000
+ * given promptLayout.width: 0..10000
+ * given promptLayout.visibleHeight: 0..10000
+ * given promptLineHeight: 0..1000
  * result.imageBox.x == x
  * result.imageBox.y == y
  * result.imageBox.sizeX == imageSizeX

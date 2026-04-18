@@ -20,9 +20,9 @@ export function shouldSwapDown(pointerY: number, neighborDestY: number, neighbor
 }
 
 /** @fit
- * given rowSizes.length: int[0, 100]
- * given rowSizes[]: number[0, 1000]
- * given paddingTop: number[0, 1000]
+ * given rowSizes.length: int 0..100
+ * given rowSizes[]: 0..1000
+ * given paddingTop: 0..1000
  * result.length == rowSizes.length
  */
 export function stackLayout(rowSizes: number[], paddingTop: number): number[] {

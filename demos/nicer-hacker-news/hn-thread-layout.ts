@@ -49,20 +49,20 @@ type RowVisualInput = {
 }
 
 /** @fit
- * given params.rows.length: int[0, 1000]
- * given params.rows[].indent: number[0, 100]
- * given params.rows[].rowHeightNatural: number[0, 1000]
- * given params.submissionHeight: number[0, 100000]
- * given params.scrollTopCap: number[0, 100000]
- * given params.containerWidth: number[0, 10000]
+ * given params.rows.length: int 0..1000
+ * given params.rows[].indent: 0..100
+ * given params.rows[].rowHeightNatural: 0..1000
+ * given params.submissionHeight: 0..100000
+ * given params.scrollTopCap: 0..100000
+ * given params.containerWidth: 0..10000
  * given params.submissionHeight >= params.scrollTopCap
  * result.length == params.rows.length
- * result[].rowIndex: int[0, 999]
- * result[].indent: number[0, 100]
+ * result[].rowIndex: int 0..999
+ * result[].indent: 0..100
  * result[].rowRect.left == 0
- * result[].rowRect.top: number[0, 1100000]
+ * result[].rowRect.top: 0..1100000
  * result[].rowRect.width == params.containerWidth
- * result[].rowRect.height: number[0, 1000]
+ * result[].rowRect.height: 0..1000
  */
 export function layoutHNRowHitGeometry(params: {
   rows: RowHitInput[]
@@ -180,9 +180,9 @@ export function layoutHNThreadVisualGeometry(params: {
 }
 
 /** @fit
- * given min: number[-100000, 100000]
- * given v: number[-100000, 100000]
- * given max: number[-100000, 100000]
+ * given min: -100000..100000
+ * given v: -100000..100000
+ * given max: -100000..100000
  * given max >= min
  * result >= min
  * result <= max
