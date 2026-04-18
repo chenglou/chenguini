@@ -59,6 +59,7 @@ type RowVisualInput = {
  * result.length == params.rows.length
  * result[].rowIndex: int[0, 999]
  * result[].indent: number[0, 100]
+ * result[].rowRect.left == 0
  * result[].rowRect.top: number[0, 1100000]
  * result[].rowRect.width == params.containerWidth
  * result[].rowRect.height: number[0, 1000]

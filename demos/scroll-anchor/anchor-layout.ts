@@ -42,6 +42,7 @@ export type AnchorLayoutResult = {
  * given y: number[0, 100000]
  * given gapTop: number[0, 1000]
  * result >= y
+ * result == y + gapTop
  */
 function anchorHeaderY(y: number, gapTop: number) {
   return y + gapTop
@@ -51,6 +52,7 @@ function anchorHeaderY(y: number, gapTop: number) {
  * given y: number[0, 100000]
  * given gapTop: number[0, 1000]
  * result >= y
+ * result == y + gapTop + headerHeight + headerGapBottom
  */
 function anchorItemsStartY(y: number, gapTop: number) {
   return y + gapTop + headerHeight + headerGapBottom
@@ -59,6 +61,7 @@ function anchorItemsStartY(y: number, gapTop: number) {
 /** @fit
  * given y: number[0, 100000]
  * result >= y
+ * result == y + itemHeight
  */
 function anchorNextItemY(y: number) {
   return y + itemHeight

@@ -55,7 +55,9 @@ function visiblePromptLineCount(lineCount: number, maxLines: number) {
 /** @fit
  * given visibleLineCount: int[0, 10]
  * given lineHeight: number[0, 100]
+ * result: number[8, 1008]
  * result >= promptPaddingTop
+ * result == promptPaddingTop + visibleLineCount * lineHeight
  */
 function promptVisibleHeightForLineCount(visibleLineCount: number, lineHeight: number) {
   return promptPaddingTop + visibleLineCount * lineHeight
