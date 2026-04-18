@@ -38,6 +38,42 @@ export type AnchorLayoutResult = {
   headerPositions: AnchorHeaderPosition[]
 }
 
+/** @fit
+ * given y: number[0, 100000]
+ * given gapTop: number[0, 1000]
+ * result >= y
+ */
+function anchorHeaderY(y: number, gapTop: number) {
+  return y + gapTop
+}
+
+/** @fit
+ * given y: number[0, 100000]
+ * given gapTop: number[0, 1000]
+ * result >= y
+ */
+function anchorItemsStartY(y: number, gapTop: number) {
+  return y + gapTop + headerHeight + headerGapBottom
+}
+
+/** @fit
+ * given y: number[0, 100000]
+ * result >= y
+ */
+function anchorNextItemY(y: number) {
+  return y + itemHeight
+}
+
+/** @fit
+ * given scrollTop: number[0, 100000]
+ * given y: number[0, 100000]
+ * given prevY: number[0, 100000]
+ * result == scrollTop + (y - prevY)
+ */
+function adjustScrollTopForAnchor(scrollTop: number, y: number, prevY: number) {
+  return scrollTop + (y - prevY)
+}
+
 export function computeAnchorLayout(
   items: AnchorLayoutItem[],
   currentScrollTop: number,
@@ -58,8 +94,8 @@ export function computeAnchorLayout(
   while (idx < items.length) {
     const sessionDay = items[idx]!.day
     const gapTop = isFirstSession ? headerGapFirst : headerGapRest
-    const headerY = y + gapTop
-    y += gapTop + headerHeight + headerGapBottom
+    const headerY = anchorHeaderY(y, gapTop)
+    y = anchorItemsStartY(y, gapTop)
     headerPositions.push({day: sessionDay, y: headerY})
 
     let itemsInSession = 0
@@ -75,11 +111,11 @@ export function computeAnchorLayout(
       }
 
       if (userScrolled === false && anchorId != null && item.id === anchorId && adjustedScrollTop > 40) {
-        adjustedScrollTop = adjustedScrollTop + (y - anchorPrevY)
+        adjustedScrollTop = adjustScrollTopForAnchor(adjustedScrollTop, y, anchorPrevY)
         nextAnchorPrevY = y
       }
 
-      y += itemHeight
+      y = anchorNextItemY(y)
       idx++
     }
     isFirstSession = false

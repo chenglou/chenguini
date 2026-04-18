@@ -48,6 +48,21 @@ type RowVisualInput = {
   commentLayout: HNCommentLayout
 }
 
+/** @fit
+ * given params.rows.length: int[0, 1000]
+ * given params.rows[].indent: number[0, 100]
+ * given params.rows[].rowHeightNatural: number[0, 1000]
+ * given params.submissionHeight: number[0, 100000]
+ * given params.scrollTopCap: number[0, 100000]
+ * given params.containerWidth: number[0, 10000]
+ * given params.submissionHeight >= params.scrollTopCap
+ * result.length == params.rows.length
+ * result[].rowIndex: int[0, 999]
+ * result[].indent: number[0, 100]
+ * result[].rowRect.top: number[0, 1100000]
+ * result[].rowRect.width == params.containerWidth
+ * result[].rowRect.height: number[0, 1000]
+ */
 export function layoutHNRowHitGeometry(params: {
   rows: RowHitInput[]
   submissionHeight: number
@@ -163,6 +178,14 @@ export function layoutHNThreadVisualGeometry(params: {
   } satisfies ThreadVisualGeometry
 }
 
+/** @fit
+ * given min: number[-100000, 100000]
+ * given v: number[-100000, 100000]
+ * given max: number[-100000, 100000]
+ * given max >= min
+ * result >= min
+ * result <= max
+ */
 function clamp(min: number, v: number, max: number) {
   return v > max ? max : v < min ? min : v
 }

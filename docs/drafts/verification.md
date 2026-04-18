@@ -72,6 +72,27 @@ Bad:
 
 Use static facts for app-owned geometry. Use browser reports for browser-owned seams.
 
+For source-only checks, put the smallest useful `@fit` contract above the pure helper itself. Keep the claim close to the code that earns it:
+
+```ts
+/** @fit
+ * given rowSizes.length: int[0, 200]
+ * given rowSizes[]: number[0, 1000]
+ * result.length == rowSizes.length
+ */
+function stackLayout(rowSizes: number[], paddingTop: number) {
+  const result = []
+  let top = paddingTop
+  for (const rowSize of rowSizes) {
+    result.push(top)
+    top += rowSize
+  }
+  return result
+}
+```
+
+Prefer boring facts like length, bounds, and copied fields first. If a contract needs a paragraph of setup or knows too much about the page, the fact probably belongs in a smaller helper or a browser-owned report.
+
 ## Demos Usually Want Two Layers
 
 Public demos usually want:

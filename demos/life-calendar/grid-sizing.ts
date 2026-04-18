@@ -11,9 +11,22 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
   return {blockSize, countX, countY, gridFinalSizeX, gridFinalSizeY}
 }
 
+/** @fit
+ * given px: number[0, 1000000]
+ * given py: number[0, 1000000]
+ * given blockSize: number[1, 1000]
+ * given countX: int[1, 1000]
+ * given px < countX * blockSize
+ * result: int[0, 1001000000]
+ * result >= 0
+ */
+function hitIndexInside(px: number, py: number, blockSize: number, countX: number) {
+  return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
+}
+
 export function hitTest(blockSize: number, countX: number, _countY: number, gridLeft: number, gridTop: number, gridFinalSizeX: number, gridFinalSizeY: number, pointer: {x: number; y: number}) {
   const px = pointer.x - gridLeft
   const py = pointer.y - gridTop
   if (px < 0 || px >= gridFinalSizeX || py < 0 || py >= gridFinalSizeY) return null
-  return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
+  return hitIndexInside(px, py, blockSize, countX)
 }
