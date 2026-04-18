@@ -106,6 +106,7 @@ function clamp(min: number, v: number, max: number) {
 /** @fit
  * given containerSizeX: number[320, 2000]
  * result.cols >= 1
+ * result.cols: int[1, 7]
  * result.boxMaxSizeX: number[0, 2000]
  */
 export function colsBoxMaxSizeXF(containerSizeX: number) {
@@ -230,6 +231,7 @@ export function getLineLayout(
  * result.imageBox.sizeX == imageSizeX
  * result.imageBox.sizeY == imageSizeY
  * result.layoutBox.sizeX == imageSizeX
+ * result.layoutBox.sizeY == imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
  * result.prompt.box.x == x
  * result.prompt.box.y == y + imageSizeY
  * result.prompt.box.sizeX == promptLayout.width
