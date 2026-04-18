@@ -237,8 +237,7 @@ export function renderHNCommentLayout(layout: HNCommentLayout): DocumentFragment
     for (let lineIndex = 0; lineIndex < block.lines.length; lineIndex++) {
       const line = block.lines[lineIndex]!
       const lineNode = document.createElement('div')
-      lineNode.className = 'comment-line'
-      if (block.kind === 'codeBlock') lineNode.classList.add('comment-code-line')
+      lineNode.className = block.kind === 'codeBlock' ? 'comment-line comment-code-line' : 'comment-line'
       lineNode.dataset['textStart'] = String(line.textStart)
       lineNode.dataset['textEnd'] = String(line.textEnd)
       lineNode.style.top = `${line.top}px`
@@ -462,14 +461,17 @@ function createFragmentNode(fragment: HNCommentLayoutFragment) {
   switch (fragment.kind) {
     case 'text':
       node = document.createElement('span')
+      node.className = 'comment-fragment'
       break
 
     case 'italic':
       node = document.createElement('i')
+      node.className = 'comment-fragment'
       break
 
     case 'link': {
       const link = document.createElement('a')
+      link.className = 'comment-fragment'
       link.href = fragment.href ?? ''
       node = link
       break
@@ -477,10 +479,9 @@ function createFragmentNode(fragment: HNCommentLayoutFragment) {
 
     case 'code':
       node = document.createElement('span')
-      node.className = 'comment-code-fragment'
+      node.className = 'comment-fragment comment-code-fragment'
       break
   }
-  node.classList.add('comment-fragment')
   node.textContent = fragment.text
   return node
 }

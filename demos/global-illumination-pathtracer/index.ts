@@ -7,11 +7,18 @@ const gl = canvas.getContext('webgl2')!
 
 // White noise texture + R2 temporal sequence for good distribution
 const bluenoise = gl.createTexture()!
+function hash(n: number) {
+  n = n | 0
+  n = Math.imul((n >>> 16) ^ n, 0x21f0aaad)
+  n = Math.imul((n >>> 15) ^ n, 0x735a2d97)
+  return (((n >>> 15) ^ n) >>> 0) / 0x100000000
+}
+
 ;(function generateNoise() {
   const size = 512
   const data = new Uint8Array(size * size * 4)
   for (let i = 0; i < data.length; i++) {
-    data[i] = Math.random() * 256 | 0
+    data[i] = hash(i) * 256 | 0
   }
   gl.bindTexture(gl.TEXTURE_2D, bluenoise)
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)

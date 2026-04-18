@@ -16,6 +16,17 @@ const damping = 12
 const alpha = damping / 2 // exponential decay rate
 const omega = Math.sqrt(stiffness - alpha * alpha) // damped angular frequency
 
+function hash(n: number) {
+  n = n | 0
+  n = Math.imul((n >>> 16) ^ n, 0x21f0aaad)
+  n = Math.imul((n >>> 15) ^ n, 0x735a2d97)
+  return (((n >>> 15) ^ n) >>> 0) / 0x100000000
+}
+
+function hash2(a: number, b: number) {
+  return hash((a + Math.imul(b, 0x9e3779b9)) | 0)
+}
+
 // === numerical spring (symplectic Euler integration) ===
 type Spring = { pos: number; dest: number; v: number }
 
@@ -83,11 +94,12 @@ type Pair = {
 
 type State = {
   animatedUntilTime: number | null
+  retargetCount: number
   pairs: Pair[]
   events: { click: MouseEvent | null }
 }
 
-const st: State = { animatedUntilTime: null, pairs: [], events: { click: null } }
+const st: State = { animatedUntilTime: null, retargetCount: 0, pairs: [], events: { click: null } }
 
 // === DOM setup ===
 const cx = document.documentElement.clientWidth / 2
@@ -149,9 +161,12 @@ function render(now: number): boolean {
   // === handle inputs
   if (st.events.click != null && st.events.click.target === domCache.btn) {
     const margin = 80
-    for (const p of st.pairs) {
-      const destX = margin + Math.random() * (w - margin * 2)
-      const destY = margin + Math.random() * (h - margin * 2)
+    st.retargetCount += 1
+    for (let pairIndex = 0; pairIndex < st.pairs.length; pairIndex++) {
+      const p = st.pairs[pairIndex]!
+      const seed = st.retargetCount * 16 + pairIndex
+      const destX = margin + hash2(seed, 0) * (w - margin * 2)
+      const destY = margin + hash2(seed, 1) * (h - margin * 2)
       p.numX.dest = destX
       p.numY.dest = destY
       aspringRetarget(p.anaX, destX, now)
