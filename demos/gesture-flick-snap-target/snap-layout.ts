@@ -6,6 +6,13 @@ export const pipH = 80
 export const cornerPad = 20
 export const decayFriction = 4.5
 
+/** @fit
+ * given w: 160..4000
+ * given h: 120..4000
+ * result.length == 4
+ * result[].x: 20..3860
+ * result[].y: 20..3900
+ */
 export function getCorners(w: number, h: number) {
   return [
     {x: cornerPad, y: cornerPad},
@@ -26,6 +33,9 @@ export function nearestCorner(x: number, y: number, w: number, h: number) {
   return best
 }
 
+/** @fit
+ * result == pos + velocity / decayFriction
+ */
 export function decayRestPos(pos: number, velocity: number) {
   return pos + velocity / decayFriction
 }

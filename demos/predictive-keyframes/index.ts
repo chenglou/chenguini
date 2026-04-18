@@ -61,6 +61,12 @@ type ImageJob = {
   aesthetic_score: number
 }
 
+/** @fit
+ * given width: 0..5000
+ * given job.width: 1..10000
+ * given job.height: 1..10000
+ * result >= 0
+ */
 function boxHeight(width: number, job: ImageJob) { return width / (job.width / job.height) }
 
 // === Initialization ===
