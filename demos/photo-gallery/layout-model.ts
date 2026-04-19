@@ -83,6 +83,10 @@ export function rectContainsPoint(r: Rect, x: number, y: number) {
   return r.x <= x && x < r.x + r.sizeX && r.y <= y && y < r.y + r.sizeY
 }
 
+/** @fit
+ * given data.length: int 0..1000
+ * result.length == data.length
+ */
 export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[]): LayoutSource[] {
   return data.map(d => ({
     ar: d.w / d.h,
@@ -116,12 +120,52 @@ export function colsBoxMaxSizeXF(containerSizeX: number) {
   return {cols, boxMaxSizeX}
 }
 
+/** @fit
+ * given ar: 0.1..10
+ * given boxMaxSizeX: 0..2000
+ * result: 0..2100
+ * result >= 0
+ */
+function gridImageMaxSizeY(ar: number, boxMaxSizeX: number) {
+  return ar === 1 ? boxMaxSizeX * 0.85
+    : ar < 1 ? boxMaxSizeX * 1.05
+    : boxMaxSizeX
+}
+
+/** @fit
+ * given naturalSizeX: 0..10000
+ * given boxMaxSizeX: 0..2000
+ * given aspectSizeX: 0..21000
+ * result: 0..2000
+ * result <= naturalSizeX
+ * result <= boxMaxSizeX
+ */
+function gridImageSizeX(naturalSizeX: number, boxMaxSizeX: number, aspectSizeX: number) {
+  const cappedByBox = Math.min(naturalSizeX, boxMaxSizeX)
+  return Math.min(cappedByBox, aspectSizeX)
+}
+
+/** @fit
+ * given ar: 0.1..10
+ * given naturalSizeX: 0..10000
+ * given boxMaxSizeX: 0..2000
+ * result.imageSizeX: 0..2000
+ * result.imageSizeX <= naturalSizeX
+ * result.imageSizeX <= boxMaxSizeX
+ * result.imageSizeY: 0..20000
+ */
+function measureGridImage(ar: number, naturalSizeX: number, boxMaxSizeX: number) {
+  const imgMaxSizeY = gridImageMaxSizeY(ar, boxMaxSizeX)
+  const imageSizeX = gridImageSizeX(naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
+  const imageSizeY = imageSizeX / ar
+  return {imageSizeX, imageSizeY}
+}
+
 export function getGridLayout(layoutSources: LayoutSource[], windowSizeX: number): GridLayoutModel {
   const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
   const rowsTop: number[] = [windowPaddingTop]
   const rowHeights: number[] = []
   const measurements: Array<{
-    ar: number
     imageSizeX: number
     imageSizeY: number
     layoutHeight: number
@@ -132,16 +176,10 @@ export function getGridLayout(layoutSources: LayoutSource[], windowSizeX: number
   for (let i = 0; i < layoutSources.length; i++) {
     const source = layoutSources[i]!
     const ar = source.ar
-    const imgMaxSizeY =
-      ar === 1 ? boxMaxSizeX * 0.85
-      : ar < 1 ? boxMaxSizeX * 1.05
-      : boxMaxSizeX
-    const imageSizeX = Math.min(source.naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
-    const imageSizeY = imageSizeX / ar
+    const {imageSizeX, imageSizeY} = measureGridImage(ar, source.naturalSizeX, boxMaxSizeX)
     const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt2DMaxLines, prompt2DLineHeight, true)
     const layoutHeight = imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
     measurements.push({
-      ar,
       imageSizeX,
       imageSizeY,
       layoutHeight,
@@ -180,6 +218,52 @@ export function getGridLayout(layoutSources: LayoutSource[], windowSizeX: number
   }
 }
 
+/** @fit
+ * given windowSizeX: 320..2000
+ * given windowSizeY: 320..2000
+ * result.box1DMaxSizeX: 16..1696
+ * result.box1DMaxSizeY: 252..1932
+ * result.box1DMaxSizeX == windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
+ * result.box1DMaxSizeY == windowSizeY - windowPaddingTop - boxes1DGapY
+ */
+function lineBoxMaxSizes(windowSizeX: number, windowSizeY: number) {
+  return {
+    box1DMaxSizeX: windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2,
+    box1DMaxSizeY: windowSizeY - windowPaddingTop - boxes1DGapY,
+  }
+}
+
+/** @fit
+ * given focused: int 1..1000
+ * given scrollY: -100000..100000
+ * given windowSizeY: 320..2000
+ * result.targetIndex: int 0..999
+ * result.targetIndex == focused - 1
+ * result.box.x == 0
+ * result.box.y == scrollY
+ * result.box.sizeX == hitArea1DSizeX
+ * result.box.sizeY == windowSizeY
+ */
+function leftEdgeHitArea(focused: number, scrollY: number, windowSizeY: number): EdgeHitArea {
+  return {box: rect(0, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused - 1}
+}
+
+/** @fit
+ * given focused: int 0..999
+ * given windowSizeX: 320..2000
+ * given scrollY: -100000..100000
+ * given windowSizeY: 320..2000
+ * result.targetIndex: int 1..1000
+ * result.targetIndex == focused + 1
+ * result.box.x == windowSizeX - hitArea1DSizeX
+ * result.box.y == scrollY
+ * result.box.sizeX == hitArea1DSizeX
+ * result.box.sizeY == windowSizeY
+ */
+function rightEdgeHitArea(focused: number, windowSizeX: number, scrollY: number, windowSizeY: number): EdgeHitArea {
+  return {box: rect(windowSizeX - hitArea1DSizeX, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused + 1}
+}
+
 export function getLineLayout(
   layoutSources: LayoutSource[],
   focused: number,
@@ -187,8 +271,7 @@ export function getLineLayout(
   windowSizeY: number,
   scrollY: number,
 ): LineLayoutModel {
-  const box1DMaxSizeY = windowSizeY - windowPaddingTop - boxes1DGapY
-  const box1DMaxSizeX = windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
+  const {box1DMaxSizeX, box1DMaxSizeY} = lineBoxMaxSizes(windowSizeX, windowSizeY)
   const measurements = layoutSources.map((source, i) =>
     get1DItemSize(source, box1DMaxSizeX, box1DMaxSizeY, i === focused ? 1 : 0.7))
 
@@ -213,8 +296,8 @@ export function getLineLayout(
 
   return {
     items,
-    leftHitArea: focused > 0 ? {box: rect(0, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused - 1} : null,
-    rightHitArea: focused < layoutSources.length - 1 ? {box: rect(windowSizeX - hitArea1DSizeX, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused + 1} : null,
+    leftHitArea: focused > 0 ? leftEdgeHitArea(focused, scrollY, windowSizeY) : null,
+    rightHitArea: focused < layoutSources.length - 1 ? rightEdgeHitArea(focused, windowSizeX, scrollY, windowSizeY) : null,
   }
 }
 
@@ -225,18 +308,14 @@ export function getLineLayout(
  * given imageSizeY: 0..10000
  * given promptLayout.width: 0..10000
  * given promptLayout.visibleHeight: 0..10000
- * given promptLineHeight: 0..1000
- * result.imageBox.x == x
- * result.imageBox.y == y
  * result.imageBox.sizeX == imageSizeX
  * result.imageBox.sizeY == imageSizeY
- * result.layoutBox.sizeX == imageSizeX
  * result.layoutBox.sizeY == imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
- * result.prompt.box.x == x
+ * result.occlusionBounds.sizeY == imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
  * result.prompt.box.y == y + imageSizeY
  * result.prompt.box.sizeX == promptLayout.width
  * result.prompt.box.sizeY == promptLayout.visibleHeight
- * result.prompt.lineHeight == promptLineHeight
+ * result.prompt.lines == promptLayout.lines
  */
 function makeItemLayoutGeometry(
   x: number,

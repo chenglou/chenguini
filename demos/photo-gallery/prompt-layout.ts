@@ -63,6 +63,24 @@ function promptVisibleHeightForLineCount(visibleLineCount: number, lineHeight: n
   return promptPaddingTop + visibleLineCount * lineHeight
 }
 
+/** @fit
+ * given outerMaxWidth: 0..10000
+ * result >= 1
+ */
+function promptInnerMaxWidth(outerMaxWidth: number) {
+  return Math.max(1, outerMaxWidth - promptPaddingX * 2)
+}
+
+/** @fit
+ * given outerMaxWidth: 0..10000
+ * given maxLineWidth: 0..10000
+ * result: 0..10000
+ * result <= outerMaxWidth
+ */
+function singleLinePromptWidth(outerMaxWidth: number, maxLineWidth: number) {
+  return Math.min(outerMaxWidth, promptPaddingX * 2 + maxLineWidth)
+}
+
 export function preparePrompt(prompt: string): PreparedPrompt {
   return {
     prepared: prepareRichInline([
@@ -79,7 +97,7 @@ export function measurePromptLayout(
   lineHeight: number,
   shrinkSingleLineWidth: boolean,
 ): PromptLayout {
-  const innerMaxWidth = Math.max(1, outerMaxWidth - promptPaddingX * 2)
+  const innerMaxWidth = promptInnerMaxWidth(outerMaxWidth)
   const lines: PromptLine[] = []
   let cursor: RichInlineCursor | undefined
   let lineCount = 0
@@ -108,7 +126,7 @@ export function measurePromptLayout(
   const visibleHeight = promptVisibleHeightForLineCount(visibleLineCount, lineHeight)
   if (shrinkSingleLineWidth && lineCount === 1) {
     return {
-      width: Math.min(outerMaxWidth, promptPaddingX * 2 + maxLineWidth),
+      width: singleLinePromptWidth(outerMaxWidth, maxLineWidth),
       lineCount: 1,
       visibleHeight,
       lines,
