@@ -46,7 +46,7 @@ import {
   type LineLayoutModel,
   type PromptGeometry,
   type Rect,
-} from './layout-model'
+} from './layout'
 import {
   measurePromptLayout,
   prompt1DMaxLines,
