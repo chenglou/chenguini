@@ -177,7 +177,7 @@ export function getGridLayout(layoutSources: LayoutSource[], windowSizeX: number
     const source = layoutSources[i]!
     const ar = source.ar
     const {imageSizeX, imageSizeY} = measureGridImage(ar, source.naturalSizeX, boxMaxSizeX)
-    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt2DMaxLines, prompt2DLineHeight, true)
+    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt2DMaxLines, prompt2DLineHeight)
     const layoutHeight = imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
     measurements.push({
       imageSizeX,
@@ -349,7 +349,7 @@ function get1DItemSize(
   while (true) {
     const imgMaxSizeY = Math.max(1, box1DMaxSizeY - promptAreaY)
     const imageSizeX = Math.min(source.naturalSizeX, box1DMaxSizeX, imgMaxSizeY * source.ar) * scaleFactor
-    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt1DMaxLines, prompt1DLineHeight, false)
+    const promptLayout = measurePromptLayout(source.preparedPrompt, imageSizeX, prompt1DMaxLines, prompt1DLineHeight)
     const nextPromptAreaY = promptLayout.visibleHeight + promptPaddingBottom
     if (nextPromptAreaY === promptAreaY) {
       return {

@@ -699,7 +699,6 @@ function render(now: number) {
         currentPromptSizeX,
         activeLineLayout == null ? prompt2DMaxLines : prompt1DMaxLines,
         geometry.prompt.lineHeight,
-        false,
       )
       const currentPromptSizeY = currentPromptLayout.visibleHeight
       prompt.style.left = `${currentPromptX}px`

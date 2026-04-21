@@ -71,16 +71,6 @@ function promptInnerMaxWidth(outerMaxWidth: number) {
   return Math.max(1, outerMaxWidth - promptPaddingX * 2)
 }
 
-/** @fit
- * given outerMaxWidth: 0..10000
- * given maxLineWidth: 0..10000
- * result: 0..10000
- * result <= outerMaxWidth
- */
-function singleLinePromptWidth(outerMaxWidth: number, maxLineWidth: number) {
-  return Math.min(outerMaxWidth, promptPaddingX * 2 + maxLineWidth)
-}
-
 export function preparePrompt(prompt: string): PreparedPrompt {
   return {
     prepared: prepareRichInline([
@@ -95,19 +85,16 @@ export function measurePromptLayout(
   outerMaxWidth: number,
   maxLines: number,
   lineHeight: number,
-  shrinkSingleLineWidth: boolean,
 ): PromptLayout {
   const innerMaxWidth = promptInnerMaxWidth(outerMaxWidth)
   const lines: PromptLine[] = []
   let cursor: RichInlineCursor | undefined
   let lineCount = 0
-  let maxLineWidth = 0
 
   while (true) {
     const range = layoutNextRichInlineLineRange(prompt.prepared, innerMaxWidth, cursor)
     if (range === null) break
     lineCount++
-    if (range.width > maxLineWidth) maxLineWidth = range.width
     if (lines.length < maxLines) {
       const line = materializeRichInlineLineRange(prompt.prepared, range)
       lines.push({
@@ -122,15 +109,25 @@ export function measurePromptLayout(
     cursor = range.end
   }
 
+  return finishPromptLayout(outerMaxWidth, lineCount, maxLines, lineHeight, lines)
+}
+
+/** @fit
+ * given outerMaxWidth: 0..10000
+ * given lineCount: int 0..200
+ * given maxLines: int 0..10
+ * given lineHeight: 0..100
+ * result.width == outerMaxWidth
+ * result.visibleHeight >= promptPaddingTop
+ */
+function finishPromptLayout(
+  outerMaxWidth: number,
+  lineCount: number,
+  maxLines: number,
+  lineHeight: number,
+  lines: PromptLine[],
+): PromptLayout {
   const visibleLineCount = visiblePromptLineCount(lineCount, maxLines)
   const visibleHeight = promptVisibleHeightForLineCount(visibleLineCount, lineHeight)
-  if (shrinkSingleLineWidth && lineCount === 1) {
-    return {
-      width: singleLinePromptWidth(outerMaxWidth, maxLineWidth),
-      lineCount: 1,
-      visibleHeight,
-      lines,
-    }
-  }
   return {width: outerMaxWidth, lineCount, visibleHeight, lines}
 }
