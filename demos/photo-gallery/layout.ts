@@ -32,7 +32,6 @@ export type PromptGeometry = {
 export type ItemLayoutGeometry = {
   imageBox: Rect
   layoutBox: Rect
-  occlusionBounds: Rect
   prompt: PromptGeometry
 }
 
@@ -40,7 +39,7 @@ export type GridLayoutModel = {
   boxMaxSizeX: number
   cols: number
   contentHeight: number
-  items: Array<ItemLayoutGeometry & {hitArea: Rect}>
+  items: ItemLayoutGeometry[]
   rowsTop: number[]
 }
 
@@ -202,7 +201,7 @@ export function getGridLayout(
       const currentRow = Math.floor(i / cols)
       const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - measurement.imageSizeX) / 2
       const y = rowsTop[currentRow]! + (rowHeights[currentRow]! - measurement.layoutHeight) / 2
-      const geometry = makeItemLayoutGeometry(
+      return makeItemLayoutGeometry(
         x,
         y,
         measurement.imageSizeX,
@@ -210,10 +209,6 @@ export function getGridLayout(
         measurement.promptLayout,
         prompt2DLineHeight,
       )
-      return {
-        ...geometry,
-        hitArea: geometry.layoutBox,
-      }
     }),
     rowsTop,
   }
@@ -313,7 +308,6 @@ export function getLineLayout(
  * result.imageBox.sizeX == imageSizeX
  * result.imageBox.sizeY == imageSizeY
  * result.layoutBox.sizeY == imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
- * result.occlusionBounds.sizeY == imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
  * result.prompt.box.y == y + imageSizeY
  * result.prompt.box.sizeX == promptLayout.width
  * result.prompt.box.sizeY == promptLayout.visibleHeight
@@ -332,7 +326,6 @@ function makeItemLayoutGeometry(
   return {
     imageBox,
     layoutBox,
-    occlusionBounds: layoutBox,
     prompt: {
       box: {x, y: y + imageSizeY, sizeX: promptLayout.width, sizeY: promptLayout.visibleHeight},
       lineHeight: promptLineHeight,

@@ -99,22 +99,6 @@ function springGoToEnd(config: Spring) {
   config.v = 0
 }
 
-function layoutRectXPos(r: Rect, d: BoxData) {
-  return r.x + d.xResidual.pos
-}
-
-function layoutRectYPos(r: Rect, d: BoxData) {
-  return r.y + d.yResidual.pos
-}
-
-function layoutRectSizeXPos(r: Rect, d: BoxData) {
-  return r.sizeX + d.sizeXResidual.pos
-}
-
-function layoutRectSizeYPos(r: Rect, d: BoxData) {
-  return r.sizeY + d.sizeYResidual.pos
-}
-
 const isSafari = navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome') // Chrome also includes Safari in user-agent string
 if (isSafari) {
   // alright *deep breath* Desktop Safari is fine, but iPad Safari behaves badly when items exceed the viewport in 1D mode (overflow hidden doesn't work!). This is prominent if you hold arrow right and check the GitHub logo move. It's especially pathological on Stage Manager and any other iPad Safari mode where the app window shrinks and bugs the browser more for whatever reason
@@ -162,7 +146,12 @@ type BoxData = {
   ar: number // aspect ratio
   scale: Spring
   fxFactor: Spring
-  // "base" values are the regular, non-animated values. Final visual value = base value + residual (see below)
+  layoutBox: AnimatedRect
+  promptBox: AnimatedRect
+}
+
+type AnimatedRect = {
+  // "base" values are the regular, non-animated values. Final visual value = base value + residual.
   x: number
   y: number
   sizeX: number
@@ -174,14 +163,6 @@ type BoxData = {
   yResidual: Spring
   sizeXResidual: Spring
   sizeYResidual: Spring
-  promptX: number
-  promptY: number
-  promptSizeX: number
-  promptSizeY: number
-  promptXResidual: Spring
-  promptYResidual: Spring
-  promptSizeXResidual: Spring
-  promptSizeYResidual: Spring
 }
 
 type State = {
@@ -202,61 +183,70 @@ type SelectTarget =
 function shiftSpringPos(s: Spring, delta: number) {
   s.pos += delta
 }
-function sizeXPos(d: BoxData) {
-  return d.sizeX + d.sizeXResidual.pos
+
+function animatedRect(r: Rect, xResidual = 0, yResidual = 0): AnimatedRect {
+  return {
+    x: r.x,
+    y: r.y,
+    sizeX: r.sizeX,
+    sizeY: r.sizeY,
+    xResidual: spring(xResidual),
+    yResidual: spring(yResidual),
+    sizeXResidual: spring(0),
+    sizeYResidual: spring(0),
+  }
 }
-function sizeYPos(d: BoxData) {
-  return d.sizeY + d.sizeYResidual.pos
+
+function relativeRect(child: Rect, parent: Rect): Rect {
+  return {
+    x: child.x - parent.x,
+    y: child.y - parent.y,
+    sizeX: child.sizeX,
+    sizeY: child.sizeY,
+  }
 }
-function xPos(d: BoxData) {
-  return d.x + d.xResidual.pos
+
+function rectXPos(r: AnimatedRect) {
+  return r.x + r.xResidual.pos
 }
-function yPos(d: BoxData) {
-  return d.y + d.yResidual.pos
+
+function rectYPos(r: AnimatedRect) {
+  return r.y + r.yResidual.pos
 }
-function promptXPos(d: BoxData) {
-  return d.promptX + d.promptXResidual.pos
+
+function rectSizeXPos(r: AnimatedRect) {
+  return r.sizeX + r.sizeXResidual.pos
 }
-function promptYPos(d: BoxData) {
-  return d.promptY + d.promptYResidual.pos
+
+function rectSizeYPos(r: AnimatedRect) {
+  return r.sizeY + r.sizeYResidual.pos
 }
-function promptSizeXPos(d: BoxData) {
-  return d.promptSizeX + d.promptSizeXResidual.pos
+
+function forEachAnimatedRectSpring(r: AnimatedRect, f: (s: Spring) => void) {
+  f(r.xResidual); f(r.yResidual); f(r.sizeXResidual); f(r.sizeYResidual)
 }
-function promptSizeYPos(d: BoxData) {
-  return d.promptSizeY + d.promptSizeYResidual.pos
+
+function resetAnimatedRectDest(r: AnimatedRect) {
+  r.xResidual.dest = 0
+  r.yResidual.dest = 0
+  r.sizeXResidual.dest = 0
+  r.sizeYResidual.dest = 0
 }
 // Set x/y/size right away. If this change should animate, stash the current on-screen delta in the residuals and let them settle back to 0.
-function setLayout(d: BoxData, x: number, y: number, sizeX: number, sizeY: number, preservePosition: boolean, preserveSize: boolean) {
-  const currentX = xPos(d), currentY = yPos(d)
-  const currentSizeX = sizeXPos(d), currentSizeY = sizeYPos(d)
-  d.x = x
-  d.y = y
-  d.sizeX = sizeX
-  d.sizeY = sizeY
+function setAnimatedRect(r: AnimatedRect, next: Rect, preservePosition: boolean, preserveSize: boolean) {
+  const currentX = rectXPos(r), currentY = rectYPos(r)
+  const currentSizeX = rectSizeXPos(r), currentSizeY = rectSizeYPos(r)
+  r.x = next.x
+  r.y = next.y
+  r.sizeX = next.sizeX
+  r.sizeY = next.sizeY
   if (preservePosition) {
-    d.xResidual.pos = currentX - x
-    d.yResidual.pos = currentY - y
+    r.xResidual.pos = currentX - next.x
+    r.yResidual.pos = currentY - next.y
   }
   if (preserveSize) {
-    d.sizeXResidual.pos = currentSizeX - sizeX
-    d.sizeYResidual.pos = currentSizeY - sizeY
-  }
-}
-function setPromptLayout(d: BoxData, x: number, y: number, sizeX: number, sizeY: number, preservePosition: boolean, preserveSize: boolean) {
-  const currentX = promptXPos(d), currentY = promptYPos(d)
-  const currentSizeX = promptSizeXPos(d), currentSizeY = promptSizeYPos(d)
-  d.promptX = x
-  d.promptY = y
-  d.promptSizeX = sizeX
-  d.promptSizeY = sizeY
-  if (preservePosition) {
-    d.promptXResidual.pos = currentX - x
-    d.promptYResidual.pos = currentY - y
-  }
-  if (preserveSize) {
-    d.promptSizeXResidual.pos = currentSizeX - sizeX
-    d.promptSizeYResidual.pos = currentSizeY - sizeY
+    r.sizeXResidual.pos = currentSizeX - next.sizeX
+    r.sizeYResidual.pos = currentSizeY - next.sizeY
   }
 }
 const layoutSources = makeLayoutSources(photoGalleryData)
@@ -282,22 +272,12 @@ function createInitialState(windowSizeX: number, windowSizeY: number, scrollY: n
         prompt: d.prompt,
         naturalSizeX: d.w,
         ar,
-        sizeX: layoutBox.sizeX,
-        sizeY: layoutBox.sizeY,
-        x: layoutBox.x,
-        y: layoutBox.y,
-        sizeXResidual: spring(0),
-        sizeYResidual: spring(0), // image + prompt
-        xResidual: spring(withEntryAnimation ? Math.floor(i / gridLayout.cols) * -windowSizeX - windowSizeX - layoutBox.x : 0), // unfold from lower left. More visible on long screens
-        yResidual: spring(withEntryAnimation ? windowSizeY + Math.floor(i / gridLayout.cols) * gridLayout.boxMaxSizeX - layoutBox.y : 0),
-        promptX: promptBox.x - layoutBox.x,
-        promptY: promptBox.y - layoutBox.y,
-        promptSizeX: promptBox.sizeX,
-        promptSizeY: promptBox.sizeY,
-        promptXResidual: spring(0),
-        promptYResidual: spring(0),
-        promptSizeXResidual: spring(0),
-        promptSizeYResidual: spring(0),
+        layoutBox: animatedRect(
+          layoutBox,
+          withEntryAnimation ? Math.floor(i / gridLayout.cols) * -windowSizeX - windowSizeX - layoutBox.x : 0, // unfold from lower left. More visible on long screens
+          withEntryAnimation ? windowSizeY + Math.floor(i / gridLayout.cols) * gridLayout.boxMaxSizeX - layoutBox.y : 0,
+        ),
+        promptBox: animatedRect(relativeRect(promptBox, layoutBox)),
         scale: spring(1),
         fxFactor: spring(withEntryAnimation ? 20 : 1), // for brightness and blur
       }
@@ -308,8 +288,9 @@ function createInitialState(windowSizeX: number, windowSizeY: number, scrollY: n
 let st: State = createInitialState(readWindowSizeX(), readWindowSizeY(), readScrollY(), true)
 function springForEach(f: (s: Spring) => void) { // no spring ownership struggle between the spring library above vs consumer; un-inversion of control!
   for (const d of st.data) {
-    f(d.sizeXResidual); f(d.sizeYResidual); f(d.xResidual); f(d.yResidual); f(d.scale); f(d.fxFactor)
-    f(d.promptXResidual); f(d.promptYResidual); f(d.promptSizeXResidual); f(d.promptSizeYResidual)
+    forEachAnimatedRectSpring(d.layoutBox, f)
+    forEachAnimatedRectSpring(d.promptBox, f)
+    f(d.scale); f(d.fxFactor)
   }
 }
 
@@ -414,7 +395,7 @@ function getPromptSelectionTarget(promptTarget: Element): SelectTarget {
 // === hit testing logic. Boxes' hit area should be static and not follow their current animated state usually (but we can do either)
 function hitTest2DMode(layout: GridLayoutModel, pointerX: number, pointerY: number) {
   for (let i = 0; i < layout.items.length; i++) {
-    if (rectContainsPoint(layout.items[i]!.hitArea, pointerX, pointerY)) return i
+    if (rectContainsPoint(layout.items[i]!.layoutBox, pointerX, pointerY)) return i
   }
   return null
 }
@@ -523,24 +504,10 @@ function render(now: number) {
       const layoutBox = geometry.layoutBox
       const promptBox = geometry.prompt.box
       // Back to grid: keep current x/y/size. Pure 2D reflow also keeps size so resize handoff doesn't jump.
-      setLayout(d, layoutBox.x, layoutBox.y, layoutBox.sizeX, layoutBox.sizeY, dismissed1D || reflowed2D, dismissed1D || reflowed2D)
-      setPromptLayout(
-        d,
-        promptBox.x - layoutBox.x,
-        promptBox.y - layoutBox.y,
-        promptBox.sizeX,
-        promptBox.sizeY,
-        dismissed1D || reflowed2D,
-        dismissed1D || reflowed2D,
-      )
-      d.sizeXResidual.dest = 0
-      d.sizeYResidual.dest = 0
-      d.xResidual.dest = 0
-      d.yResidual.dest = 0
-      d.promptXResidual.dest = 0
-      d.promptYResidual.dest = 0
-      d.promptSizeXResidual.dest = 0
-      d.promptSizeYResidual.dest = 0
+      setAnimatedRect(d.layoutBox, layoutBox, dismissed1D || reflowed2D, dismissed1D || reflowed2D)
+      setAnimatedRect(d.promptBox, relativeRect(promptBox, layoutBox), dismissed1D || reflowed2D, dismissed1D || reflowed2D)
+      resetAnimatedRectDest(d.layoutBox)
+      resetAnimatedRectDest(d.promptBox)
       d.scale.dest = 1
       d.fxFactor.dest = 1
     }
@@ -551,8 +518,8 @@ function render(now: number) {
       cursor = 'zoom-in'
       const hoveredLayoutBox = gridLayout.items[hit]!.layoutBox
       const d = data[hit]!
-      d.xResidual.dest += (pointerXLocal - (hoveredLayoutBox.x + hoveredLayoutBox.sizeX / 2)) / hoverMagnetFactor
-      d.yResidual.dest += (pointerYLocal - (hoveredLayoutBox.y + hoveredLayoutBox.sizeY / 2)) / hoverMagnetFactor
+      d.layoutBox.xResidual.dest += (pointerXLocal - (hoveredLayoutBox.x + hoveredLayoutBox.sizeX / 2)) / hoverMagnetFactor
+      d.layoutBox.yResidual.dest += (pointerYLocal - (hoveredLayoutBox.y + hoveredLayoutBox.sizeY / 2)) / hoverMagnetFactor
       d.scale.dest = 1.02
     }
     // if layout shifted, keep the boxes near the same place to prevent annoying layout jumps while viewing
@@ -579,33 +546,11 @@ function render(now: number) {
       const layoutBox = geometry.layoutBox
       const promptBox = geometry.prompt.box
       // Going into 1D mode, switching focused image, or resizing in 1D starts from the current on-screen x/y/size.
-      setLayout(
-        d,
-        layoutBox.x,
-        layoutBox.y,
-        layoutBox.sizeX,
-        layoutBox.sizeY,
-        entered1D || changedFocusIn1D || resized1D,
-        entered1D || changedFocusIn1D || resized1D,
-      )
-      setPromptLayout(
-        d,
-        promptBox.x - layoutBox.x,
-        promptBox.y - layoutBox.y,
-        promptBox.sizeX,
-        promptBox.sizeY,
-        entered1D || changedFocusIn1D || resized1D,
-        entered1D || changedFocusIn1D || resized1D,
-      )
-      d.sizeXResidual.dest = 0
-      d.sizeYResidual.dest = 0
-      d.xResidual.dest = 0
-      d.yResidual.dest = 0
-      d.promptXResidual.dest = 0
-      d.promptYResidual.dest = 0
-      d.promptSizeXResidual.dest = 0
-      d.promptSizeYResidual.dest = 0
-      d.xResidual.v += edgeRubberBandVelocityX / (i === newFocused ? 1 : 4)
+      setAnimatedRect(d.layoutBox, layoutBox, entered1D || changedFocusIn1D || resized1D, entered1D || changedFocusIn1D || resized1D)
+      setAnimatedRect(d.promptBox, relativeRect(promptBox, layoutBox), entered1D || changedFocusIn1D || resized1D, entered1D || changedFocusIn1D || resized1D)
+      resetAnimatedRectDest(d.layoutBox)
+      resetAnimatedRectDest(d.promptBox)
+      d.layoutBox.xResidual.v += edgeRubberBandVelocityX / (i === newFocused ? 1 : 4)
       d.scale.dest = 1
       d.fxFactor.dest = i === newFocused ? 1 : 0.2 // center image has no brightness & blur effect
     }
@@ -616,15 +561,15 @@ function render(now: number) {
       cursor = 'zoom-in'
       const hoveredLayoutBox = activeLineLayout.items[hit]!.layoutBox
       const d = data[hit]!
-      d.xResidual.dest += (pointerXLocal - (hoveredLayoutBox.x + hoveredLayoutBox.sizeX / 2)) / hoverMagnetFactor
-      d.yResidual.dest += (pointerYLocal - (hoveredLayoutBox.y + hoveredLayoutBox.sizeY / 2)) / hoverMagnetFactor
+      d.layoutBox.xResidual.dest += (pointerXLocal - (hoveredLayoutBox.x + hoveredLayoutBox.sizeX / 2)) / hoverMagnetFactor
+      d.layoutBox.yResidual.dest += (pointerYLocal - (hoveredLayoutBox.y + hoveredLayoutBox.sizeY / 2)) / hoverMagnetFactor
       d.scale.dest = 1.02
       d.fxFactor.dest = 0.5
     }
   }
   const preserveScrollShiftViaResidual = (focused != null && newFocused == null) || reflowed2D
   if (preserveScrollShiftViaResidual && adjustedScrollTop !== currentScrollY) { // scroll changes base coordinates only; preserve the current visual position while it catches up
-    for (const d of data) shiftSpringPos(d.yResidual, adjustedScrollTop - currentScrollY)
+    for (const d of data) shiftSpringPos(d.layoutBox.yResidual, adjustedScrollTop - currentScrollY)
   }
 
   // === animation
@@ -653,21 +598,15 @@ function render(now: number) {
   for (let i = 0; i < data.length; i++) {
     const d = data[i]!
     const geometry = activeLayoutItems[i]!
-    const layoutBox = geometry.layoutBox
-    const occlusionBounds = geometry.occlusionBounds
-    const boxX = layoutRectXPos(layoutBox, d)
-    const boxY = layoutRectYPos(layoutBox, d)
-    const boxSizeX = layoutRectSizeXPos(layoutBox, d)
-    const boxSizeY = layoutRectSizeYPos(layoutBox, d)
-    const occlusionX = layoutRectXPos(occlusionBounds, d)
-    const occlusionY = layoutRectYPos(occlusionBounds, d)
-    const occlusionSizeX = layoutRectSizeXPos(occlusionBounds, d)
-    const occlusionSizeY = layoutRectSizeYPos(occlusionBounds, d)
+    const boxX = rectXPos(d.layoutBox)
+    const boxY = rectYPos(d.layoutBox)
+    const boxSizeX = rectSizeXPos(d.layoutBox)
+    const boxSizeY = rectSizeYPos(d.layoutBox)
     if ( // occlusion culling, aka only draw what's visible on screen (aka "virtualization")
-      occlusionY -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
-      occlusionY + occlusionSizeY -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
-      occlusionX <= newWindowSizeX &&
-      occlusionX + occlusionSizeX >= 0
+      boxY -/*toGlobal*/adjustedScrollTop <= windowSizeY + browserUIMaxSizeBottom &&
+      boxY + boxSizeY -/*toGlobal*/adjustedScrollTop >= -browserUIMaxSizeTop &&
+      boxX <= newWindowSizeX &&
+      boxX + boxSizeX >= 0
     ) { // disregard shadow & scaling for now; browserUIMaxSizeBottom and browserUIMaxSizeTop are safe bigger values anyway
       let node = domCache.get(d.id)
       if (node == null) { // JIT DOM node creation: first time this box is visible
@@ -690,9 +629,9 @@ function render(now: number) {
         ? `brightness(${d.fxFactor.pos * 100}%) blur(${Math.max(0, 6 - d.fxFactor.pos * 6)}px)` // blur these 3 only
         : `brightness(${d.fxFactor.pos * 100}%)` // blur of unrelated pics is too fast during transition from/to 1D mode to be seen anyway
       if (debug) node.style.outline = i === newAnchor ? '2px solid rgba(255, 255, 0, 0.8)' : 'none' // oxlint-disable-line no-unnecessary-condition
-      const currentPromptX = promptXPos(d)
-      const currentPromptY = promptYPos(d)
-      const currentPromptSizeX = promptSizeXPos(d)
+      const currentPromptX = rectXPos(d.promptBox)
+      const currentPromptY = rectYPos(d.promptBox)
+      const currentPromptSizeX = rectSizeXPos(d.promptBox)
       const currentPromptLayout = measurePromptLayout(
         layoutSources[i]!.preparedPrompt,
         currentPromptSizeX,
