@@ -241,46 +241,9 @@ function lineLayoutY(
   return Math.max(windowPaddingTop, (windowSizeY - layoutHeight) / 2) + scrollY
 }
 
-/** @fit
- * result.targetIndex == focused - 1
- * result.box.x == 0
- * result.box.y == scrollY
- * result.box.sizeX == hitArea1DSizeX
- * result.box.sizeY == windowSizeY
- */
-function leftEdgeHitArea(
-  focused: number, // @fit int 1..1000
-  scrollY: number, // @fit -100000..100000
-  windowSizeY: number, // @fit 320..2000
-): EdgeHitArea {
-  return {
-    box: {x: 0, y: scrollY, sizeX: hitArea1DSizeX, sizeY: windowSizeY},
-    targetIndex: focused - 1, // @fit int 0..999
-  }
-}
-
-/** @fit
- * result.targetIndex == focused + 1
- * result.box.x == windowSizeX - hitArea1DSizeX
- * result.box.y == scrollY
- * result.box.sizeX == hitArea1DSizeX
- * result.box.sizeY == windowSizeY
- */
-function rightEdgeHitArea(
-  focused: number, // @fit int 0..999
-  windowSizeX: number, // @fit 320..2000
-  scrollY: number, // @fit -100000..100000
-  windowSizeY: number, // @fit 320..2000
-): EdgeHitArea {
-  return {
-    box: {x: windowSizeX - hitArea1DSizeX, y: scrollY, sizeX: hitArea1DSizeX, sizeY: windowSizeY},
-    targetIndex: focused + 1, // @fit int 1..1000
-  }
-}
-
 export function getLineLayout(
   layoutSources: LayoutSource[],
-  focused: number,
+  focused: number, // @fit int 0..1000
   windowSizeX: number, // @fit 320..2000
   windowSizeY: number, // @fit 320..2000
   scrollY: number,
@@ -310,8 +273,26 @@ export function getLineLayout(
 
   return {
     items,
-    leftHitArea: focused > 0 ? leftEdgeHitArea(focused, scrollY, windowSizeY) : null,
-    rightHitArea: focused < layoutSources.length - 1 ? rightEdgeHitArea(focused, windowSizeX, scrollY, windowSizeY) : null,
+    leftHitArea: focused > 0 ? {
+      box: {
+        x: 0, // @fit == 0
+        y: scrollY, // @fit == scrollY
+        sizeX: hitArea1DSizeX, // @fit == hitArea1DSizeX
+        sizeY: windowSizeY, // @fit == windowSizeY
+      },
+      // @fit > -1
+      targetIndex: focused - 1, // @fit == focused - 1
+    } : null,
+    rightHitArea: focused < layoutSources.length - 1 ? {
+      box: {
+        x: windowSizeX - hitArea1DSizeX, // @fit == windowSizeX - hitArea1DSizeX
+        y: scrollY, // @fit == scrollY
+        sizeX: hitArea1DSizeX, // @fit == hitArea1DSizeX
+        sizeY: windowSizeY, // @fit == windowSizeY
+      },
+      // @fit int 1..1001
+      targetIndex: focused + 1, // @fit < layoutSources.length
+    } : null,
   }
 }
 

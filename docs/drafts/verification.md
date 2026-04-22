@@ -136,6 +136,14 @@ Don't prove everything. Prove the places that are cheap and likely to regress: l
 
 Sometimes a tiny helper is worth extracting because it names a real dependency. E.g. `scalePointIntoRect` is better than a large loop contract if several coordinates all depend on the same transform. But don't extract just to make the checker happy. The helper should still be a useful piece of app code.
 
+If the fact belongs to one field or return value, keep it there:
+
+```ts
+return {
+  targetIndex: focused + 1, // @fit < items.length
+}
+```
+
 Responsive layout also benefits from explicit domains. A line like `given windowWidth: 320..2000` is not paperwork. It says which screens the layout actually supports, and it stops thin impossible layouts from quietly becoming part of the app.
 
 ## Demos Usually Want Two Layers
