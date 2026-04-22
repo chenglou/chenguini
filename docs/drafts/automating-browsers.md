@@ -281,6 +281,25 @@ Don't mix those goals by accident.
 
 For correctness runs, it is often enough to drive a manual page-owned clock and read semantic geometry. That is a different job from measuring real frame cadence.
 
+## Batch One Category Per Page
+
+If a check runs many cases in the same category, keep the page open and batch the cases in-page.
+
+Good:
+
+- navigate once to `probe?batch=pre-wrap`
+- let the page loop through the pre-wrap cases
+- post one report with every case result
+- keep the runner responsible for timeouts and `requestId` matching
+
+Bad:
+
+- navigate to a fresh probe URL for every case
+- encode a large report into the hash because it was convenient once
+- make the browser runner understand every case's fixture shape
+
+This keeps the browser session stable, avoids tab churn, and makes timeout phases more meaningful. Use one-off probe URLs for diagnosis, not for the standing sweep.
+
 ## Profiling Is A Third Browser Job
 
 Profiling is neither a correctness report nor a benchmark snapshot.
