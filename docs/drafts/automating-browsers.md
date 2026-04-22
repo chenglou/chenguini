@@ -281,6 +281,40 @@ Don't mix those goals by accident.
 
 For correctness runs, it is often enough to drive a manual page-owned clock and read semantic geometry. That is a different job from measuring real frame cadence.
 
+## Profiling Is A Third Browser Job
+
+Profiling is neither a correctness report nor a benchmark snapshot.
+
+The page should still own the workload:
+
+- build the same prepared state the app or benchmark uses
+- expose one scenario like `profile=layout-hot-path`
+- run one focused loop long enough to sample
+- return a tiny done report with a sink value
+
+The runner should own the profiler:
+
+- launch an isolated Chrome with remote debugging
+- start `Profiler` or `HeapProfiler`
+- navigate once, or call one in-page workload function
+- stop the profiler when the page says done
+- save the raw `.cpuprofile` or heap sample outside the product snapshot
+
+Good:
+
+- first run the coarse benchmark to prove there is a real movement
+- then profile only `prepare tracked text` or `walk line ranges`
+- keep the raw profile as scratch evidence unless it becomes a repeatable check
+
+Bad:
+
+- profiling the whole app and guessing which user path mattered
+- treating a CPU profile as proof of browser correctness
+- changing browser mode or focus policy while investigating a benchmark regression
+- checking in a giant profile as if it were the baseline
+
+If the question is allocation churn, use heap sampling during the workload. If the question is retained memory, force GC, snapshot before and after, and diff what survived. Those are different questions.
+
 ## Fail Loudly On Drift
 
 Don't hide transport drift or environment drift with silent fallbacks.

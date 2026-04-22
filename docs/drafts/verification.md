@@ -367,6 +367,31 @@ Concrete example:
 
 That second kind of bug wants a tiny policy test, not just better canvas fidelity.
 
+## Performance Needs Benchmark Then Profile
+
+A benchmark tells you whether something moved. A profile tells you where time or allocations went.
+
+Use both, in that order:
+
+- keep a coarse benchmark snapshot for the user-facing workload
+- when it moves, run a focused browser profile on the same kind of work
+- name the hot path, e.g. `prepare tracked text`, `line walking`, or `visible row calculation`
+- decide whether the cost is CPU, allocation churn, or retained memory
+
+Good:
+
+- a median benchmark for `layout()` before and after a text-engine change
+- a Chrome CPU profile for the line-walker loop if that benchmark regresses
+- heap sampling during the same loop if the question is allocation churn
+
+Bad:
+
+- staring at a profile without first proving the workload regressed
+- treating a faster microbenchmark as enough when the real browser benchmark moved
+- optimizing a sampled helper before checking whether the helper is on the user-visible path
+
+Keep permanent perf evidence compact. The checked-in artifact should usually be the benchmark JSON or a small machine-readable summary. Raw CPU and heap profiles are excellent investigation notes, but too bulky and environment-shaped to become the normal truth.
+
 ## Keep Laws Narrow And Earned
 
 Laws are great when they are real.
