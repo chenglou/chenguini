@@ -112,7 +112,6 @@ export function colsBoxMaxSizeXF(
 
 /** @fit
  * result: 0..2100
- * result >= 0
  */
 function gridImageMaxSizeY(
   ar: number, // @fit 0.1..10
@@ -155,7 +154,15 @@ function measureGridImage(
   }
 }
 
-export function getGridLayout(layoutSources: LayoutSource[], windowSizeX: number): GridLayoutModel {
+/** @fit
+ * given layoutSources.length: int 0..1000
+ * given layoutSources[].ar: 0.1..10
+ * given layoutSources[].naturalSizeX: 0..10000
+ */
+export function getGridLayout(
+  layoutSources: LayoutSource[],
+  windowSizeX: number, // @fit 320..2000
+): GridLayoutModel {
   const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
   const rowsTop: number[] = [windowPaddingTop]
   const rowHeights: number[] = []
