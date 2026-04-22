@@ -229,6 +229,19 @@ function lineBoxMaxSizes(
 }
 
 /** @fit
+ * given layoutHeight <= windowSizeY - windowPaddingTop - boxes1DGapY
+ * result >= scrollY + windowPaddingTop
+ * result + layoutHeight <= scrollY + windowSizeY - boxes1DGapY
+ */
+function lineLayoutY(
+  layoutHeight: number, // @fit 0..10000
+  windowSizeY: number, // @fit 320..2000
+  scrollY: number, // @fit -100000..100000
+) {
+  return Math.max(windowPaddingTop, (windowSizeY - layoutHeight) / 2) + scrollY
+}
+
+/** @fit
  * result.targetIndex == focused - 1
  * result.box.x == 0
  * result.box.y == scrollY
@@ -283,7 +296,7 @@ export function getLineLayout(
   for (let i = 0; i < layoutSources.length; i++) {
     const measurement = measurements[i]!
     const x = i === focused ? (windowSizeX - measurement.imageSizeX) / 2 : currentLeft
-    const y = Math.max(windowPaddingTop, (windowSizeY - measurement.layoutHeight) / 2) + scrollY
+    const y = lineLayoutY(measurement.layoutHeight, windowSizeY, scrollY)
     items.push(makeItemLayoutGeometry(
       x,
       y,
