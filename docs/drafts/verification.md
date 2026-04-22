@@ -392,6 +392,8 @@ Bad:
 
 Keep permanent perf evidence compact. The checked-in artifact should usually be the benchmark JSON or a small machine-readable summary. Raw CPU and heap profiles are excellent investigation notes, but too bulky and environment-shaped to become the normal truth.
 
+If a benchmark suddenly looks bad, compare old and new in the same session before blaming the code. Browser timings move with focus, thermal state, and stale tabs. Run the old commit, then the new commit, with the same command and browser. Trust that more than an old JSON compared against one fresh run.
+
 ## Keep Laws Narrow And Earned
 
 Laws are great when they are real.
