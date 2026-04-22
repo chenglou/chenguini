@@ -22,10 +22,12 @@ export function shouldSwapDown(pointerY: number, neighborDestY: number, neighbor
 /** @fit
  * given rowSizes.length: int 0..100
  * given rowSizes[]: 0..1000
- * given paddingTop: 0..1000
  * result.length == rowSizes.length
  */
-export function stackLayout(rowSizes: number[], paddingTop: number): number[] {
+export function stackLayout(
+  rowSizes: number[],
+  paddingTop: number, // @fit 0..1000
+): number[] {
   const result: number[] = []
   let top = paddingTop
   for (const rowSize of rowSizes) {

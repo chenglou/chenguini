@@ -69,16 +69,6 @@ export const windowPaddingTop = 40
 export const gapTopPeek = 40
 export const hitArea1DSizeX = 100
 
-/** @fit
- * result.x == x
- * result.y == y
- * result.sizeX == sizeX
- * result.sizeY == sizeY
- */
-export function rect(x: number, y: number, sizeX: number, sizeY: number): Rect {
-  return {x, y, sizeX, sizeY}
-}
-
 export function rectContainsPoint(r: Rect, x: number, y: number) {
   return r.x <= x && x < r.x + r.sizeX && r.y <= y && y < r.y + r.sizeY
 }
@@ -96,69 +86,73 @@ export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[])
 }
 
 /** @fit
- * given min: -100000..100000
- * given v: -100000..100000
- * given max: -100000..100000
  * given max >= min
  * result >= min
  * result <= max
  */
-function clamp(min: number, v: number, max: number) {
+function clamp(
+  min: number, // @fit -100000..100000
+  v: number, // @fit -100000..100000
+  max: number, // @fit -100000..100000
+) {
   return v > max ? max : v < min ? min : v
 }
 
-/** @fit
- * given containerSizeX: 320..2000
- * result.cols >= 1
- * result.cols: int 1..7
- * result.boxMaxSizeX: 0..2000
- */
-export function colsBoxMaxSizeXF(containerSizeX: number) {
+export function colsBoxMaxSizeXF(
+  containerSizeX: number, // @fit 320..2000
+) {
   const boxMinSizeX = 220
   const cols = clamp(1, Math.floor((containerSizeX - boxesGapX) / (boxMinSizeX + boxesGapX)), 7)
   const boxMaxSizeX = (containerSizeX - boxesGapX - cols * boxesGapX) / cols
-  return {cols, boxMaxSizeX}
+  return {
+    cols, // @fit int 1..7
+    boxMaxSizeX, // @fit 0..2000
+  }
 }
 
 /** @fit
- * given ar: 0.1..10
- * given boxMaxSizeX: 0..2000
  * result: 0..2100
  * result >= 0
  */
-function gridImageMaxSizeY(ar: number, boxMaxSizeX: number) {
+function gridImageMaxSizeY(
+  ar: number, // @fit 0.1..10
+  boxMaxSizeX: number, // @fit 0..2000
+) {
   return ar === 1 ? boxMaxSizeX * 0.85
     : ar < 1 ? boxMaxSizeX * 1.05
     : boxMaxSizeX
 }
 
 /** @fit
- * given naturalSizeX: 0..10000
- * given boxMaxSizeX: 0..2000
- * given aspectSizeX: 0..21000
  * result: 0..2000
  * result <= naturalSizeX
  * result <= boxMaxSizeX
  */
-function gridImageSizeX(naturalSizeX: number, boxMaxSizeX: number, aspectSizeX: number) {
+function gridImageSizeX(
+  naturalSizeX: number, // @fit 0..10000
+  boxMaxSizeX: number, // @fit 0..2000
+  aspectSizeX: number, // @fit 0..21000
+) {
   const cappedByBox = Math.min(naturalSizeX, boxMaxSizeX)
   return Math.min(cappedByBox, aspectSizeX)
 }
 
 /** @fit
- * given ar: 0.1..10
- * given naturalSizeX: 0..10000
- * given boxMaxSizeX: 0..2000
- * result.imageSizeX: 0..2000
  * result.imageSizeX <= naturalSizeX
  * result.imageSizeX <= boxMaxSizeX
- * result.imageSizeY: 0..20000
  */
-function measureGridImage(ar: number, naturalSizeX: number, boxMaxSizeX: number) {
+function measureGridImage(
+  ar: number, // @fit 0.1..10
+  naturalSizeX: number, // @fit 0..10000
+  boxMaxSizeX: number, // @fit 0..2000
+) {
   const imgMaxSizeY = gridImageMaxSizeY(ar, boxMaxSizeX)
   const imageSizeX = gridImageSizeX(naturalSizeX, boxMaxSizeX, imgMaxSizeY * ar)
   const imageSizeY = imageSizeX / ar
-  return {imageSizeX, imageSizeY}
+  return {
+    imageSizeX, // @fit 0..2000
+    imageSizeY, // @fit 0..20000
+  }
 }
 
 export function getGridLayout(layoutSources: LayoutSource[], windowSizeX: number): GridLayoutModel {
@@ -219,56 +213,61 @@ export function getGridLayout(layoutSources: LayoutSource[], windowSizeX: number
 }
 
 /** @fit
- * given windowSizeX: 320..2000
- * given windowSizeY: 320..2000
- * result.box1DMaxSizeX: 16..1696
- * result.box1DMaxSizeY: 252..1932
  * result.box1DMaxSizeX == windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
  * result.box1DMaxSizeY == windowSizeY - windowPaddingTop - boxes1DGapY
  */
-function lineBoxMaxSizes(windowSizeX: number, windowSizeY: number) {
+function lineBoxMaxSizes(
+  windowSizeX: number, // @fit 320..2000
+  windowSizeY: number, // @fit 320..2000
+) {
   return {
-    box1DMaxSizeX: windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2,
-    box1DMaxSizeY: windowSizeY - windowPaddingTop - boxes1DGapY,
+    box1DMaxSizeX: windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2, // @fit 16..1696
+    box1DMaxSizeY: windowSizeY - windowPaddingTop - boxes1DGapY, // @fit 252..1932
   }
 }
 
 /** @fit
- * given focused: int 1..1000
- * given scrollY: -100000..100000
- * given windowSizeY: 320..2000
- * result.targetIndex: int 0..999
  * result.targetIndex == focused - 1
  * result.box.x == 0
  * result.box.y == scrollY
  * result.box.sizeX == hitArea1DSizeX
  * result.box.sizeY == windowSizeY
  */
-function leftEdgeHitArea(focused: number, scrollY: number, windowSizeY: number): EdgeHitArea {
-  return {box: rect(0, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused - 1}
+function leftEdgeHitArea(
+  focused: number, // @fit int 1..1000
+  scrollY: number, // @fit -100000..100000
+  windowSizeY: number, // @fit 320..2000
+): EdgeHitArea {
+  return {
+    box: {x: 0, y: scrollY, sizeX: hitArea1DSizeX, sizeY: windowSizeY},
+    targetIndex: focused - 1, // @fit int 0..999
+  }
 }
 
 /** @fit
- * given focused: int 0..999
- * given windowSizeX: 320..2000
- * given scrollY: -100000..100000
- * given windowSizeY: 320..2000
- * result.targetIndex: int 1..1000
  * result.targetIndex == focused + 1
  * result.box.x == windowSizeX - hitArea1DSizeX
  * result.box.y == scrollY
  * result.box.sizeX == hitArea1DSizeX
  * result.box.sizeY == windowSizeY
  */
-function rightEdgeHitArea(focused: number, windowSizeX: number, scrollY: number, windowSizeY: number): EdgeHitArea {
-  return {box: rect(windowSizeX - hitArea1DSizeX, scrollY, hitArea1DSizeX, windowSizeY), targetIndex: focused + 1}
+function rightEdgeHitArea(
+  focused: number, // @fit int 0..999
+  windowSizeX: number, // @fit 320..2000
+  scrollY: number, // @fit -100000..100000
+  windowSizeY: number, // @fit 320..2000
+): EdgeHitArea {
+  return {
+    box: {x: windowSizeX - hitArea1DSizeX, y: scrollY, sizeX: hitArea1DSizeX, sizeY: windowSizeY},
+    targetIndex: focused + 1, // @fit int 1..1000
+  }
 }
 
 export function getLineLayout(
   layoutSources: LayoutSource[],
   focused: number,
-  windowSizeX: number,
-  windowSizeY: number,
+  windowSizeX: number, // @fit 320..2000
+  windowSizeY: number, // @fit 320..2000
   scrollY: number,
 ): LineLayoutModel {
   const {box1DMaxSizeX, box1DMaxSizeY} = lineBoxMaxSizes(windowSizeX, windowSizeY)
@@ -302,10 +301,6 @@ export function getLineLayout(
 }
 
 /** @fit
- * given x: -10000..10000
- * given y: -10000..10000
- * given imageSizeX: 0..10000
- * given imageSizeY: 0..10000
  * given promptLayout.width: 0..10000
  * given promptLayout.visibleHeight: 0..10000
  * result.imageBox.sizeX == imageSizeX
@@ -318,21 +313,21 @@ export function getLineLayout(
  * result.prompt.lines == promptLayout.lines
  */
 function makeItemLayoutGeometry(
-  x: number,
-  y: number,
-  imageSizeX: number,
-  imageSizeY: number,
+  x: number, // @fit -10000..10000
+  y: number, // @fit -10000..10000
+  imageSizeX: number, // @fit 0..10000
+  imageSizeY: number, // @fit 0..10000
   promptLayout: PromptLayout,
   promptLineHeight: number,
 ): ItemLayoutGeometry {
-  const imageBox = rect(x, y, imageSizeX, imageSizeY)
-  const layoutBox = rect(x, y, imageSizeX, imageSizeY + promptLayout.visibleHeight + promptPaddingBottom)
+  const imageBox = {x, y, sizeX: imageSizeX, sizeY: imageSizeY}
+  const layoutBox = {x, y, sizeX: imageSizeX, sizeY: imageSizeY + promptLayout.visibleHeight + promptPaddingBottom}
   return {
     imageBox,
     layoutBox,
     occlusionBounds: layoutBox,
     prompt: {
-      box: rect(x, y + imageSizeY, promptLayout.width, promptLayout.visibleHeight),
+      box: {x, y: y + imageSizeY, sizeX: promptLayout.width, sizeY: promptLayout.visibleHeight},
       lineHeight: promptLineHeight,
       lines: promptLayout.lines,
     },

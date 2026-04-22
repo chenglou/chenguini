@@ -180,13 +180,14 @@ export function layoutHNThreadVisualGeometry(params: {
 }
 
 /** @fit
- * given min: -100000..100000
- * given v: -100000..100000
- * given max: -100000..100000
  * given max >= min
  * result >= min
  * result <= max
  */
-function clamp(min: number, v: number, max: number) {
+function clamp(
+  min: number, // @fit -100000..100000
+  v: number, // @fit -100000..100000
+  max: number, // @fit -100000..100000
+) {
   return v > max ? max : v < min ? min : v
 }

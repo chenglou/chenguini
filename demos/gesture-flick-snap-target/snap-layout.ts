@@ -7,13 +7,14 @@ export const cornerPad = 20
 export const decayFriction = 4.5
 
 /** @fit
- * given w: 160..4000
- * given h: 120..4000
  * result.length == 4
  * result[].x: 20..3860
  * result[].y: 20..3900
  */
-export function getCorners(w: number, h: number) {
+export function getCorners(
+  w: number, // @fit 160..4000
+  h: number, // @fit 120..4000
+) {
   return [
     {x: cornerPad, y: cornerPad},
     {x: w - pipW - cornerPad, y: cornerPad},

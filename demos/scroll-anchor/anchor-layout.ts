@@ -39,41 +39,45 @@ export type AnchorLayoutResult = {
 }
 
 /** @fit
- * given y: 0..100000
- * given gapTop: 0..1000
  * result >= y
  * result == y + gapTop
  */
-function anchorHeaderY(y: number, gapTop: number) {
+function anchorHeaderY(
+  y: number, // @fit 0..100000
+  gapTop: number, // @fit 0..1000
+) {
   return y + gapTop
 }
 
 /** @fit
- * given y: 0..100000
- * given gapTop: 0..1000
  * result >= y
  * result == y + gapTop + headerHeight + headerGapBottom
  */
-function anchorItemsStartY(y: number, gapTop: number) {
+function anchorItemsStartY(
+  y: number, // @fit 0..100000
+  gapTop: number, // @fit 0..1000
+) {
   return y + gapTop + headerHeight + headerGapBottom
 }
 
 /** @fit
- * given y: 0..100000
  * result >= y
  * result == y + itemHeight
  */
-function anchorNextItemY(y: number) {
+function anchorNextItemY(
+  y: number, // @fit 0..100000
+) {
   return y + itemHeight
 }
 
 /** @fit
- * given scrollTop: 0..100000
- * given y: 0..100000
- * given prevY: 0..100000
  * result == scrollTop + (y - prevY)
  */
-function adjustScrollTopForAnchor(scrollTop: number, y: number, prevY: number) {
+function adjustScrollTopForAnchor(
+  scrollTop: number, // @fit 0..100000
+  y: number, // @fit 0..100000
+  prevY: number, // @fit 0..100000
+) {
   return scrollTop + (y - prevY)
 }
 

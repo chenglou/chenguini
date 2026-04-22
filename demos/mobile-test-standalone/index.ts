@@ -22,14 +22,15 @@ function springGoToEnd(s: Spring) { s.pos = s.dest; s.v = 0 }
  */
 function center(a: number, b: number) { return (b - a) / 2 }
 /** @fit
- * given ar: 0..10
- * given maxW: 0..10000
- * given maxH: 0..10000
  * result >= 0
  * result <= maxW
  * result <= maxH * ar
  */
-function fit(ar: number, maxW: number, maxH: number) { return Math.min(maxW, maxH * ar) }
+function fit(
+  ar: number, // @fit 0..10
+  maxW: number, // @fit 0..10000
+  maxH: number, // @fit 0..10000
+) { return Math.min(maxW, maxH * ar) }
 function remap(v: number, oMin: number, oMax: number, nMin: number, nMax: number) {
   if (oMin === oMax) return (nMin + nMax) / 2
   return (v - oMin) / (oMax - oMin) * (nMax - nMin) + nMin
@@ -38,14 +39,15 @@ function insideInclusive(x1: number, y1: number, x2: number, y2: number, sx: num
 function overlapInclusive(x1: number, y1: number, sx1: number, sy1: number, x2: number, y2: number, sx2: number, sy2: number) { return x1 <= x2 + sx2 && x2 <= x1 + sx1 && y1 <= y2 + sy2 && y2 <= y1 + sy1 }
 function lessEqual(a: number, b: number, c: number) { return a <= b && b <= c }
 /** @fit
- * given min: -100000..100000
- * given v: -100000..100000
- * given max: -100000..100000
  * given max >= min
  * result >= min
  * result <= max
  */
-function clamp(min: number, v: number, max: number) { return v > max ? max : v < min ? min : v }
+function clamp(
+  min: number, // @fit -100000..100000
+  v: number, // @fit -100000..100000
+  max: number, // @fit -100000..100000
+) { return v > max ? max : v < min ? min : v }
 
 // === scheduler
 let scheduledRaf: number | null = null

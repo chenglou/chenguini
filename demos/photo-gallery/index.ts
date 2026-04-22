@@ -39,7 +39,6 @@ import {
   getGridLayout,
   getLineLayout,
   makeLayoutSources,
-  rect,
   rectContainsPoint,
   type GridLayoutModel,
   type ItemLayoutGeometry,
@@ -708,7 +707,7 @@ function render(now: number) {
       prompt.style.lineHeight = `${geometry.prompt.lineHeight}px`
       prompt.style.overflowY = 'hidden'
       syncPromptNode(prompt, {
-        box: rect(currentPromptX, currentPromptY, currentPromptSizeX, currentPromptSizeY),
+        box: {x: currentPromptX, y: currentPromptY, sizeX: currentPromptSizeX, sizeY: currentPromptSizeY},
         lineHeight: geometry.prompt.lineHeight,
         lines: currentPromptLayout.lines,
       }, d.prompt)

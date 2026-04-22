@@ -62,12 +62,14 @@ type ImageJob = {
 }
 
 /** @fit
- * given width: 0..5000
  * given job.width: 1..10000
  * given job.height: 1..10000
  * result >= 0
  */
-function boxHeight(width: number, job: ImageJob) { return width / (job.width / job.height) }
+function boxHeight(
+  width: number, // @fit 0..5000
+  job: ImageJob,
+) { return width / (job.width / job.height) }
 
 // === Initialization ===
 

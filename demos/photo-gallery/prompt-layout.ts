@@ -42,32 +42,35 @@ export type PromptLine = {
 }
 
 /** @fit
- * given lineCount: int 0..200
- * given maxLines: int 0..10
  * result: int 0..10
  * result <= lineCount
  * result <= maxLines
  */
-function visiblePromptLineCount(lineCount: number, maxLines: number) {
+function visiblePromptLineCount(
+  lineCount: number, // @fit int 0..200
+  maxLines: number, // @fit int 0..10
+) {
   return Math.min(lineCount, maxLines)
 }
 
 /** @fit
- * given visibleLineCount: int 0..10
- * given lineHeight: 0..100
  * result: 8..1008
  * result >= promptPaddingTop
  * result == promptPaddingTop + visibleLineCount * lineHeight
  */
-function promptVisibleHeightForLineCount(visibleLineCount: number, lineHeight: number) {
+function promptVisibleHeightForLineCount(
+  visibleLineCount: number, // @fit int 0..10
+  lineHeight: number, // @fit 0..100
+) {
   return promptPaddingTop + visibleLineCount * lineHeight
 }
 
 /** @fit
- * given outerMaxWidth: 0..10000
  * result >= 1
  */
-function promptInnerMaxWidth(outerMaxWidth: number) {
+function promptInnerMaxWidth(
+  outerMaxWidth: number, // @fit 0..10000
+) {
   return Math.max(1, outerMaxWidth - promptPaddingX * 2)
 }
 
@@ -113,21 +116,20 @@ export function measurePromptLayout(
 }
 
 /** @fit
- * given outerMaxWidth: 0..10000
- * given lineCount: int 0..200
- * given maxLines: int 0..10
- * given lineHeight: 0..100
  * result.width == outerMaxWidth
- * result.visibleHeight >= promptPaddingTop
  */
 function finishPromptLayout(
-  outerMaxWidth: number,
-  lineCount: number,
-  maxLines: number,
-  lineHeight: number,
+  outerMaxWidth: number, // @fit 0..10000
+  lineCount: number, // @fit int 0..200
+  maxLines: number, // @fit int 0..10
+  lineHeight: number, // @fit 0..100
   lines: PromptLine[],
 ): PromptLayout {
   const visibleLineCount = visiblePromptLineCount(lineCount, maxLines)
-  const visibleHeight = promptVisibleHeightForLineCount(visibleLineCount, lineHeight)
-  return {width: outerMaxWidth, lineCount, visibleHeight, lines}
+  return {
+    width: outerMaxWidth,
+    lineCount,
+    visibleHeight: promptVisibleHeightForLineCount(visibleLineCount, lineHeight), // @fit 8..1008
+    lines,
+  }
 }
