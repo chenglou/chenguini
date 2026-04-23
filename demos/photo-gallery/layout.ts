@@ -179,9 +179,7 @@ export function getGridLayout(
 
   /** @fit
    * rows.length <= layoutSources.length
-   * rows[].height >= 0
    * rows[].bottom == rows[].top + rows[].height
-   * nondecreasing(rows.top)
    * spaced(rows, boxesGapY)
    */
   for (let i = 0; i < layoutSources.length; i++) {
