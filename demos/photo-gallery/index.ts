@@ -490,7 +490,7 @@ function render(now: number) {
   const hoverMagnetFactor = 40
   if (newFocused == null) { // 2D mode
     if (focused != null) { // just dismissed 1D mode
-      const focusedTop = gridLayout.rowsTop[Math.floor(focused / gridLayout.cols)]!
+      const focusedTop = gridLayout.rows[Math.floor(focused / gridLayout.cols)]!.top
       const focusedItem = gridLayout.items[focused]!.layoutBox
       // if the dismissed box isn't fully shown, scroll to it (later after the render code block)
       if (focusedTop <= currentScrollY || focusedItem.y + focusedItem.sizeY >= currentScrollY + windowSizeY) {

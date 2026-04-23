@@ -40,7 +40,13 @@ export type GridLayoutModel = {
   cols: number
   contentHeight: number
   items: ItemLayoutGeometry[]
-  rowsTop: number[]
+  rows: GridRow[]
+}
+
+export type GridRow = {
+  top: number
+  height: number
+  bottom: number
 }
 
 export type EdgeHitArea = {
@@ -161,14 +167,14 @@ export function getGridLayout(
   windowSizeX: number, // @fit 320..2000
 ): GridLayoutModel {
   const {cols, boxMaxSizeX} = colsBoxMaxSizeXF(windowSizeX)
-  const rowsTop: number[] = [windowPaddingTop]
-  const rowHeights: number[] = []
+  const rows: GridRow[] = []
   const measurements: Array<{
     imageSizeX: number
     imageSizeY: number
     layoutHeight: number
     promptLayout: PromptLayout
   }> = []
+  let nextRowTop = windowPaddingTop
   let rowHeight = 0
 
   for (let i = 0; i < layoutSources.length; i++) {
@@ -185,8 +191,10 @@ export function getGridLayout(
     })
     rowHeight = Math.max(rowHeight, layoutHeight)
     if (i % cols === cols - 1 || i === layoutSources.length - 1) {
-      rowHeights.push(rowHeight)
-      rowsTop.push(rowsTop.at(-1)! + rowHeight + boxesGapY)
+      const top = nextRowTop
+      const bottom = top + rowHeight
+      rows.push({top, height: rowHeight, bottom})
+      nextRowTop = bottom + boxesGapY
       rowHeight = 0
     }
   }
@@ -194,11 +202,12 @@ export function getGridLayout(
   return {
     boxMaxSizeX,
     cols,
-    contentHeight: rowsTop.at(-1)!,
+    contentHeight: nextRowTop,
     items: measurements.map((measurement, i) => {
       const currentRow = Math.floor(i / cols)
+      const row = rows[currentRow]!
       const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - measurement.imageSizeX) / 2
-      const y = rowsTop[currentRow]! + (rowHeights[currentRow]! - measurement.layoutHeight) / 2
+      const y = row.top + (row.height - measurement.layoutHeight) / 2
       return makeItemLayoutGeometry(
         x,
         y,
@@ -208,7 +217,7 @@ export function getGridLayout(
         prompt2DLineHeight,
       )
     }),
-    rowsTop,
+    rows,
   }
 }
 
