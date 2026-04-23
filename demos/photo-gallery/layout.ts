@@ -109,13 +109,11 @@ export function colsBoxMaxSizeXF(
   }
 }
 
-/** @fit
- * result: 0..2100
- */
 function gridImageMaxSizeY(
   ar: number, // @fit 0.1..10
   boxMaxSizeX: number, // @fit 0..2000
 ) {
+  // @fit 0..2100
   return ar === 1 ? boxMaxSizeX * 0.85
     : ar < 1 ? boxMaxSizeX * 1.05
     : boxMaxSizeX
@@ -214,30 +212,26 @@ export function getGridLayout(
   }
 }
 
-/** @fit
- * result.box1DMaxSizeX == windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
- * result.box1DMaxSizeY == windowSizeY - windowPaddingTop - boxes1DGapY
- */
 function lineBoxMaxSizes(
   windowSizeX: number, // @fit 320..2000
   windowSizeY: number, // @fit 320..2000
 ) {
   return {
+    // @fit == windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2
     box1DMaxSizeX: windowSizeX - boxes1DGapX * 2 - hitArea1DSizeX * 2, // @fit 16..1696
+    // @fit == windowSizeY - windowPaddingTop - boxes1DGapY
     box1DMaxSizeY: windowSizeY - windowPaddingTop - boxes1DGapY, // @fit 252..1932
   }
 }
 
-/** @fit
- * given layoutHeight <= windowSizeY - windowPaddingTop - boxes1DGapY
- * result >= scrollY + windowPaddingTop
- * result + layoutHeight <= scrollY + windowSizeY - boxes1DGapY
- */
 function lineLayoutY(
+  // @fit <= windowSizeY - windowPaddingTop - boxes1DGapY
   layoutHeight: number, // @fit 0..10000
   windowSizeY: number, // @fit 320..2000
   scrollY: number, // @fit -100000..100000
 ) {
+  // @fit >= scrollY + windowPaddingTop
+  // @fit <= scrollY + windowSizeY - boxes1DGapY - layoutHeight
   return Math.max(windowPaddingTop, (windowSizeY - layoutHeight) / 2) + scrollY
 }
 
@@ -280,7 +274,7 @@ export function getLineLayout(
         sizeX: hitArea1DSizeX, // @fit == hitArea1DSizeX
         sizeY: windowSizeY, // @fit == windowSizeY
       },
-      // @fit > -1
+      // @fit >= 0
       targetIndex: focused - 1, // @fit == focused - 1
     } : null,
     rightHitArea: focused < layoutSources.length - 1 ? {
@@ -296,17 +290,6 @@ export function getLineLayout(
   }
 }
 
-/** @fit
- * given promptLayout.width: 0..10000
- * given promptLayout.visibleHeight: 0..10000
- * result.imageBox.sizeX == imageSizeX
- * result.imageBox.sizeY == imageSizeY
- * result.layoutBox.sizeY == imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
- * result.prompt.box.y == y + imageSizeY
- * result.prompt.box.sizeX == promptLayout.width
- * result.prompt.box.sizeY == promptLayout.visibleHeight
- * result.prompt.lines == promptLayout.lines
- */
 function makeItemLayoutGeometry(
   x: number, // @fit -10000..10000
   y: number, // @fit -10000..10000
@@ -315,15 +298,30 @@ function makeItemLayoutGeometry(
   promptLayout: PromptLayout,
   promptLineHeight: number,
 ): ItemLayoutGeometry {
-  const imageBox = {x, y, sizeX: imageSizeX, sizeY: imageSizeY}
-  const layoutBox = {x, y, sizeX: imageSizeX, sizeY: imageSizeY + promptLayout.visibleHeight + promptPaddingBottom}
+  const imageBox = {
+    x,
+    y,
+    sizeX: imageSizeX, // @fit == imageSizeX
+    sizeY: imageSizeY, // @fit == imageSizeY
+  }
+  const layoutBox = {
+    x,
+    y,
+    sizeX: imageSizeX,
+    sizeY: imageSizeY + promptLayout.visibleHeight + promptPaddingBottom, // @fit == imageSizeY + promptLayout.visibleHeight + promptPaddingBottom
+  }
   return {
     imageBox,
     layoutBox,
     prompt: {
-      box: {x, y: y + imageSizeY, sizeX: promptLayout.width, sizeY: promptLayout.visibleHeight},
+      box: {
+        x,
+        y: y + imageSizeY, // @fit == y + imageSizeY
+        sizeX: promptLayout.width, // @fit == promptLayout.width
+        sizeY: promptLayout.visibleHeight, // @fit == promptLayout.visibleHeight
+      },
       lineHeight: promptLineHeight,
-      lines: promptLayout.lines,
+      lines: promptLayout.lines, // @fit == promptLayout.lines
     },
   }
 }

@@ -65,12 +65,10 @@ function promptVisibleHeightForLineCount(
   return promptPaddingTop + visibleLineCount * lineHeight
 }
 
-/** @fit
- * result >= 1
- */
 function promptInnerMaxWidth(
   outerMaxWidth: number, // @fit 0..10000
 ) {
+  // @fit >= 1
   return Math.max(1, outerMaxWidth - promptPaddingX * 2)
 }
 
@@ -115,9 +113,6 @@ export function measurePromptLayout(
   return finishPromptLayout(outerMaxWidth, lineCount, maxLines, lineHeight, lines)
 }
 
-/** @fit
- * result.width == outerMaxWidth
- */
 function finishPromptLayout(
   outerMaxWidth: number, // @fit 0..10000
   lineCount: number, // @fit int 0..200
@@ -127,7 +122,7 @@ function finishPromptLayout(
 ): PromptLayout {
   const visibleLineCount = visiblePromptLineCount(lineCount, maxLines)
   return {
-    width: outerMaxWidth,
+    width: outerMaxWidth, // @fit == outerMaxWidth
     lineCount,
     visibleHeight: promptVisibleHeightForLineCount(visibleLineCount, lineHeight), // @fit 8..1008
     lines,
