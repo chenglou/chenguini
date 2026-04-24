@@ -27,8 +27,8 @@ function center(a: number, b: number) { return (b - a) / 2 }
  */
 function fit(
   ar: number, // @fit 0..10
-  maxW: number, // @fit 0..10000
-  maxH: number, // @fit 0..10000
+  maxW: number, // @fit 0..Infinity
+  maxH: number, // @fit 0..Infinity
 ) { return Math.min(maxW, maxH * ar) }
 function remap(v: number, oMin: number, oMax: number, nMin: number, nMax: number) {
   if (oMin === oMax) return (nMin + nMax) / 2
@@ -43,9 +43,9 @@ function lessEqual(a: number, b: number, c: number) { return a <= b && b <= c }
  * result <= max
  */
 function clamp(
-  min: number, // @fit -100000..100000
-  v: number, // @fit -100000..100000
-  max: number, // @fit -100000..100000
+  min: number, // @fit -Infinity..Infinity
+  v: number, // @fit -Infinity..Infinity
+  max: number, // @fit -Infinity..Infinity
 ) { return v > max ? max : v < min ? min : v }
 
 // === scheduler

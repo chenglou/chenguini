@@ -79,7 +79,7 @@ export function rectContainsPoint(r: Rect, x: number, y: number) {
 }
 
 /** @fit
- * given data.length: int 0..1000
+ * given data.length: int 0..Infinity
  * result.length == data.length
  */
 export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[]): LayoutSource[] {
@@ -96,9 +96,9 @@ export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[])
  * result <= max
  */
 function clamp(
-  min: number, // @fit -100000..100000
-  v: number, // @fit -100000..100000
-  max: number, // @fit -100000..100000
+  min: number, // @fit -Infinity..Infinity
+  v: number, // @fit -Infinity..Infinity
+  max: number, // @fit -Infinity..Infinity
 ) {
   return v > max ? max : v < min ? min : v
 }
@@ -158,7 +158,7 @@ function measureGridImage(
 }
 
 /** @fit
- * given layoutSources.length: int 0..1000
+ * given layoutSources.length: int 0..Infinity
  * given layoutSources[].ar: 0.1..10
  * given layoutSources[].naturalSizeX: 0..10000
  */
@@ -240,9 +240,9 @@ function lineBoxMaxSizes(
 
 function lineLayoutY(
   // @fit <= windowSizeY - windowPaddingTop - boxes1DGapY
-  layoutHeight: number, // @fit 0..10000
+  layoutHeight: number, // @fit 0..Infinity
   windowSizeY: number, // @fit 320..2000
-  scrollY: number, // @fit -100000..100000
+  scrollY: number, // @fit -Infinity..Infinity
 ) {
   // @fit >= scrollY + windowPaddingTop
   // @fit <= scrollY + windowSizeY - boxes1DGapY - layoutHeight
@@ -251,7 +251,7 @@ function lineLayoutY(
 
 export function getLineLayout(
   layoutSources: LayoutSource[],
-  focused: number, // @fit int 0..1000
+  focused: number, // @fit int 0..<layoutSources.length
   windowSizeX: number, // @fit 320..2000
   windowSizeY: number, // @fit 320..2000
   scrollY: number,
@@ -298,17 +298,16 @@ export function getLineLayout(
         sizeX: hitArea1DSizeX, // @fit == hitArea1DSizeX
         sizeY: windowSizeY, // @fit == windowSizeY
       },
-      // @fit int 1..1001
       targetIndex: focused + 1, // @fit < layoutSources.length
     } : null,
   }
 }
 
 function makeItemLayoutGeometry(
-  x: number, // @fit -10000..10000
-  y: number, // @fit -10000..10000
-  imageSizeX: number, // @fit 0..10000
-  imageSizeY: number, // @fit 0..10000
+  x: number, // @fit -Infinity..Infinity
+  y: number, // @fit -Infinity..Infinity
+  imageSizeX: number, // @fit 0..Infinity
+  imageSizeY: number, // @fit 0..Infinity
   promptLayout: PromptLayout,
   promptLineHeight: number,
 ): ItemLayoutGeometry {

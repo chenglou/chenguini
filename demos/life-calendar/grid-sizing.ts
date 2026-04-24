@@ -13,13 +13,13 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
 
 /** @fit
  * given px < countX * blockSize
- * result: int 0..1001000000
+ * result >= 0
  */
 function hitIndexInside(
-  px: number, // @fit 0..1000000
-  py: number, // @fit 0..1000000
-  blockSize: number, // @fit 1..1000
-  countX: number, // @fit int 1..1000
+  px: number, // @fit 0..Infinity
+  py: number, // @fit 0..Infinity
+  blockSize: number, // @fit 1..Infinity
+  countX: number, // @fit int 1..Infinity
 ) {
   return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
 }

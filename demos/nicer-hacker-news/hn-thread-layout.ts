@@ -49,20 +49,20 @@ type RowVisualInput = {
 }
 
 /** @fit
- * given params.rows.length: int 0..1000
+ * given params.rows.length: int 0..Infinity
  * given params.rows[].indent: 0..100
- * given params.rows[].rowHeightNatural: 0..1000
- * given params.submissionHeight: 0..100000
- * given params.scrollTopCap: 0..100000
- * given params.containerWidth: 0..10000
+ * given params.rows[].rowHeightNatural: 0..Infinity
+ * given params.submissionHeight: 0..Infinity
+ * given params.scrollTopCap: 0..Infinity
+ * given params.containerWidth: 0..Infinity
  * given params.submissionHeight >= params.scrollTopCap
  * result.length == params.rows.length
- * result[].rowIndex: int 0..999
+ * result[].rowIndex >= 0
  * result[].indent: 0..100
  * result[].rowRect.left == 0
- * result[].rowRect.top: 0..1100000
+ * result[].rowRect.top >= 0
  * result[].rowRect.width == params.containerWidth
- * result[].rowRect.height: 0..1000
+ * result[].rowRect.height: 0..Infinity
  */
 export function layoutHNRowHitGeometry(params: {
   rows: RowHitInput[]
@@ -185,9 +185,9 @@ export function layoutHNThreadVisualGeometry(params: {
  * result <= max
  */
 function clamp(
-  min: number, // @fit -100000..100000
-  v: number, // @fit -100000..100000
-  max: number, // @fit -100000..100000
+  min: number, // @fit -Infinity..Infinity
+  v: number, // @fit -Infinity..Infinity
+  max: number, // @fit -Infinity..Infinity
 ) {
   return v > max ? max : v < min ? min : v
 }
