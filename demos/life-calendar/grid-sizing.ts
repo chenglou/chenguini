@@ -14,8 +14,8 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
 /** @fit
  * given px < countX * blockSize
  * given py < _countY * blockSize
- * result >= 0
- * result < countX * _countY
+ * return >= 0
+ * return < countX * _countY
  */
 function hitIndexInside(
   px: number, // @fit 0..Infinity

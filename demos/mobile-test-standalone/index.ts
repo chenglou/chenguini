@@ -18,12 +18,12 @@ function springStep(s: Spring) {
 }
 function springGoToEnd(s: Spring) { s.pos = s.dest; s.v = 0 }
 /** @fit
- * result == (b - a) / 2
+ * return == (b - a) / 2
  */
 function center(a: number, b: number) { return (b - a) / 2 }
 /** @fit
- * result <= maxW
- * result <= maxH * ar
+ * return <= maxW
+ * return <= maxH * ar
  */
 function fit(
   ar: number, // @fit 0..10
@@ -39,8 +39,8 @@ function overlapInclusive(x1: number, y1: number, sx1: number, sy1: number, x2: 
 function lessEqual(a: number, b: number, c: number) { return a <= b && b <= c }
 /** @fit
  * given max >= min
- * result >= min
- * result <= max
+ * return >= min
+ * return <= max
  */
 function clamp(
   min: number, // @fit -Infinity..Infinity

@@ -42,8 +42,8 @@ export type PromptLine = {
 }
 
 /** @fit
- * result <= lineCount
- * result <= maxLines
+ * return <= lineCount
+ * return <= maxLines
  */
 function visiblePromptLineCount(
   lineCount: number, // @fit int 0..200
@@ -53,7 +53,7 @@ function visiblePromptLineCount(
 }
 
 /** @fit
- * result >= promptPaddingTop
+ * return >= promptPaddingTop
  */
 function promptVisibleHeightForLineCount(
   visibleLineCount: number, // @fit int 0..10

@@ -7,9 +7,9 @@ export const cornerPad = 20
 export const decayFriction = 4.5
 
 /** @fit
- * result.length == 4
- * result[].x: 20..3860
- * result[].y: 20..3900
+ * return.length == 4
+ * return[].x: 20..3860
+ * return[].y: 20..3900
  */
 export function getCorners(
   w: number, // @fit 160..4000
@@ -35,7 +35,7 @@ export function nearestCorner(x: number, y: number, w: number, h: number) {
 }
 
 /** @fit
- * result == pos + velocity / decayFriction
+ * return == pos + velocity / decayFriction
  */
 export function decayRestPos(pos: number, velocity: number) {
   return pos + velocity / decayFriction

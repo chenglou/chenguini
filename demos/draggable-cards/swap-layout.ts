@@ -5,7 +5,7 @@ export const rowSizeX = 320
 export const windowPaddingTop = 50
 
 /** @fit
- * result == (container - containee) / 2
+ * return == (container - containee) / 2
  */
 export function center(containee: number, container: number) {
   return (container - containee) / 2
@@ -22,7 +22,7 @@ export function shouldSwapDown(pointerY: number, neighborDestY: number, neighbor
 /** @fit
  * given rowSizes.length: int 0..100
  * given rowSizes[]: 0..1000
- * result.length == rowSizes.length
+ * return.length == rowSizes.length
  */
 export function stackLayout(
   rowSizes: number[],

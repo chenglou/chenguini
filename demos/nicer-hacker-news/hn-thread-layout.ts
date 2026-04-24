@@ -56,13 +56,13 @@ type RowVisualInput = {
  * given params.scrollTopCap: 0..Infinity
  * given params.containerWidth: 0..Infinity
  * given params.submissionHeight >= params.scrollTopCap
- * result.length == params.rows.length
- * result[].rowIndex: int 0..<params.rows.length
- * result[].indent: 0..100
- * result[].rowRect.left == 0
- * result[].rowRect.top >= 0
- * result[].rowRect.width == params.containerWidth
- * result[].rowRect.height: 0..Infinity
+ * return.length == params.rows.length
+ * return[].rowIndex: int 0..<params.rows.length
+ * return[].indent: 0..100
+ * return[].rowRect.left == 0
+ * return[].rowRect.top >= 0
+ * return[].rowRect.width == params.containerWidth
+ * return[].rowRect.height: 0..Infinity
  */
 export function layoutHNRowHitGeometry(params: {
   rows: RowHitInput[]
@@ -181,8 +181,8 @@ export function layoutHNThreadVisualGeometry(params: {
 
 /** @fit
  * given max >= min
- * result >= min
- * result <= max
+ * return >= min
+ * return <= max
  */
 function clamp(
   min: number, // @fit -Infinity..Infinity

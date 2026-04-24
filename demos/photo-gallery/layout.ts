@@ -80,7 +80,7 @@ export function rectContainsPoint(r: Rect, x: number, y: number) {
 
 /** @fit
  * given data.length: int 0..Infinity
- * result.length == data.length
+ * return.length == data.length
  */
 export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[]): LayoutSource[] {
   return data.map(d => ({
@@ -92,8 +92,8 @@ export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[])
 
 /** @fit
  * given max >= min
- * result >= min
- * result <= max
+ * return >= min
+ * return <= max
  */
 function clamp(
   min: number, // @fit -Infinity..Infinity
@@ -126,9 +126,9 @@ function gridImageMaxSizeY(
 }
 
 /** @fit
- * result: 0..2000
- * result <= naturalSizeX
- * result <= boxMaxSizeX
+ * return: 0..2000
+ * return <= naturalSizeX
+ * return <= boxMaxSizeX
  */
 function gridImageSizeX(
   naturalSizeX: number, // @fit 0..10000
@@ -140,8 +140,8 @@ function gridImageSizeX(
 }
 
 /** @fit
- * result.imageSizeX <= naturalSizeX
- * result.imageSizeX <= boxMaxSizeX
+ * return.imageSizeX <= naturalSizeX
+ * return.imageSizeX <= boxMaxSizeX
  */
 function measureGridImage(
   ar: number, // @fit 0.1..10
