@@ -57,7 +57,7 @@ type RowVisualInput = {
  * given params.containerWidth: 0..Infinity
  * given params.submissionHeight >= params.scrollTopCap
  * result.length == params.rows.length
- * result[].rowIndex >= 0
+ * result[].rowIndex: int 0..<params.rows.length
  * result[].indent: 0..100
  * result[].rowRect.left == 0
  * result[].rowRect.top >= 0
