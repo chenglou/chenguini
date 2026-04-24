@@ -22,7 +22,6 @@ function springGoToEnd(s: Spring) { s.pos = s.dest; s.v = 0 }
  */
 function center(a: number, b: number) { return (b - a) / 2 }
 /** @fit
- * result >= 0
  * result <= maxW
  * result <= maxH * ar
  */

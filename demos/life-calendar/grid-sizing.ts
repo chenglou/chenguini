@@ -14,7 +14,6 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
 /** @fit
  * given px < countX * blockSize
  * result: int 0..1001000000
- * result >= 0
  */
 function hitIndexInside(
   px: number, // @fit 0..1000000

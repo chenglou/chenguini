@@ -64,7 +64,6 @@ type ImageJob = {
 /** @fit
  * given job.width: 1..10000
  * given job.height: 1..10000
- * result >= 0
  */
 function boxHeight(
   width: number, // @fit 0..5000
