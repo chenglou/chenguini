@@ -15,6 +15,16 @@ Two systems want different data representations. Expect data shape pressure at t
 
 A good helper should create _local_, not global, shape pressure. Quick design test: if you removed the helper tomorrow, would you only delete one adapter, or would you have to remodel your app state and control flow? If only the adapter breaks, the helper fits. If the whole app now has to carry the helper's shape around, the API is too prescriptive.
 
+Put a guarantee in the data shape only when it stays true wherever the value goes. If it only becomes true because one helper made it that way, check that helper instead.
+
+Good data shape guarantee: `type NonEmpty<T> = [T, ...T[]]` when empty really is impossible. The guarantee belongs to the value no matter who reads it.
+
+Bad data shape guarantee: `type SortedRows = Row[]` if any caller can still push an unsorted row. That's just a name. Either hide the constructor/mutation path, or check the helper that produces the rows.
+
+Good producer guarantee: after `stackRows(items, gap)`, `rows[$i + 1].top >= rows[$i].bottom + gap`. The guarantee belongs to that construction, not to every `Row[]` forever.
+
+Bad producer guarantee: forcing every downstream renderer to accept `StackedRowsFromThisOneLayoutHelper` because one helper builds spaced rows. If the type name starts sounding like a whole algorithm, the data model is probably doing too much.
+
 Guideline for typing potentially nullable string:
 
 - If the nullable string has no valid `''` state (e.g. mandatory non-empty username), model it as `string | null`
