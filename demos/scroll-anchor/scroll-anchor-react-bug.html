@@ -27,7 +27,9 @@
       scrollTop=X === storedScrollTop=X → userScrolled=false → adjustment runs.
       This eliminates the _isProgrammaticScroll flag, its prevScrollTop guard,
       and the onScrolled flag entirely. Truncation (Scrolling.md points 3-4)
-      is handled naturally by storing the read-back value.
+      is handled naturally by storing the read-back value. That read can
+      force layout, so keep it at the end of the effect and don't do more
+      DOM writes after it.
 
     Part 2: scrollAnchor.prevY = y
       Updates prevY immediately after computing the adjustment. Without this,
@@ -298,6 +300,8 @@ function ScrollDemo({ buggy }) {
     // FIXED: always store the read-back scrollTop. This is what the next
     // render compares against to detect user scroll. Storing the read-back
     // (not the requested value) handles browser truncation naturally.
+    // This can force layout, so keep it at the end of the effect and don't
+    // do more DOM writes after it.
     if (!buggy && containerRef.current != null) {
       storedScrollTopRef.current = containerRef.current.scrollTop;
     }

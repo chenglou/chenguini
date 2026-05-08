@@ -181,6 +181,8 @@ function render() {
     // value — browser truncation (Chrome: 0.5, Safari/Firefox: integers)
     // would cause a false mismatch on the next frame, making us think
     // the user scrolled when they didn't. (Scrolling.md points 3-4)
+    // This can force layout, so keep it at the end of the frame and don't
+    // do more DOM writes after it.
     st.storedScrollY = domCache.container.scrollTop
   } else {
     st.storedScrollY = currentScrollY

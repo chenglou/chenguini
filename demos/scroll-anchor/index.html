@@ -34,6 +34,8 @@
     (not the requested value). Browser truncation varies: Chrome rounds
     to 0.5, Safari/Firefox to integers. Storing the read-back value
     prevents false "user scrolled" detection from truncation mismatch.
+    This read can force layout; keep it at the end of the frame and
+    don't do more DOM writes after it.
     This repro uses integer heights so truncation doesn't manifest here,
     but the read-back pattern is included as the correct general approach.
 
