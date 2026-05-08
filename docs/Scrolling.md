@@ -50,11 +50,13 @@ The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scr
 2. Compare to the stored value from last frame. If different → user scrolled → pick a new anchor (first item below `scrollTop`). If same → data changed → keep the old anchor and compute the delta.
 3. Compute layout. When the anchor item is encountered, `adjustedScrollTop = scrollTop + (currentY - anchor.prevY)`. Return the next anchor state too, e.g. `{id, prevY: currentY}`.
 4. After all DOM writes, `scrollTo(adjustedScrollTop)` if it changed. Make sure to use `behavior: 'instant'` to avoid wrong smooth scrolling
-5. **Read back** `container.scrollTop` and store _that_ value (not the requested value). Browser truncation (point 3 above) would otherwise cause a false "user scrolled" detection next frame.
+5. After `scrollTo`, read back `container.scrollTop` once and store it for the next frame's comparison. Treat this as a deliberate layout-forcing read: keep it at the end of the effect and don't do more DOM writes after it. If you request `10.6` but the browser exposes `10` or `10.5`, storing `10.6` makes the next render see a false mismatch.
 
 This requires no flags or workarounds because each frame processes all accumulated state changes independently — `scrollTo` from frame N is fully resolved by frame N+1.
 
 Remaining limitation: continuous resize with fractional layout values causes sub-pixel anchor jitter from `scrollTop` truncation accumulating over frames (point 3 footnote). This is a fundamental browser limitation.
+
+For scroll anchoring, don't infer user scroll from whether a scroll event fired. Programmatic `scrollTo` also fires scroll events, so a "scroll happened" flag can mistake our own anchor adjustment for user input. Use the stored read-back value from step 5 for the next render's comparison.
 
 ### React 18+ Pitfall
 
