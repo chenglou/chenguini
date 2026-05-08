@@ -111,6 +111,8 @@ Modern computing's much cheaper than memory. Recompute instead of storing the re
 - truly expensive computations after real measurements
 - computations with stable input identity, real reuse, bounded cache size
 
+React recommends useMemo and useCallback, but actually, try avoiding them.
+
 ## Project Setup
 
 A quick iteration & verification loop is important especially for AI now. To that end, we use nuanced TypeScript + linting to essentially monkeypatch the type system into a mostly correct one, while opinionatedly dropping all the unhelpful stylistic rules that distracts AI
@@ -144,11 +146,16 @@ For linting, we prefer oxlint + tsgolint npm packages for AI verification loop p
 
 ```jsonc
 "plugins": ["typescript", "oxc"], // no need to turn on other things. Others might be noisy for AI
+"options": {
+  "denyWarnings": true, // keep diagnostics labeled as warnings, but still fail the check
+},
 "prefer-ts-expect-error": "error",
 "no-unnecessary-type-assertion": "error",
 "no-unreachable": "error", // we use this instead of typescript's "allowUnreachableCode" (see tsconfig)
 "@typescript-eslint/no-explicit-any": "error",
 "@typescript-eslint/no-unsafe-assignment": "error",
+"@typescript-eslint/no-unsafe-argument": "error",
+"@typescript-eslint/no-unsafe-call": "error",
 "@typescript-eslint/no-unsafe-return": "error",
 "@typescript-eslint/no-unsafe-member-access": "error",
 "@typescript-eslint/prefer-nullish-coalescing": ["error", {
