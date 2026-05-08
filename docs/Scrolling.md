@@ -8,6 +8,8 @@ iOS, macOS and a few other platforms produce a pleseant bounce effect when a con
 
 Safari and Firefox (nowadays) both do rubberbanding on page and container scrolling. Chrome only does it for page scrolling. [Here's a very stale Chromium issue](https://issues.chromium.org/issues/41102897).
 
+Fixed elements don't always rubberband with the page. Chrome keeps fixed elements pinned during page rubberbanding; Safari and Firefox move them with the page. So a fixed nav can peek through during a top bounce in Chrome, but move along with the rest of the page in Safari/Firefox.
+
 ## Scroll Value & Quirks
 
 `scrollTop` and others properties are the primary ways to get the content's scroll position. However:
