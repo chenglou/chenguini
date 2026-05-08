@@ -39,6 +39,7 @@ Despite all this, some effects are only possible through programmatic manipulati
 - Occlusion culling/virtualization, where we read `scrollTop` and determine only the elements that need to be shown on screen. `IntersectionObserver` is the usual proposed alternative, but it's also capped at JS framerate (see earlier) and is a bit yuckier in terms of API architecture, among other flaws.
 - Scroll anchoring, where we keep a certain element stable while resizing container, when things above and below potentially change size and jitter said element around otherwise. `overflow-anchor` isn't yet a satisfying solution (no Safari support, etc.).
 - Rendering to canvas, where you're reading `scrollTop`from a transparent DOM container somewhere else in order not to recreate your own scrolling logic. Keep in mind the `scrollTop` quirks above. You can try keeping an old & new `scrollTop` value and interpolate between them into a smoother one.
+- Scroll position restoration across page changes.
 
 ## Scroll Anchoring
 
