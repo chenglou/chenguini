@@ -1,6 +1,6 @@
 # GalleryGongGong standalone demo
 
-2-column image gallery with spring-animated lightbox transitions and touch gesture support. React-wrapped but uses imperative DOM layout internally.
+2-column image gallery with spring-animated lightbox transitions and touch gesture support. React-wrapped but uses imperative DOM layout internally. Extracted from the `prealpha-mobile-gang` branch.
 
 ## Setup
 
