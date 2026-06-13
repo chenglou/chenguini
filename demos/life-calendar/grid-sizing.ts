@@ -15,14 +15,13 @@ export function gridSizing(life: number, gridSizeX: number, gridSizeY: number) {
  * given px < countX * blockSize
  * given py < _countY * blockSize
  * return >= 0
- * return < countX * _countY
  */
 function hitIndexInside(
-  px: number, // @fit 0..Infinity
-  py: number, // @fit 0..Infinity
-  blockSize: number, // @fit 1..Infinity
-  countX: number, // @fit int 1..Infinity
-  _countY: number, // @fit int 1..Infinity
+  px: number, // @fit 0..<Infinity
+  py: number, // @fit 0..<Infinity
+  blockSize: number, // @fit 1..<Infinity
+  countX: number, // @fit int 1..<Infinity
+  _countY: number, // @fit int 1..<Infinity
 ) {
   return Math.floor(py / blockSize) * countX + Math.floor(px / blockSize)
 }

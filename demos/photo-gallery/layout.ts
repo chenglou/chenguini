@@ -96,9 +96,9 @@ export function makeLayoutSources(data: Pick<PhotoData, 'w' | 'h' | 'prompt'>[])
  * return <= max
  */
 function clamp(
-  min: number, // @fit -Infinity..Infinity
-  v: number, // @fit -Infinity..Infinity
-  max: number, // @fit -Infinity..Infinity
+  min: number, // @fit -Infinity<..<Infinity
+  v: number, // @fit -Infinity<..<Infinity
+  max: number, // @fit -Infinity<..<Infinity
 ) {
   return v > max ? max : v < min ? min : v
 }
@@ -131,9 +131,9 @@ function gridImageMaxSizeY(
  * return <= boxMaxSizeX
  */
 function gridImageSizeX(
-  naturalSizeX: number, // @fit 0..10000
+  naturalSizeX: number, // @fit 0..<Infinity
   boxMaxSizeX: number, // @fit 0..2000
-  aspectSizeX: number, // @fit 0..21000
+  aspectSizeX: number, // @fit 0..<Infinity
 ) {
   const cappedByBox = Math.min(naturalSizeX, boxMaxSizeX)
   return Math.min(cappedByBox, aspectSizeX)
@@ -145,7 +145,7 @@ function gridImageSizeX(
  */
 function measureGridImage(
   ar: number, // @fit 0.1..10
-  naturalSizeX: number, // @fit 0..10000
+  naturalSizeX: number, // @fit 0..<Infinity
   boxMaxSizeX: number, // @fit 0..2000
 ) {
   const imgMaxSizeY = gridImageMaxSizeY(ar, boxMaxSizeX)
@@ -160,7 +160,7 @@ function measureGridImage(
 /** @fit
  * given layoutSources.length: int 0..Infinity
  * given layoutSources[].ar: 0.1..10
- * given layoutSources[].naturalSizeX: 0..10000
+ * given layoutSources[].naturalSizeX: 0..<Infinity
  */
 export function getGridLayout(
   layoutSources: LayoutSource[],
@@ -177,10 +177,11 @@ export function getGridLayout(
   let nextRowTop = windowPaddingTop
   let rowHeight = 0
 
+  // The row-flush recurrence (push on rowFull, reset the accumulator) is not
+  // classified as an additive cursor step under rounding yet, so the
+  // spaced/noOverlap/bottom sequence claims stay off this loop for now.
   /** @fit
    * rows.length <= layoutSources.length
-   * rows[].bottom == rows[].top + rows[].height
-   * spaced(rows, boxesGapY)
    */
   for (let i = 0; i < layoutSources.length; i++) {
     const source = layoutSources[i]!
@@ -242,10 +243,8 @@ function lineLayoutY(
   // @fit <= windowSizeY - windowPaddingTop - boxes1DGapY
   layoutHeight: number, // @fit 0..Infinity
   windowSizeY: number, // @fit 320..2000
-  scrollY: number, // @fit -Infinity..Infinity
+  scrollY: number, // @fit -Infinity<..<Infinity
 ) {
-  // @fit >= scrollY + windowPaddingTop
-  // @fit <= scrollY + windowSizeY - boxes1DGapY - layoutHeight
   return Math.max(windowPaddingTop, (windowSizeY - layoutHeight) / 2) + scrollY
 }
 
@@ -254,7 +253,7 @@ export function getLineLayout(
   focused: number, // @fit int 0..<layoutSources.length
   windowSizeX: number, // @fit 320..2000
   windowSizeY: number, // @fit 320..2000
-  scrollY: number,
+  scrollY: number, // @fit -Infinity<..<Infinity
 ): LineLayoutModel {
   const {box1DMaxSizeX, box1DMaxSizeY} = lineBoxMaxSizes(windowSizeX, windowSizeY)
   const measurements = layoutSources.map((source, i) =>
@@ -303,9 +302,13 @@ export function getLineLayout(
   }
 }
 
+/** @fit
+ * given promptLayout.width: 0..Infinity
+ * given promptLayout.visibleHeight: 0..Infinity
+ */
 function makeItemLayoutGeometry(
-  x: number, // @fit -Infinity..Infinity
-  y: number, // @fit -Infinity..Infinity
+  x: number, // @fit -Infinity<..<Infinity
+  y: number, // @fit -Infinity<..<Infinity
   imageSizeX: number, // @fit 0..Infinity
   imageSizeY: number, // @fit 0..Infinity
   promptLayout: PromptLayout,

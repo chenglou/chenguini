@@ -5,6 +5,8 @@ export const rowSizeX = 320
 export const windowPaddingTop = 50
 
 /** @fit
+ * given containee: 0..<Infinity
+ * given container: 0..<Infinity
  * return == (container - containee) / 2
  */
 export function center(containee: number, container: number) {

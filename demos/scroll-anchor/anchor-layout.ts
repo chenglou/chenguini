@@ -74,9 +74,9 @@ function anchorNextItemY(
  * return == scrollTop + (y - prevY)
  */
 function adjustScrollTopForAnchor(
-  scrollTop: number, // @fit 0..Infinity
-  y: number, // @fit 0..Infinity
-  prevY: number, // @fit 0..Infinity
+  scrollTop: number, // @fit 0..<Infinity
+  y: number, // @fit 0..<Infinity
+  prevY: number, // @fit 0..<Infinity
 ) {
   return scrollTop + (y - prevY)
 }

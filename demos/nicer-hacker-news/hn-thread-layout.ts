@@ -51,9 +51,9 @@ type RowVisualInput = {
 /** @fit
  * given params.rows.length: int 0..Infinity
  * given params.rows[].indent: 0..100
- * given params.rows[].rowHeightNatural: 0..Infinity
- * given params.submissionHeight: 0..Infinity
- * given params.scrollTopCap: 0..Infinity
+ * given params.rows[].rowHeightNatural: 0..<Infinity
+ * given params.submissionHeight: 0..<Infinity
+ * given params.scrollTopCap: 0..<Infinity
  * given params.containerWidth: 0..Infinity
  * given params.submissionHeight >= params.scrollTopCap
  * return.length == params.rows.length
@@ -185,9 +185,9 @@ export function layoutHNThreadVisualGeometry(params: {
  * return <= max
  */
 function clamp(
-  min: number, // @fit -Infinity..Infinity
-  v: number, // @fit -Infinity..Infinity
-  max: number, // @fit -Infinity..Infinity
+  min: number, // @fit -Infinity<..<Infinity
+  v: number, // @fit -Infinity<..<Infinity
+  max: number, // @fit -Infinity<..<Infinity
 ) {
   return v > max ? max : v < min ? min : v
 }

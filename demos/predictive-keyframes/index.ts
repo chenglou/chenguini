@@ -62,11 +62,11 @@ type ImageJob = {
 }
 
 /** @fit
- * given job.width: 1..10000
- * given job.height: 1..10000
+ * given job.width: 1..<Infinity
+ * given job.height: 1..<Infinity
  */
 function boxHeight(
-  width: number, // @fit 0..5000
+  width: number, // @fit 0..<Infinity
   job: ImageJob,
 ) { return width / (job.width / job.height) }
 

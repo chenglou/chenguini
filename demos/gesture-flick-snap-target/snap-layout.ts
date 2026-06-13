@@ -35,6 +35,8 @@ export function nearestCorner(x: number, y: number, w: number, h: number) {
 }
 
 /** @fit
+ * given pos: -Infinity<..<Infinity
+ * given velocity: -Infinity<..<Infinity
  * return == pos + velocity / decayFriction
  */
 export function decayRestPos(pos: number, velocity: number) {

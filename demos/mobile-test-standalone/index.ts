@@ -18,6 +18,8 @@ function springStep(s: Spring) {
 }
 function springGoToEnd(s: Spring) { s.pos = s.dest; s.v = 0 }
 /** @fit
+ * given a: 0..<Infinity
+ * given b: 0..<Infinity
  * return == (b - a) / 2
  */
 function center(a: number, b: number) { return (b - a) / 2 }
@@ -43,9 +45,9 @@ function lessEqual(a: number, b: number, c: number) { return a <= b && b <= c }
  * return <= max
  */
 function clamp(
-  min: number, // @fit -Infinity..Infinity
-  v: number, // @fit -Infinity..Infinity
-  max: number, // @fit -Infinity..Infinity
+  min: number, // @fit -Infinity<..<Infinity
+  v: number, // @fit -Infinity<..<Infinity
+  max: number, // @fit -Infinity<..<Infinity
 ) { return v > max ? max : v < min ? min : v }
 
 // === scheduler
