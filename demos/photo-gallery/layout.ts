@@ -44,7 +44,7 @@ export type GridLayoutModel = {
 }
 
 export type GridRow = {
-  top: number
+  y: number
   height: number
   bottom: number
 }
@@ -197,9 +197,9 @@ export function getGridLayout(
     })
     rowHeight = Math.max(rowHeight, layoutHeight)
     if (i % cols === cols - 1 || i === layoutSources.length - 1) {
-      const top = nextRowTop
-      const bottom = top + rowHeight
-      rows.push({top, height: rowHeight, bottom})
+      const y = nextRowTop
+      const bottom = y + rowHeight
+      rows.push({y, height: rowHeight, bottom})
       nextRowTop = bottom + boxesGapY
       rowHeight = 0
     }
@@ -213,10 +213,10 @@ export function getGridLayout(
       const currentRow = Math.floor(i / cols)
       const row = rows[currentRow]!
       const x = boxesGapX + (boxMaxSizeX + boxesGapX) * (i % cols) + (boxMaxSizeX - measurement.imageSizeX) / 2
-      const y = row.top + (row.height - measurement.layoutHeight) / 2
+      const centeredY = row.y + (row.height - measurement.layoutHeight) / 2
       return makeItemLayoutGeometry(
         x,
-        y,
+        centeredY,
         measurement.imageSizeX,
         measurement.imageSizeY,
         measurement.promptLayout,
