@@ -194,6 +194,7 @@ Recommended alias in package.json as e.g.:
 Use Knip to periodically find unused files, exports, types, dependencies, and binaries. The config's straightforward, with one nuance below:
 
 ```ts
+// knip.config.ts
 import type { KnipConfig } from 'knip'
 
 // Test files are in `ignore` so their imports don't count as "usage", flagging exports used only by test files as unused.
