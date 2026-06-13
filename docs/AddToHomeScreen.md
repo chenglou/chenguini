@@ -55,6 +55,8 @@ _Section under construction_
 
 Input focus keyboard goes up white part below
 
+- On Chrome Android, `<meta name="viewport" content="interactive-widget=resizes-content">` makes the layout viewport resize when the keyboard opens, instead of only resizing the visual viewport. Use it when a full-height app/input bar should relayout rather than get covered by the keyboard or pushed into a bad scroll position.
+
 Mobile Safari device rotation: https://x.com/_chenglou/status/1605796073829646336/photo/1
 
 (maybe stale info?) proper window sizes: https://x.com/_chenglou/status/1579109784816877568/photo/1
