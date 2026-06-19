@@ -21,8 +21,6 @@ Good data shape guarantee: `type NonEmpty<T> = [T, ...T[]]` when empty really is
 
 Bad data shape guarantee: `type SortedRows = Row[]` if any caller can still push an unsorted row. That's just a name. Either hide the constructor/mutation path, or check the helper that produces the rows.
 
-Good producer guarantee: after `stackRows(items, gap)`, `rows[$i + 1].top >= rows[$i].bottom + gap`. The guarantee belongs to that construction, not to every `Row[]` forever.
-
 Bad producer guarantee: forcing every downstream renderer to accept `StackedRowsFromThisOneLayoutHelper` because one helper builds spaced rows. If the type name starts sounding like a whole algorithm, the data model is probably doing too much.
 
 Guideline for typing potentially nullable string:
