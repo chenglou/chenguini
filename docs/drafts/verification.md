@@ -16,8 +16,6 @@ Examples:
 - If the bug is "this card height drifted", compare height directly.
 - If the bug is "this browser flow should end on the same selected item", let the page compute that report itself. See `automating-browsers.md`.
 
-Don't force every demo or helper through one shape.
-
 ## Start Narrow, Then Widen
 
 Start with the smallest repro you can trust.
@@ -37,6 +35,8 @@ For example:
 - keep a small permanent suite like repeated spaces, one hard break, one whitespace-only middle line, one tab case
 - do one temporary broader pass over a much bigger generated matrix
 - if the broad pass agrees, keep the small suite and throw the broad pass away
+
+In other words: narrow aggressively while finding the problem, broaden temporarily to check the shape, then compress back down to a small permanent oracle.
 
 Don't keep the big exploratory checker forever just because it helped once.
 
@@ -103,8 +103,6 @@ The useful contracts we added were not grand claims. They were plain facts on sm
 - hit geometry returns one hit box per visible row
 - scroll anchor math moves by `currentY - previousY`
 
-These are good because the source can earn them. A caller can then use the helper contract without knowing the helper body.
-
 Preconditions count. A clamp contract that says `result <= max` is only true if `max >= min`:
 
 ```ts
@@ -133,8 +131,6 @@ Use negative probes too. After adding a contract, briefly break the code in the 
 The checker should complain. If it doesn't, the contract is probably decoration.
 
 Don't prove everything. Prove the places that are cheap and likely to regress: lengths, bounds, copied fields, row order, hit areas, min/max guarantees. Leave native selection, browser scrolling, text painting, and storage behavior to browser reports.
-
-Sometimes a tiny helper is worth extracting because it names a real dependency. E.g. `scalePointIntoRect` is better than a large loop contract if several coordinates all depend on the same transform. But don't extract just to make the checker happy. The helper should still be a useful piece of app code.
 
 If the fact belongs to one field or return value, keep it there:
 
@@ -274,7 +270,7 @@ Bad:
 - hand-copied markdown tables
 - prose counts that can drift from the real sweep
 
-If you still want a human summary, derive it from the checked-in JSON. Don't make humans keep two truths aligned by hand.
+If you still want a human summary, derive it from the checked-in JSON.
 
 ## Batch The Cheap Homogeneous Cases
 
