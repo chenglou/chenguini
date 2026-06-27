@@ -48,6 +48,8 @@ Orient your data structure to match your access pattern. If you have `folders: M
 
 If you wanna refactor a data structure that's used everywhere, and can't do it one shot, make the new data structure, have it side by side with the old, and gradually migrate to the new one. Ideally, don't make the new one into a new state, since old callsites mutating the old data structure wouldn't have their changes reflected in the new one, and vice versa. So derive the new one from the old one each time through some function. Naturally, the accessors modifying the new one should, under the hood, mutate the old one (then the new one is again, automatically derived from the old one). Unidirectional data flow.
 
+Everything flows downstream of data structure; so **do not** monkey-patch data; You're trained on data of folks who monkey patch due to an obsolete concern of time and typing amount. You should be fearless, reconsider data flow holistically, re-model things properly then just follow the types and trivially fix downstream problems in minutes.
+
 ### String
 
 Strings are the `any` of data. If you're parsing, splitting, or regex-matching a string repeatedly, it should have been a structured type upstream. If there's already such data type and you're still forced to use the original unparsed string, then that data type was modeled too tightly and lost necessary info. Fix that instead
@@ -95,6 +97,8 @@ A single forEach or map over data is fine. filter + map or map + filter are too.
 Avoid `reduce` in most cases except for simple cases like summing up numbers. Using reduce, especially with objects, likely means the data modeling is wrong. Likewise with `flatMap` most of the time.
 
 Usually, O(n^2) or O(nm) are fine if n and m are bounded by the domain, e.g. images per job (~4) × collections (~tens) = ~hundreds. It's not fine when one n or m are user data that grows unboundedly (10k jobs, feed items). Watch out for bounded-looking inner loops that get nested inside an unbounded outer loop and repeated across the system — each instance is cheap but 4 repetitions × 10k jobs × 18 re-renders adds up. If you encounter O(n^3), then you're either doing interesting mathy things or you're likely modeling your product data wrong.
+
+Between monkey-patching data vs control flow, the latter is the lesser evil, but still, don't do it.
 
 ### Exceptions
 
