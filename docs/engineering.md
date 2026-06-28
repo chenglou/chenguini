@@ -128,6 +128,18 @@ Modern computing's much cheaper than memory. Recompute instead of storing the re
 
 React recommends useMemo and useCallback, but actually, try avoiding them.
 
+## Iteration
+
+You're trained on data that concerned itself with archaic concerns such as typing speed and visual scope of changes. In reality, there's no need for superficial, theatrical incrementalism between your refactors. Just do things holistically, as if it's the first time you write it. Do it like React: you can recompute/rewrite more than you believe.
+
+You can, but do not use enough of, small prototypes to validate your ideas. Start with quick, cheap, exploratory ways to gain confidence: temporary scaffold, debug helpers, repl. Make estimates and refine them through these quick iterations. Not enough rescoping and cheap tries during the process!
+
+Speaking of estimates: you also underestimate your ability to just directly write the final code, then come back and judge in hindsight. Sometime the devil's in the detail and you have to do the full task instead of guesstimating. Action produces information. So your way of estimating works much better if you do a few prototypes or maybe even the final code instead of doubting either way.
+
+### Exploration
+
+Exploratory work works better without overdousing subagents with context. Careful when setting overly concrete goals. Careful also not have subagents over-critique details. Ideas start fragile; prevent subagents from prematurily reducing entropy through petty critiques. But if you feel we're drifting off to the deep end and confusing ourselves, then validate the general architecture first (again, through quick prototypes).
+
 ## Project Setup
 
 A quick iteration & verification loop is important especially for AI now. To that end, we use nuanced TypeScript + linting to essentially monkeypatch the type system into a mostly correct one, while opinionatedly dropping all the unhelpful stylistic rules that distracts AI
