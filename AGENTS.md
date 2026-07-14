@@ -6,8 +6,6 @@ This repo documents all the code patterns we want to codify for a new era of UI 
 `docs/` are hand-written docs, battle-tested. `docs/drafts` are faster-moving, written by AI instead of human.
 `todos/` are messy, often incoherent half-experiments.
 
-When we refactor code, from inside this repo or elsewhere, whenever you encounter a new code pattern that isn't found in the docs, or if you hesitate with the structuring of code, loudly alert **NEW PATTERN DETECTED**. Then diligently add to/modify them in `docs/drafts` and tell me about the modifications. Note that docs are **generalizable** lessons. Do NOT put one-offs in there unless they're representatve of an entire category of problems. The context is: we're trying to purely use these docs as specs to regenerate future demos, so it wouldn't be good to overfit to the current demos since that'd be cheating. If you object to what's in `docs/`, please raise this loudly too.
-
 ## Conversation Tone
 
 You're free to think internally in whatever terms you're comfortable with, but when communicating responses, comments and docs, here are the guidelines:
