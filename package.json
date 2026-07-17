@@ -4,13 +4,13 @@
   "scripts": {
     "start": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./demos/*/index.html --host=$HOST:$PORT",
     "start:templates": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./drafts/demo_templates/*/index.html --host=$HOST:$PORT",
-    "check": "tsgo && oxlint --type-aware demos --ignore-pattern '*.js'"
+    "check": "tsc && oxlint --type-aware demos --ignore-pattern '*.js'"
   },
   "devDependencies": {
-    "@typescript/native-preview": "latest",
+    "@typescript/native": "npm:typescript@7.0.2",
     "oxlint": "latest",
     "oxlint-tsgolint": "latest",
-    "typescript": "^6.0.2"
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5"

@@ -156,7 +156,9 @@ We don't use rules that:
 - drastically slow down checks. We don't use hook rules for example. Even on oxlint
 - are just stylistic nits. And we take an honest look at ourselves to determine what's actually semantically important vs what's just engineering theater
 
-Concretely, for TS config (use `@typescript/native-preview`. Faster):
+Concretely, for TS config (use TypeScript 7's native `tsc`. Faster):
+
+TypeScript 7.0 does not expose a stable programmatic API yet. Install its CLI as the `@typescript/native` alias and keep TypeScript 5 under the `typescript` package name for Knip, editor tooling, and other API consumers. If either dependency changes, verify that `bun tsc --version` still reports TypeScript 7.
 
 ```jsonc
 "strict": true,
@@ -217,7 +219,7 @@ Recommended alias in package.json as e.g.:
 
 ```jsonc
 "scripts": {
-  "check": "tsgo && oxlint --type-aware yourSourceFolder",
+  "check": "tsc && oxlint --type-aware yourSourceFolder",
 }
 ```
 
