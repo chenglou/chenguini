@@ -1,18 +1,21 @@
-# Animation (Section Under Construction)
+# Animation
 
 Animations are hard for several reasons:
 
-- They require thinking about the states in-between the main states, aka the interpolations in-between the keyframes. Most web frameworks are not architected to cater to this. Those transitional states are often prematurity discarded "by construction" through types and data structures that naively made states (which they consider illegal) irrepresentable.
-- Animations forces the interface to be fast and smooth. Most webapps barely scrape by with low performance, and thus the lack of animation helps hide sluggishness.
-- Animation architectures on the web typical overfit specific use-cases like sending simple, standalone effects to the GPU to avoid janks from CPU. This also removed the forcing function for main thread performance to be good. Most tasteful animations require interactions between various UI elements, gestures, CPU-side computations, etc.
-- Modern web frameworks optimize for throughput performance at the expense of latency performance (elaborate)
-- Animations require structural ...
+- They require thinking about the states in-between the main states, aka the interpolations in-between the keyframes. Most web frameworks are not architected to cater to this. Those transitional states are often prematurity discarded "by construction" through types and data structures that naively made states (which they consider illegal) irrepresentable
+- Animation architectures on the web typical overfit specific use-cases like sending simple, standalone effects to the GPU to avoid janks from CPU. This prematurily calcifies future use-cases, as now instead of just updating some rectangles at fast frame rate, those transitional times are special-cased. This causes async boundary problems, as seen on iOS and macOS, where animations are butter smooth but often uninterruptible or glitchy due to async + stateful coordinations. Most tasteful animations require interactions between various UI elements, gestures, CPU-side computations, etc. Do not prematurity create async boundaries
+- Modern web frameworks optimize for throughput performance at the expense of latency performance. Non-animated states render fine, but rendering at 120fps and you'll see jank everywhere
+- The fact that animations can violate UI layout invariants (e.g. non-overlap, containment) invalidates many frameworks' organizational hierarchy
 
-## Prefer Closed-Form (Analytical) Over Numerical
+## Closed-Form vs Numerical
 
-When possible, prefer animations with closed-form solutions (e.g. `x(t) = dest + e^(-αt) * (A*cos(ωt) + B*sin(ωt))` for underdamped springs) over numerical stepping (Euler integration in a loop). Closed-form lets you sample any point in time directly — no stepping loop, no accumulated numerical error, no spiral-of-death concerns, trivially FPS-independent. It also enables cheap prediction for predictive keyframes: just evaluate the formula at future timestamps instead of cloning & stepping world state. Retargeting (changing destination mid-animation) works by sampling current pos/vel and computing new coefficients. See [spring-comparison](../demos/spring-comparison/index.ts) for both approaches side by side.
+The main benefit of a closed-form animation is that the value is exact without numerical steppings inside the frame. With a numerical spring, a 60fps frame may still run four 4ms physics steps and then paint once. With a closed-form spring, the frame just asks "what are `pos` and `vel` at this timestamp?" If the tab stalls for a second, sample at the later timestamp. There's no catch-up loop, no accumulated integration drift, and no spiral-of-death cap. Retargeting works by sampling the current `pos` and `vel` and starting a new trajectory from there. See [spring-comparison](../demos/spring-comparison/index.ts) for both approaches side by side.
 
-Numerical stepping is still necessary when forces depend on other elements' positions (N-body repulsion, collisions), since coupled systems have no general closed-form solution.
+For current UI, many animations are one-off trajectories: snapping a card to a target, fading an element in, scaling a button, or letting a layout residual settle back to `0`. Closed forms are nice for these because the moving value only depends on its own start state, destination, and constants.
+
+Numerical stepping becomes the better fit once several moving items physically affect each other. If two rectangles repel, collide, or constrain each other's position, they usually can't be calculated independently analytically. The moment there's any interaction, we're back to numerical animation.
+
+A reusable closed-form spring helper must handle all damping regimes. Underdamped springs bounce, critically damped springs settle fastest without overshoot, and overdamped springs feel heavier. The naive underdamped formula has a `1 / omega` term, so it gets awkward near critical damping even though the real curve has a finite limit there.
 
 ## Tips & Tricks
 
@@ -89,7 +92,7 @@ At t=0 this gives `current_pos + 0 = current_pos`. At t=∞ this gives `rest_pos
 Springs are often overrated. Exp decays are simple, with great properties:
 - No overshoot bounce. Smoothly eases out to a resting position that's analytically computable ahead of time
 - Interruptible without transition discontinuity
-- Closed-form. `x(t) = x0 * e^(-kt)` plug in any t, get the exact answer. No stepping loop, no accumulated numerical error, can skip ahead to any point in time. FPS-independent! (the naive velocity *= 0.99 per frame gives 0.99^60 ≈ 0.55 at 60fps but 0.99^30 ≈ 0.74 at 30fps)
+- Closed-form. `x(t) = x0 * e^(-kt)` plug in any t, get the exact answer. No stepping loop, no accumulated numerical error, can skip ahead to any point in time. FPS-independent! (the naive `velocity *= 0.99` per frame gives `0.99^60 ≈ 0.55` at 60fps but `0.99^30 ≈ 0.74` at 30fps)
 
 ## Predictive Keyframes
 
