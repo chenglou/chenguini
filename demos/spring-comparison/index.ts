@@ -47,8 +47,24 @@ function springGoToEnd(s: Spring) {
 }
 
 // === analytical spring (closed-form underdamped solution) ===
-// x(t) = dest + e^(-α·t) · (A·cos(ω·t) + B·sin(ω·t))
-// A and B are determined by initial position and velocity
+// Let x(t) = pos(t) - dest, x0 = pos0 - dest, v0 = initial velocity,
+// alpha = damping / 2, and omega0 = sqrt(stiffness).
+//
+// Underdamped (alpha < omega0):
+// x(t) = e^(-alpha*t) * (x0*cos(omega*t) + ((v0 + alpha*x0) / omega)*sin(omega*t))
+// where omega = sqrt(omega0^2 - alpha^2).
+//
+// Critically damped (alpha = omega0):
+// x(t) = e^(-alpha*t) * (x0 + (v0 + alpha*x0)*t)
+// This is the omega -> 0 limit of the underdamped form:
+// sin(omega*t) / omega -> t
+// cos(omega*t) -> 1
+//
+// Overdamped (alpha > omega0):
+// x(t) = e^(-alpha*t) * (x0*cosh(delta*t) + ((v0 + alpha*x0) / delta)*sinh(delta*t))
+// where delta = sqrt(alpha^2 - omega0^2).
+//
+// The implementation below currently uses only the underdamped form.
 type ASpring = { dest: number; A: number; B: number; t0: number }
 
 function aspring(pos: number, dest: number, vel: number, t0: number): ASpring {
