@@ -13,7 +13,8 @@
 - on iOS Safari, `mouseup` and `click` don't fire on window-level, unless they're bubbled up from some other element
 - pointer coordinates are rounded/truncated to integers on iOS Safari, and sometime, by heuristics, even less precise. This, along with throttled frame rate, explains why most webapps don't feel smooth on iOS vs their native counterparts.
 - `pointermove` doesn't work on android (TODO: re-verify)
-- TODO: check `mousemove` and `touchmove` behaviors
+- On desktop Chrome and Safari, mouse movements while a native context menu is open may be delayed until the menu closes. Chrome may then deliver a few buffered `mousemove` events out of `event.timeStamp` order, so the last event delivered can contain an older pointer position. In our Safari test, the delayed events remained in timestamp order.
+- TODO: check `touchmove` behavior
 - (Not a bug, just a warning) when scrolling, a container's `pointermove`/`touchmove`/`mousemove` obviously don't always trigger; some stored `event.offsetX/Y` (coordinates local to container) would be stale
 - pointer values can exceed document bounds, thus have legal negative values
 - On page load, there's no way to render a first cursor state.
@@ -30,9 +31,14 @@ Events contain a `timeStamp` property, the high-precision time when the event oc
 - **Click/hover** (scroll may change between events): use `clientX/Y`. Convert to document-local for hit testing: `pointerXLocal = clientX + scrollX`.
 - **Drag tracking** (container has no scrolling): use `pageX/Y`. These stay stable in document space across frames.
 
+Use an event's own coordinates for behavior caused by that event. E.g. hit-test a click with its `clientX/Y`, rather than a stored pointer position that a delayed `mousemove` may overwrite.
+
 ```ts
 // click/hover: store viewport-relative, convert when needed
 if (st.events.click != null) {
+  const clickXLocal = st.events.click.clientX + scrollX
+  const clickYLocal = st.events.click.clientY + scrollY
+  // use clickXLocal/YLocal for click hit testing
   pointer.x = st.events.click.clientX
   pointer.y = st.events.click.clientY
 }
@@ -40,7 +46,7 @@ if (st.events.mousemove != null) {
   pointer.x = st.events.mousemove.clientX
   pointer.y = st.events.mousemove.clientY
 }
-// for hit testing against absolute-positioned elements:
+// for hover hit testing against absolute-positioned elements:
 const pointerXLocal = pointer.x + scrollX
 const pointerYLocal = pointer.y + scrollY
 ```
