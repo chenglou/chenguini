@@ -142,6 +142,10 @@ When you launch long-running task, unless the task's scope and structure is cert
 
 Exploratory work works better without overdousing subagents with context. Careful when setting overly concrete goals. Careful also not have subagents over-critique details. Ideas start fragile and sometime wrong; they then pivot and pivot until the original problem isn't necessarily solved, but rendered unimportant compared to the new idea's value props. If you're handling exploratory tasks, do NOT give up early and view experiments too much in the scope of present day. Prevent subagents from prematurily reducing entropy through petty critiques. But if you feel we're drifting off to the deep end and confusing ourselves, then validate the general architecture first (again, through quick prototypes). Some early critiques are fine, and sometime crucial dovetails with rapid iteration & cutting down bad exploration space; for example, concretely actionable/verifiable critiques, falsifiable hypotheses (as opposed to "this'll usually not work" which is sometime just cynicism).
 
+## Refactors
+
+Traditional refactors partially aim to minimize the syntactical amount of code changed. This is no longer necessary/desirable under AI, where we can treat code as IR/assembly (compile fresh rather than incrementally changed). When refactoring, do the full, deep change, as if the desired feature was made fresh rather than partially tweaked from a previous feature state. This also means no intermediate glue code that bridges from some supposed legacy code (unless said code's actually still running during production, e.g. old logic still being called in an instance).
+
 ## Project Setup
 
 A quick iteration & verification loop is important especially for AI now. To that end, we use nuanced TypeScript + linting to essentially monkeypatch the type system into a mostly correct one, while opinionatedly dropping all the unhelpful stylistic rules that distracts AI
