@@ -8,8 +8,9 @@ A **stacking context** isolates z-index values. Children inside a stacking conte
 
 Stacking contexts are created by:
 - `isolation: isolate` (cleanest, no side effects)
+- `position: relative/absolute` with a `z-index` other than `auto`
 - `position: fixed/sticky`
-- `transform`, `filter`, `opacity < 1`, etc.
+- `transform`, `filter`, `opacity < 1`, `contain: paint`, etc.
 
 (Of course, in a React component, the child can technically escape the parent stacking context through a Portal that brings the whole element somewhere else in the DOM. But that's a different concept.)
 
@@ -61,11 +62,11 @@ When elements within a component need to stack relative to each other and DOM or
 let d = 1
 const below = d++
 const above = d++
-<div style={{ isolation: 'isolate' }}> {/* second highest */}
-  <header style={{ position: 'relative', zIndex: above }}>header</header> {/* third highest */}
-  <main style={{ position: 'relative', zIndex: below }}>content</main> {/* lowest */}
+<div style={{ isolation: 'isolate' }}> {/* header and main only compete with each other inside this div */}
+  <header style={{ position: 'relative', zIndex: above }}>header</header> {/* above main */}
+  <main style={{ position: 'relative', zIndex: below }}>content</main> {/* below header */}
 </div>
-<div>sibling</div> {/* highest — isolation prevents header's z-index from escaping */}
+<div style={{ position: 'relative' }}>sibling</div> {/* above the whole isolated div, header included — isolation prevents header's z-index from escaping */}
 ```
 
 (It's also ok to directly use constants like `1` and `2` instead of `d++` _locally_ for convenience, since nothing escapes and cross-pollutes).
@@ -92,6 +93,7 @@ See [Input.md § Z-Index During Drag & Release](Input.md#z-index-during-drag--re
 ### Gotchas
 
 - `position: fixed` and `sticky` create a stacking context, but the element is still bounded by any ancestor stacking context. They only compete at the root level if no ancestor creates a stacking context. (This means a fixed/sticky element inside a nav that creates a stacking context — e.g. `position: relative` + `z-index: 5`, or `isolation: isolate` — is bounded by that nav, even though it's positioned relative to the viewport.)
-- A parent with `overflow: hidden/auto/scroll` that creates a stacking context will clip children visually even if they have high z-index
+- An element that creates a stacking context paints like a positioned element with `z-index: 0`. So a later sibling that isn't positioned paints _below_ it, e.g. in the local z-indexing example above, a plain `<div>sibling</div>` would paint below the isolated div, background and header included. That's why the sibling there is `position: relative`
+- `overflow: hidden/auto/scroll/clip` doesn't create a stacking context, and a high z-index doesn't get a descendant out of the clip. Whether a descendant is clipped depends on its containing block instead: an absolutely positioned descendant escapes the clip when its containing block is outside the overflow element, i.e. when neither the overflow element nor anything between them establishes a containing block for absolutely positioned elements. `position` other than `static` does, and so do `transform`, `filter`, `will-change: transform` and `contain: paint`; `isolation: isolate` doesn't. (`contain: paint` also clips on its own like `overflow`, but unlike `overflow` it creates a stacking context.)
 - For DOM node A and B, both without stacking context, and where A comes syntactically before B (which means visually beneath B), setting z-index on A's child will make it correctly appear above B
 - `isolation: isolate` prevents `mix-blend-mode` from blending with content outside - rarely matters for UI

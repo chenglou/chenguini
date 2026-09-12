@@ -20,14 +20,14 @@ This is subtle but important:
 
 | Scenario | Source of Truth | Why |
 |----------|-----------------|-----|
-| Fresh page load (shared link, typed URL, new tab) | URL | `history.state` is null |
+| Fresh page load (new tab, shared link opened in a new tab) | URL | `history.state` is null |
 | Refresh | History state | `history.state` survives reloads |
 | Normal navigation (clicking links) | Route object | Stored in `history.state` |
 | Browser back/forward | History state | `e.state` from popstate event |
 
 The discriminator is whether `history.state` is null.
 
-Because `history.state` survives refreshes, a refresh after a deploy hands the new build a route object that the old build wrote. Validate it like any other stored data instead of casting it.
+Because `history.state` survives refreshes, a refresh after a deploy hands the new build a route object that the old build wrote. Validate it like any other stored data instead of casting it. Navigating to the URL a tab already shows isn't always a fresh load either: Safari reuses and reloads a tab that already shows the URL it's asked to open, and a same-tab navigation to the current URL kept `history.state` in Chrome. So treat a non-null `history.state` as "this entry has context", not as "the user refreshed".
 
 ## Same URL, Different Meaning
 
