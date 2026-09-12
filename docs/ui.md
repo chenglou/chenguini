@@ -252,6 +252,8 @@ Properties set on a DOM node split into two **disjoint** groups:
 - **Dynamic** (set every frame): `transform`, `width`, `height`, `opacity`, `zIndex`. These go outside, in the per-frame write path.
 If a property appears in both, it's a bug: either it's truly static (move it to creation) or truly dynamic (remove it from creation).
 
+Careful with per-frame writes on stateful nodes: a few setters reset what the browser holds even when the value is unchanged. Assigning the same `textContent` (or a text node's `data`) collapses a selection inside it, the same `video.src` restarts the video from 0s, the same `img.src` refires `load` (and Firefox restarts a download that's still in progress), and re-appending a focused node drops focus. Same-value `className`, `style.transform` and `input.value` writes are harmless. So only rewrite those setters every frame on non-interactive nodes. For nodes that can hold a selection, focus or playback, keep the last written value in `domCache` and write only on change. Compare against that, not the getter, since `img.src` reads back as an absolute URL. (Checked in Chrome 153, Firefox 155 and Safari 26.5.)
+
 ### DOM Update Strategies
 
 React has to use a universal diffing algorithm for human developer needs, with much expressivity and performance cost. With AI, we should specialize a tiny, access-pattern-aware inlined reconciling strategy per DOM chunk instead. This section describes the important set of state-to-DOM projection strategies the AI should pick from
