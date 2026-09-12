@@ -33,7 +33,7 @@ DO NOT prematurily optimize data for performance at the cost of simplicity:
 If behavior genuinely differs by some dimension, say, browser, feature flag, or mode, model that difference explicitly in one place. Don't weave it through a bunch of local conditionals.
 
 DO NOT write defensive code like `foo?.bar?.baz`, or bigger defensive patterns that silence potential upstream causes of errors. Things are well-typed, and if weird type-related errors happen, that means somewhere _upstream_ is broken and needs fixing, not silenced per-callsite. Let it crash early.
-Do consider defensive code in the context of provably shaky boundaries, e.g. user input, network responses. But do it only after user asks so. AI tends to overdo defensive coding.
+Do consider defensive code in the context of provably shaky boundaries, e.g. user input, network responses. But don't overdo defensive coding.
 
 Think twice before using overly generic data structures like Map and Set. They're fine in many cases, but in many others, it just means you haven't leveraged more properties & strong assumptions from your domain. Array's often a better bet unless your algorithm really needs `O(1)` access. Think more in C-style terms: where is a hash map more appropriate despite its higher friction?
 Data structures tier:
