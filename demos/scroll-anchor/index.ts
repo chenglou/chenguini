@@ -86,7 +86,8 @@ document.getElementById('btn-rapid')!.addEventListener('click', () => {
   // either way. If one render: sees all 3, adjusts once. If two
   // renders: each adjusts for its new items, prevY updated between.
   // The counts are summed, not assigned: when the timeout runs before the
-  // frame (Safari, or a synthetic click in Chrome), assigning would drop the 1.
+  // frame (every click in Safari, synthetic clicks in Chrome and Firefox),
+  // assigning would drop the 1.
   st.events.addAbove = (st.events.addAbove ?? 0) + 1; scheduleRender()
   setTimeout(function addTwoMore() {
     st.events.addAbove = (st.events.addAbove ?? 0) + 2; scheduleRender()
