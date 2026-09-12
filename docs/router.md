@@ -20,11 +20,14 @@ This is subtle but important:
 
 | Scenario | Source of Truth | Why |
 |----------|-----------------|-----|
-| Fresh page load (refresh, shared link, typed URL) | URL | `history.state` is null |
+| Fresh page load (shared link, typed URL, new tab) | URL | `history.state` is null |
+| Refresh | History state | `history.state` survives reloads |
 | Normal navigation (clicking links) | Route object | Stored in `history.state` |
 | Browser back/forward | History state | `e.state` from popstate event |
 
 The discriminator is whether `history.state` is null.
+
+Because `history.state` survives refreshes, a refresh after a deploy hands the new build a route object that the old build wrote. Validate it like any other stored data instead of casting it.
 
 ## Same URL, Different Meaning
 
@@ -108,9 +111,11 @@ Using a tagged union gives you:
 
 ```ts
 function parseUrl(location: URL, historyState: unknown): Route {
-  // History state takes precedence — it has full context
-  if (historyState != null) {
-    return historyState as Route
+  // History state takes precedence — it has full context. It also survives refreshes,
+  // so after a deploy it can hold a route the previous build wrote: validate, don't cast
+  const stateRoute = parseHistoryState(historyState)
+  if (stateRoute != null) {
+    return stateRoute
   }
 
   // Otherwise parse from URL (fresh navigation)

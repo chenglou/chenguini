@@ -6,7 +6,7 @@ const msPerAnimationStep = 6
 function hash(n: number) {
   n = n | 0
   n = Math.imul((n >>> 16) ^ n, 0x21f0aaad)
-  n = Math.imul((n >>> 15) ^ n, 0x735a2d97)
+  n = Math.imul((n >>> 15) ^ n, 0xd35a2d97)
   return (((n >>> 15) ^ n) >>> 0) / 0x100000000
 }
 

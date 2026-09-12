@@ -39,7 +39,7 @@ Springs became the pseudo-standard for UI animations thanks to their versatility
 ```ts
 // 4ms/step for the spring animation's step. Typically 4 steps for 60fps (16.6ms/frame) and 2 for 120fps (8.3ms/frame). Frame time delta varies, so not always true
 // could use 8ms instead, but 120fps' 8.3ms/frame means the computation might not fit in the remaining 0.3ms, which means sometime the simulation step wouldn't even run once, giving the illusion of jank
-const msPerAnimationStep = 6
+const msPerAnimationStep = 4
 type Spring = { pos: number; dest: number; v: number; k: number; b: number }
 function spring(position: number, destination = position, velocity = 0, stiffness = 333, damping = 33): Spring {
   return { pos: position, dest: destination, v: velocity, k: stiffness, b: damping } // try https://chenglou.me/react-motion/demos/demo5-spring-parameters-chooser/
@@ -71,7 +71,7 @@ We can't compare against the exact target value and velocity of 0 since the spri
 
 ### Spiral of Death Prevention
 
-When computing `steps = floor((now - animatedUntilTime) / msPerAnimationStep)`, if the tab was backgrounded or the device lagged, `steps` can be enormous (e.g. 10 seconds → 2500 steps at 4ms/step). Running all of them in one frame causes that frame to be late, which makes the next frame's `steps` even larger — a spiral of death. Cap it: `steps = Math.min(N, steps)`. Since `animatedUntilTime` only advances by the capped amount, the remaining gap catches up naturally over subsequent frames — no time skip. Pick N large enough that normal operation never triggers it (60fps at 4ms/step needs ~4 steps/frame; occasional stalls might need ~50), but small enough to prevent the spiral. N = 300 (1200ms at 4ms/step) is a good default: most animations settle well within that, and no normal frame is 1.2 seconds long.
+When computing `steps = floor((now - animatedUntilTime) / msPerAnimationStep)`, if the tab was backgrounded or the device lagged, `steps` can be enormous (e.g. 10 seconds → 2500 steps at 4ms/step). Running all of them in one frame makes that frame late. If simulating the steps takes longer than the time they cover, every late frame leaves an even bigger backlog for the next one — a spiral of death. Spring steps are cheap enough (nanoseconds each) that a real spiral is rare, but the single catch-up frame after a long stall is still a visible hitch. Cap it: `steps = Math.min(N, steps)`. Since `animatedUntilTime` only advances by the capped amount, the remaining gap catches up naturally over subsequent frames — no time skip. Pick N large enough that normal operation never triggers it (60fps at 4ms/step needs ~4 steps/frame; occasional stalls might need ~50), but small enough to prevent the spiral. N = 300 (1200ms at 4ms/step) is a good default: most animations settle well within that, and no normal frame is 1.2 seconds long.
 
 ### Obscure Usages
 

@@ -127,25 +127,41 @@ TODO: two states copies (n states for debugging), alloc benefits, needing to see
 
 ## Pseudo-Random
 Avoid Math.random() and other non-deterministic functions (Date.now() counts too, but that's a separate topic). Use a seeded pseudo-random, and call it a hash, for intent clarity.
-Strong recommendation: use Wellons lowbias32 improved, and specialize per argument count:
+Strong recommendation: use `lowbias32` from Chris Wellons' [hash-prospector](https://github.com/skeeto/hash-prospector) (public domain), with the lower-bias constants TheIronBorn found, and specialize per argument count:
 
 ```ts
-function hash(n) {
+function lowbias32(n) {
   n = Math.imul((n >>> 16) ^ n, 0x21f0aaad);
-  n = Math.imul((n >>> 15) ^ n, 0x735a2d97);
-  return (((n >>> 15) ^ n) >>> 0) / 0x100000000;
+  n = Math.imul((n >>> 15) ^ n, 0xd35a2d97);
+  return (n >>> 15) ^ n;
+}
+function hash(a) {
+  return (lowbias32(a) >>> 0) / 0x100000000;
 }
 function hash2(a, b) {
-  return hash((a + Math.imul(b, 0x9e3779b9)) | 0);
+  return (lowbias32(lowbias32(a) ^ b) >>> 0) / 0x100000000;
 }
 function hashN(args) {
   let n = 0;
-  for (let i = 0; i < args.length; i++) n = (n + Math.imul(args[i], 0x9e3779b9)) | 0;
-  n = Math.imul((n >>> 16) ^ n, 0x21f0aaad);
-  n = Math.imul((n >>> 15) ^ n, 0x735a2d97);
-  return (((n >>> 15) ^ n) >>> 0) / 0x100000000;
+  for (let i = 0; i < args.length; i++) n = lowbias32(n ^ args[i]);
+  return (n >>> 0) / 0x100000000;
 }
 ```
+
+`hash2(a, b)` is `hashN([a, b])` written out. When specializing for more arguments, run every argument through `lowbias32` like `hashN` does. Argument order matters on purpose: combining the arguments first, e.g. by adding them up, makes `hashN([1, 2])` equal `hashN([2, 1])`, so a grid cell and its mirror across the diagonal always get the same random value.
+
+These treat arguments as 32-bit integers, so floats get truncated: `hash(0.3) === hash(0)`. To hash a float, hash the two halves of its 64 bits:
+
+```ts
+const float64 = new Float64Array(1);
+const float64Words = new Uint32Array(float64.buffer);
+function hashFloat(x) {
+  float64[0] = x === 0 ? 0 : x; // -0 === 0, so hash them the same
+  return hash2(float64Words[0], float64Words[1]);
+}
+```
+
+Floats that look equal but differ in their last bits hash differently, e.g. `hashFloat(0.1 + 0.2) !== hashFloat(0.3)`. Round first when that matters, e.g. `hash(Math.round(x * 1000))`.
 
 ## DOM
 

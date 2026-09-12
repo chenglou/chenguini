@@ -71,12 +71,18 @@ This pins the spring to the cursor (no springy lag). On release, the layout pass
 For flick/throw gestures, estimate velocity from recent pointer history:
 
 ```js
-let pointer = [{x: 0, y: 0, time: 0}] // circular buffer, keep last ~20
-// On move: pointer.push({x, y, time: performance.now()})
-// On release:
-let i = pointer.length - 1
-while (i >= 0 && now - pointer[i].time <= 100) i-- // last ~100ms
-let vx = (pointerLast.x - pointer[i].x) / (now - pointer[i].time) * 1000 // px/s
+let pointer = [] // circular buffer, keep last ~20
+// On move: pointer.push({x: e.clientX, y: e.clientY, time: e.timeStamp})
+// On release, with now = the release event's timeStamp:
+let vx = 0
+if (pointer.length > 0) {
+  const last = pointer[pointer.length - 1]
+  let i = pointer.length - 1
+  // last ~100ms. Stop at the oldest sample when every sample is recent, e.g. 20 samples from a 240Hz pen
+  while (i > 0 && now - pointer[i].time <= 100) i--
+  const dt = now - pointer[i].time
+  if (dt > 0) vx = (last.x - pointer[i].x) / dt * 1000 // px/s
+}
 ```
 
 ### Z-Index During Drag & Release

@@ -22,15 +22,17 @@ Different bugs want different checks:
 - a narrow diff against old code
 - a seeded random pass
 
+If the question is whether a refactor or migration kept the old behavior, start with a diff against the old code. The old code already knows the answer.
+
 Start narrow, widen once, then shrink back. If a text box wraps wrong, use one short string and one width where the bug is obvious. After the fix, run a broader matrix so you don't tune for that one case.
 
 For example:
 
 - keep a small permanent suite like repeated spaces, one hard break, one whitespace-only middle line, one tab case
 - do one temporary broader pass over a much bigger generated matrix
-- if the broad pass agrees, keep the small suite and delete the broad checker
+- if the broad pass agrees, keep the small suite. Keep the broad pass too if it runs in seconds, e.g. a pass over a helper's contracts; otherwise delete it
 
-Don't keep a big exploratory checker forever just because it helped once.
+Don't keep a slow exploratory checker forever just because it helped once.
 
 ## Pure Checks
 
@@ -48,44 +50,41 @@ Bad:
 - using a browser run to check pure helper math
 - forcing native selection, scroll physics, or storage behavior into a pure helper check
 
-Put the smallest useful `@fit` contract above the pure helper itself:
+Put the smallest useful contract in the pure helper itself, as `console.assert` lines. Leading asserts state what callers must pass; later asserts state what the result guarantees:
 
 ```ts
-/** @fit
- * given rowSizes.length: int 0..200
- * given rowSizes[]: 0..1000
- * result.length == rowSizes.length
- */
 function stackLayout(rowSizes: number[], paddingTop: number) {
+  console.assert(paddingTop >= 0)
   const result = []
   let top = paddingTop
   for (const rowSize of rowSizes) {
     result.push(top)
     top += rowSize
   }
+  console.assert(result.length === rowSizes.length)
   return result
 }
 ```
 
 Prefer boring facts like length, bounds, and copied fields first. If a contract needs a paragraph of setup or knows too much about the page, the fact probably belongs in a smaller helper or a browser report.
 
+Contracts are worth the most at the boundaries other code relies on, e.g. "the input bar stays inside the content area". An assert that restates the line above it catches little.
+
 Preconditions count. A clamp contract that says `result <= max` is only true if `max >= min`:
 
 ```ts
-/** @fit
- * given min: -100000..100000
- * given value: -100000..100000
- * given max: -100000..100000
- * given max >= min
- * result >= min
- * result <= max
- */
 function clamp(min: number, value: number, max: number) {
-  return Math.min(Math.max(value, min), max)
+  console.assert(min <= max)
+  const result = Math.min(Math.max(value, min), max)
+  console.assert(result >= min)
+  console.assert(result <= max)
+  return result
 }
 ```
 
 If a helper needs that input promise, put it in the contract. Don't let every caller rediscover it as a weird layout failure.
+
+Check the contracts by running the helper over its realistic inputs with `console.assert` made to throw, e.g. every window width `320..3840` and both sidebar states. A plain loop or a seeded random pass is enough, and it usually runs in seconds. Freerange can prove some contracts without running anything; the rest still get checked by the run.
 
 Use negative probes too. After adding a contract, briefly break the code in the boring way:
 
@@ -98,15 +97,15 @@ The checker should complain. If the checker doesn't complain, the contract is pr
 
 Don't prove everything. Prove places that are cheap and likely to regress: lengths, bounds, copied fields, row order, hit areas, min/max guarantees. Leave native selection, browser scrolling, text painting, and storage behavior to browser reports.
 
-If the fact belongs to one field or return value, keep it there:
+If the fact belongs to one field or return value, name the value and assert it right there:
 
 ```ts
-return {
-  targetIndex: focused + 1, // @fit < items.length
-}
+const targetIndex = focused + 1
+console.assert(targetIndex < items.length)
+return {targetIndex}
 ```
 
-Responsive layout also benefits from explicit domains. A line like `given windowWidth: 320..2000` says which screens the layout supports, and stops impossible thin layouts from quietly becoming part of the app.
+Responsive layout also benefits from explicit domains. Leading asserts like `console.assert(windowWidth >= 320)` and `console.assert(windowWidth <= 2000)` say which screens the layout supports, and stop impossible thin layouts from quietly becoming part of the app.
 
 ## Browser Reports
 
@@ -144,18 +143,6 @@ Bad:
 - rebuilding the same text state 61 times just to collect 61 heights
 
 Keep each batch homogeneous. If the work changes, start a new page run.
-
-Keep transport correctness in the report, but don't make it part of the checked behavior.
-
-Good:
-
-- keep `requestId` while transporting the report
-- assert on `orderedCardIds`, `selectedText`, `visibleRowRange`, or `topItemId`
-
-Bad:
-
-- snapshotting a transport nonce as if it were product behavior
-- treating "Chrome exited" as the product answer
 
 ## Snapshots
 
@@ -451,7 +438,6 @@ A demo spec should not keep re-explaining:
 
 Keep shared browser automation machinery in the docs so every new spec does not fork the repo's verification style.
 
-For how to run this workflow end to end, see `demo-reconstruction.md`.
 For how to shape the demo packet itself, see `../../todos/minimum-viable-demo-spec.md` and `../../todos/spec-writing-for-demos.md`.
 
 ## Done
@@ -461,7 +447,7 @@ When iterating alone, "tests pass" is usually too weak.
 A better stopping condition is:
 
 - the chosen small fixtures pass
-- one broader pass agreed before being deleted
+- one broader pass agreed before being deleted, or is cheap enough to keep
 - one sensitivity check proves the check can notice a meaningful regression
 - the fragile interaction is asserted directly if there is one
 - any remaining blind spots are named explicitly
