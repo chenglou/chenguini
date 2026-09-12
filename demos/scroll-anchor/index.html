@@ -31,8 +31,8 @@
 
   Truncation handling (Scrolling.md points 3-4):
     After scrollTo, read back container.scrollTop and store THAT value
-    (not the requested value). Browser truncation varies: Chrome rounds
-    to 0.5, Safari/Firefox to integers. Storing the read-back value
+    (not the requested value). Browser rounding varies: Chrome and Firefox
+    round to the nearest device pixel, Safari down to integers. Storing the read-back value
     prevents false "user scrolled" detection from truncation mismatch.
     This read can force layout; keep it at the end of the frame and
     don't do more DOM writes after it.
@@ -43,8 +43,9 @@
     1. "Add 3 above" -- items prepended while scrolled down. Anchor
        adjustment keeps visible items stable.
     2. "Add 1, then 2 rapid" -- two separate data changes in quick
-       succession (simulates rapid async updates). Each is a separate render, each
-       adjusts correctly. No double-counting, no flags.
+       succession (simulates rapid async updates). They land in one render or
+       two depending on the browser; the counts are summed, so all 3 get added
+       either way and the anchor adjusts correctly. No double-counting, no flags.
     3. User scroll -- scroll manually, then add items. New anchor is
        picked from the new scroll position.
     4. Resize -- narrow/widen the browser. Anchor keeps visible items

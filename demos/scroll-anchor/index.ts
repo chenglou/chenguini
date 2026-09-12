@@ -78,16 +78,18 @@ document.getElementById('btn-scroll')!.addEventListener('click', () => {
   st.events.scrollTo = targetScroll; scheduleRender()
 })
 document.getElementById('btn-add')!.addEventListener('click', () => {
-  st.events.addAbove = 3; scheduleRender()
+  st.events.addAbove = (st.events.addAbove ?? 0) + 3; scheduleRender()
 })
 document.getElementById('btn-rapid')!.addEventListener('click', () => {
   // Two separate data changes in quick succession (simulates rapid async updates).
   // Whether they land in one render or two depends on timing — works
   // either way. If one render: sees all 3, adjusts once. If two
   // renders: each adjusts for its new items, prevY updated between.
-  st.events.addAbove = 1; scheduleRender()
+  // The counts are summed, not assigned: when the timeout runs before the
+  // frame (Safari, or a synthetic click in Chrome), assigning would drop the 1.
+  st.events.addAbove = (st.events.addAbove ?? 0) + 1; scheduleRender()
   setTimeout(function addTwoMore() {
-    st.events.addAbove = 2; scheduleRender()
+    st.events.addAbove = (st.events.addAbove ?? 0) + 2; scheduleRender()
   }, 0)
 })
 
@@ -178,7 +180,7 @@ function render() {
   if (layout.adjustedScrollTop !== currentScrollY) {
     domCache.container.scrollTo({top: layout.adjustedScrollTop, behavior: 'instant' as ScrollBehavior})
     // Read back actual value after scrollTo. Do NOT store the requested
-    // value — browser truncation (Chrome: 0.5, Safari/Firefox: integers)
+    // value — browser rounding (Chrome and Firefox: nearest device pixel, Safari: integers)
     // would cause a false mismatch on the next frame, making us think
     // the user scrolled when they didn't. (Scrolling.md points 3-4)
     // This can force layout, so keep it at the end of the frame and don't
