@@ -507,11 +507,12 @@ function lineBreakCharCountAt(text: string, index: number) {
 function measureFragmentTextWidth(fragment: HNCommentLayoutFragment, text: string) {
   if (text === '') return 0
   const font = fontForFragmentKind(fragment.kind)
-  const whiteSpace = whiteSpaceForFragmentKind(fragment.kind)
-  const key = `${font}\u0000${whiteSpace}\u0000${text}`
+  const key = `${font}\u0000${text}`
   const cached = textWidthCache.get(key)
   if (cached != null) return cached
-  const prepared = prepareWithSegments(text, font, {whiteSpace})
+  // Fragments render with `white-space: pre`, so their spaces take width. Under 'normal', measureNaturalWidth
+  // drops trailing spaces, and a prefix like "alpha " would measure one space short
+  const prepared = prepareWithSegments(text, font, {whiteSpace: 'pre-wrap'})
   const width = measureNaturalWidth(prepared)
   textWidthCache.set(key, width)
   return width
@@ -527,10 +528,6 @@ function fontForFragmentKind(kind: HNCommentLayoutFragment['kind']) {
     case 'link':
       return COMMENT_BODY_FONT
   }
-}
-
-function whiteSpaceForFragmentKind(kind: HNCommentLayoutFragment['kind']) {
-  return kind === 'code' ? 'pre-wrap' : 'normal'
 }
 
 function pushMergedRect(rects: HNCommentRect[], next: HNCommentRect) {
