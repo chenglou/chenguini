@@ -109,11 +109,18 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
       case 'paragraph': {
         const lines: HNCommentLayoutLine[] = []
         let blockHeight = 0
+        // Where each run's text starts in the source, past the boundary whitespace Pretext collapses into gapBefore
+        const runTextStarts: number[] = []
+        let runStart = textOffset
+        for (let runIndex = 0; runIndex < block.runs.length; runIndex++) {
+          const runText = block.runs[runIndex]!.text
+          runTextStarts.push(runStart + runText.length - runText.replace(/^[ \t\n\f\r]+/, '').length)
+          runStart += runText.length
+        }
 
         walkRichInlineLineRanges(block.flow, safeWidth, lineRange => {
           const line = materializeRichInlineLineRange(block.flow, lineRange)
           const lineTop = blockTop + blockHeight
-          const lineTextStart = textOffset
           const fragments: HNCommentLayoutFragment[] = []
           let left = 0
 
@@ -121,7 +128,11 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
             const fragment = line.fragments[fragmentIndex]!
             const run = block.runs[fragment.itemIndex]!
             left += fragment.gapBefore
-            if (fragmentIndex > 0 && fragment.gapBefore > 0) textOffset += 1
+            // A fragment that starts its run begins at the run's source text. Counting gapBefore misses the space
+            // when a line wraps right before a run, because Pretext drops gapBefore at a line start
+            if (fragment.start.segmentIndex === 0 && fragment.start.graphemeIndex === 0) {
+              textOffset = runTextStarts[fragment.itemIndex]!
+            }
 
             const textStart = textOffset
             const textEnd = textStart + fragment.text.length
@@ -147,7 +158,7 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
             top: lineTop,
             width: line.width,
             height: COMMENT_LINE_HEIGHT,
-            textStart: lineTextStart,
+            textStart: fragments[0]!.textStart,
             textEnd: textOffset,
             fragments,
           })
