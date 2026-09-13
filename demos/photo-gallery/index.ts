@@ -526,7 +526,7 @@ function render(now: number) {
     const anchorY = gridLayout.items[st.anchor]!.layoutBox.y - gapTopPeek
     if (newWindowSizeX !== st.windowSizeX) adjustedScrollTop = Math.max(0, anchorY) // resized; maintain position!
     if (adjustedScrollTop !== st.scrollY && Math.abs(anchorY -/*toLocal*/adjustedScrollTop) > windowSizeY / 10) { // find new anchor if the current one moved too much
-      for (newAnchor = 0; newAnchor < data.length; newAnchor += gridLayout.cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
+      for (newAnchor = 0; newAnchor + gridLayout.cols < data.length; newAnchor += gridLayout.cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
         const layoutBox = gridLayout.items[newAnchor]!.layoutBox
         // find 1st box whose bottom exceeds 20% of window height
         if (layoutBox.y + layoutBox.sizeY -/*toLocal*/adjustedScrollTop > windowSizeY / 5) break
