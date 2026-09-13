@@ -116,6 +116,8 @@ _btw, gesture-gated APIs (`navigator.clipboard.writeText`, `element.requestFulls
 
 The event fields are just regular state fields whose lifetime happens to be one frame or so. **don't forget to reset those event states** at the end of the render loop.
 
+A field like `st.events.click` only keeps the latest click of the frame; an earlier click in the same frame gets overwritten. That's fine when only the latest value matters, e.g. pointer position, and a person rarely presses the same key twice within one frame. When every occurrence counts, accumulate instead: sum deltas (`st.events.wheelDeltaY += e.deltaY`), or push onto an array (`st.events.keydowns.push(e)`), e.g. for held-key autorepeat or events dispatched from code. Reset those to `0` and `[]` at the end of the render loop too.
+
 A React app might not be able to follow this render architecture, but when the need arises (heavy interactivity), this can still be adopted within components.
 
 ### State Management
