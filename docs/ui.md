@@ -294,7 +294,7 @@ Every DOM node should have one owner at a time. If another chunk needs to render
 
 ## Layout
 
-Use `document.documentElement.clientWidth` and `document.documentElement.clientHeight` for viewport dimensions. Do NOT use `window.innerWidth` / `window.innerHeight` — those include scrollbar width and behave differently under Safari pinch zoom (they change during zoom, `clientWidth/Height` don't). `visualViewport.width/height` also changes during pinch zoom. **`<!DOCTYPE html>` is required.** Without it, the browser enters quirks mode and `document.documentElement.clientHeight` returns the full document content height instead of the viewport height.
+Use `document.documentElement.clientWidth` and `document.documentElement.clientHeight` for viewport dimensions. Do NOT use `window.innerWidth` / `window.innerHeight` — those include scrollbar width and behave differently under Safari pinch zoom (they change during zoom, `clientWidth/Height` don't). `visualViewport.width/height` also changes during pinch zoom. **`<!DOCTYPE html>` is required.** Without it, the browser enters quirks mode and `document.documentElement.clientHeight` returns the full document content height instead of the viewport height. Virtualization that reads it then treats every item as visible and renders all of them; in Pretext's masonry demo, that crashed iOS Safari.
 
 Do heavily borrow from shader/pytorch/vector primitives, e.g. vec2/3/4 (either as xyzw object or array), the pseudo-randoms above, remap, clamp, fract, step, length, etc.
 
