@@ -6,7 +6,7 @@ This doc details as much as we know about scrolling on the web, so that folks do
 
 iOS, macOS and a few other platforms produce a pleseant bounce effect when a container scrolls past its bounds, to indicate the end of the content. This is a large, silent differentiator in making your app feel native, and a large, silent reason why a vocal minority dislikes Electron and other non-native apps. This UX, along with the now-famous "green bubble" effect, is one of the many premium-feeling Apple subtleties one has to familiarize themselves with in order to cross the chasm for Apple platform adoptions, especially when your app differentiates itself through premium feels.
 
-Safari and Firefox (nowadays) both do rubberbanding on page and container scrolling. Chrome only does it for page scrolling. [Here's a very stale Chromium issue](https://issues.chromium.org/issues/41102897).
+Safari, Firefox and Chrome (since 145) all do rubberbanding on page and container scrolling.
 
 Fixed elements don't always rubberband with the page. Chrome keeps fixed elements pinned during page rubberbanding; Safari and Firefox move them with the page. So a fixed nav can peek through during a top bounce in Chrome, but move along with the rest of the page in Safari/Firefox.
 
@@ -106,8 +106,6 @@ On iPad Safari, elements positioned outside the viewport (e.g. a horizontal caro
 - Scroll event listener needs `{ capture: true }` to catch body scroll events
 
 Detect Safari: `navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')` (Chrome's UA also contains "Safari").
-
-Chrome doesn't rubberband inner elements (only page-wide), so for Chrome you may want to keep using `window` as the scroll target to preserve native page-level rubberbanding.
 
 ## Overflow-X
 
