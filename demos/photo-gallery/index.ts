@@ -127,7 +127,7 @@ function readScrollX() {
 }
 
 function applyScrollTop(top: number) {
-  ;(isSafari ? document.body : window).scrollTo({top})
+  ;(isSafari ? document.body : window).scrollTo({top, behavior: 'instant'})
 }
 
 function applyFocusedId(id: string | null) {
@@ -168,9 +168,9 @@ type AnimatedRect = {
 type State = {
   debugTimestamp: number
   animatedUntilTime: number | null
-  anchor: number
+  anchor: {index: number; screenY: number} // keep this box at the same place on screen while the layout shifts. screenY is its y minus scrollY when it was picked
   windowSizeX: number
-  scrollY: number
+  scrollY: number // what the browser reported after the last render's scrollTo
   pointer: {x: number; y: number}
   events: {keydown: KeyboardEvent | null; click: MouseEvent | null; mousemove: MouseEvent | null}
   data: BoxData[]
@@ -257,7 +257,7 @@ function createInitialState(windowSizeX: number, windowSizeY: number, scrollY: n
   return {
     debugTimestamp: 0,
     animatedUntilTime: null,
-    anchor: 0, // keep a box stable during resize layout shifts
+    anchor: {index: 0, screenY: gridLayout.items[0]!.layoutBox.y - scrollY},
     windowSizeX,
     scrollY,
     pointer: {x: -Infinity, y: -Infinity}, // btw, on page load, there's no way to render a first cursor state =(
@@ -483,7 +483,7 @@ function render(now: number) {
   const reflowed2D = newFocused == null && resized && previousGridLayout.cols !== gridLayout.cols
   const resized1D = newFocused != null && resized
   let cursor: string
-  let newAnchor = st.anchor
+  let newAnchorIndex: number | null = null // set when a new anchor is picked; committed after the scroll read-back
   let adjustedScrollTop = currentScrollY
   let activeLayoutItems: ItemLayoutGeometry[] = gridLayout.items
   let activeLineLayout: LineLayoutModel | null = null
@@ -522,15 +522,16 @@ function render(now: number) {
       d.layoutBox.yResidual.dest += (pointerYLocal - (hoveredLayoutBox.y + hoveredLayoutBox.sizeY / 2)) / hoverMagnetFactor
       d.scale.dest = 1.02
     }
-    // if layout shifted, keep the boxes near the same place to prevent annoying layout jumps while viewing
-    const anchorY = gridLayout.items[st.anchor]!.layoutBox.y - gapTopPeek
-    if (newWindowSizeX !== st.windowSizeX) adjustedScrollTop = Math.max(0, anchorY) // resized; maintain position!
-    if (adjustedScrollTop !== st.scrollY && Math.abs(anchorY -/*toLocal*/adjustedScrollTop) > windowSizeY / 10) { // find new anchor if the current one moved too much
-      for (newAnchor = 0; newAnchor + gridLayout.cols < data.length; newAnchor += gridLayout.cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
-        const layoutBox = gridLayout.items[newAnchor]!.layoutBox
-        // find 1st box whose bottom exceeds 20% of window height
-        if (layoutBox.y + layoutBox.sizeY -/*toLocal*/adjustedScrollTop > windowSizeY / 5) break
+    // if layout shifted, keep the anchor box at the same place on screen to prevent annoying layout jumps while viewing. See docs/Scrolling.md, Scroll Anchoring
+    if (currentScrollY !== st.scrollY || adjustedScrollTop !== currentScrollY) { // user scrolled, or we're scrolling to the dismissed box: pick a new anchor
+      let index = 0
+      for (; index + gridLayout.cols < data.length; index += gridLayout.cols) { // new anchor is picked from leftmost column. Btw old anchor might not be from leftmost col due to resize layout shifts
+        if (gridLayout.items[index]!.layoutBox.y >= adjustedScrollTop) break // 1st box below the window's top
       }
+      newAnchorIndex = index
+    } else if (gridLayout.items[st.anchor.index]!.layoutBox.y !== previousGridLayout.items[st.anchor.index]!.layoutBox.y) { // the layout moved the anchor, e.g. on resize
+      // absolute from where the anchor was picked, so scrollTop rounding doesn't add up over a continuous resize
+      adjustedScrollTop = gridLayout.items[st.anchor.index]!.layoutBox.y - st.anchor.screenY
     }
   } else { // 1D mode
     activeLineLayout = getLineLayout(layoutSources, newFocused, newWindowSizeX, windowSizeY, adjustedScrollTop)
@@ -589,9 +590,7 @@ function render(now: number) {
   // === commit state
   st.events.keydown = st.events.click = st.events.mousemove = null
   st.animatedUntilTime = stillAnimating ? newAnimatedUntilTime : null // oxlint-disable-line no-unnecessary-condition
-  st.anchor = newAnchor
   st.windowSizeX = newWindowSizeX
-  st.scrollY = adjustedScrollTop
 
   // === DOM writes
   const browserUIMaxSizeTop = 100, browserUIMaxSizeBottom = 150 // browsers UI like Safari are transluscent. Random conservative numbers
@@ -628,7 +627,7 @@ function render(now: number) {
       node.style.filter = newFocused != null && (i === newFocused - 1 || i === newFocused || i === newFocused + 1)
         ? `brightness(${d.fxFactor.pos * 100}%) blur(${Math.max(0, 6 - d.fxFactor.pos * 6)}px)` // blur these 3 only
         : `brightness(${d.fxFactor.pos * 100}%)` // blur of unrelated pics is too fast during transition from/to 1D mode to be seen anyway
-      if (debug) node.style.outline = i === newAnchor ? '2px solid rgba(255, 255, 0, 0.8)' : 'none' // oxlint-disable-line no-unnecessary-condition
+      if (debug) node.style.outline = i === (newAnchorIndex ?? st.anchor.index) ? '2px solid rgba(255, 255, 0, 0.8)' : 'none' // oxlint-disable-line no-unnecessary-condition
       const currentPromptX = rectXPos(d.promptBox)
       const currentPromptY = rectYPos(d.promptBox)
       const currentPromptSizeX = rectSizeXPos(d.promptBox)
@@ -692,6 +691,12 @@ function render(now: number) {
   }
   if (newFocused !== focused) {
     applyFocusedId(newFocused == null ? null : data[newFocused]!.id)
+  }
+  // store where the browser actually scrolled (rounded, or clamped to the content), not what we asked for, so the next render doesn't mistake the difference for a user scroll. This read can force layout, so keep it last
+  st.scrollY = adjustedScrollTop !== currentScrollY ? readScrollY() : currentScrollY
+  if (newAnchorIndex != null) { // measured against the read-back, so a clamped scroll doesn't skew where the anchor sits
+    st.anchor.index = newAnchorIndex
+    st.anchor.screenY = gridLayout.items[newAnchorIndex]!.layoutBox.y - st.scrollY
   }
 
   return stillAnimating
