@@ -107,6 +107,26 @@ On iPad Safari, elements positioned outside the viewport (e.g. a horizontal caro
 
 Detect Safari: `navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')` (Chrome's UA also contains "Safari").
 
+## Scrollbar Room
+
+Overlay scrollbars never take room: macOS set to "When scrolling" (or "Automatically" with a trackpad), iOS, Android, and Firefox on Windows 11 and Linux by default. Hovering only thickens how they're drawn. Classic scrollbars take about 15px: macOS set to "Always" (or "Automatically" with a mouse without gestures), Chrome on Windows and Linux, Firefox on Windows 10. They move content whenever that room changes:
+
+- The box starts or stops overflowing: content grows or shrinks, the window resizes, or `overflow: hidden` goes on or off (e.g. opening a modal). Centered content moves by half a scrollbar.
+- The scrollbar itself changes: the OS switches between overlay and classic live (settings, or plugging in a mouse under "Automatically"), or CSS changes `scrollbar-width` or `::-webkit-scrollbar`.
+
+No window `resize` event fires when a classic scrollbar appears or disappears; `visualViewport`'s `resize` and ResizeObserver do.
+
+`html { scrollbar-gutter: stable }` reserves the room from the start without painting anything, and overlay scrollbars ignore it. `overflow-y: scroll` reserves it too, but paints an empty track on short pages. Nothing but hiding scrollbars (`scrollbar-width: none`) stops a live overlay/classic switch from moving content.
+
+With a stable gutter:
+- Read the width from `document.body.clientWidth`. Chrome's `documentElement.clientWidth` reports the full width until a scrollbar is drawn (ui.md, Layout).
+- Content centers in the room left of the gutter, so with classic scrollbars it sits half a scrollbar left of the window's center, even on short pages. `scrollbar-gutter: stable both-edges` reserves both sides and centers on the window, for one more gutter of width.
+- The gutter width is `window.innerWidth - document.body.clientWidth` (with no body margin).
+- `100vw` includes the scrollbar in Safari and Firefox; size containers with `100%`.
+- `@media` widths include the scrollbar and `clientWidth` doesn't, so a JS breakpoint and a CSS one with the same number disagree by a scrollbar. Decide each breakpoint in one place.
+
+For an inner scroller, read its own `clientWidth` and give it `scrollbar-gutter: stable`.
+
 ## Overflow-X
 
 When positioning elements horizontally outside the viewport (e.g. a 1D carousel), set `overflow-x: hidden` on `<body>`. Without it, the browser adds a horizontal scrollbar. This is easy to forget because `overflow-y: auto` doesn't imply `overflow-x: hidden`.
