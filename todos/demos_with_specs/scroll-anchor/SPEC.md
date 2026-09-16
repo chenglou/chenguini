@@ -72,7 +72,7 @@ Each new item should:
 
 - read `scrollTop` once at the start of render; the info line shows the computed scroll value instead of reading `scrollTop` again
 - detect user scroll by comparing current `scrollTop` to the stored read-back value from the previous frame, or by an explicit `scrollTo` event
-- if the user scrolled, pick a new anchor as the first item below `scrollTop`
+- if the user scrolled, pick a new anchor as the first item below `scrollTop`, or the last item if none is
 - the anchor keeps `anchor.screenY`, its y minus `scrollTop` when it was picked; keep `screenY` until the user scrolls
 - if the user did not scroll and the anchor item is encountered, scroll to `currentY - anchor.screenY`
 - write all DOM, including the total height, before `scrollTo`, and call it with `behavior: 'instant'`

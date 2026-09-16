@@ -110,7 +110,8 @@ export function computeAnchorLayout(
 
       itemPositions.push({id: item.id, day: item.day, y})
 
-      if (userScrolled === true && newAnchor == null && y > adjustedScrollTop) {
+      // the last item if none is below scrollTop, so a user scroll never keeps the old anchor's screenY
+      if (userScrolled === true && newAnchor == null && (y > adjustedScrollTop || idx === items.length - 1)) {
         newAnchor = {id: item.id, y}
       }
 

@@ -259,9 +259,10 @@ function ScrollDemo({ buggy }) {
       if (!firstInSession) y += ITEM_GAP;
       firstInSession = false;
 
-      // Anchor picking: user scrolled, pick first item below scrollTop.
+      // Anchor picking: user scrolled, pick first item below scrollTop, or the
+      // last item if none is, so the old anchor's screenY never outlives a user scroll.
       // Its screenY is measured in useLayoutEffect, after the read-back.
-      if (userScrolled && newScrollAnchor == null && y > scrollTopRef.current) {
+      if (userScrolled && newScrollAnchor == null && (y > scrollTopRef.current || idx === items.length - 1)) {
         newScrollAnchor = { id: item.id, y };
       }
 

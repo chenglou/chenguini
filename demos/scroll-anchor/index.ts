@@ -159,7 +159,7 @@ function render() {
       node.style.top = itemPosition.y + 'px'
       node.style.height = itemHeight + 'px'
       node.style.background = item.color
-      node.textContent = item.label + ' — ' + item.day
+      node.textContent = item.label + ' \u2014 ' + item.day
       if (node.parentNode == null) domCache.spacer.appendChild(node)
     } else {
       const node = domCache.nodes.get(item.id)
