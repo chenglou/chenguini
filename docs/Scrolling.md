@@ -24,7 +24,7 @@ Fixed elements don't always rubberband with the page. Chrome keeps fixed element
 
 \* In fact, on certain platforms, such as macOS and iOS, JavaScript's execution is capped to 60fps (lower in certain cases, e.g. after some touches, low battery mode, etc.) while native scrolling happens at potentially 120fps, on GPU. So by the time JS reads that `scrollTop`, it might be way late. This means many things: you can't reliably prevent position-based scrolling in JS, can't reliably sync up other items' position with scroll position in JS, etc.
 
-\*\* This means preferrably, only _read_ `scrollTop` and don't use it to set a new scroll position. This is almost unavoidable for scroll anchoring, as you'd need the current `scrollTop`, the delta to adjust, then do `scrollTo({top: scrollTop + delta})`. Notice that if `delta` is some floating point, you'll end up with some anchor jitter if the user resizes browser smoothly/continuously, as the final scroll value is rounded or truncated and would keep jitter. E.g. continuously resizing might nudge the anchor lower and lower.
+\*\* This means preferrably, only _read_ `scrollTop` and don't use it to set a new scroll position. This is almost unavoidable for scroll anchoring, as you'd need the current `scrollTop`, the delta to adjust, then do `scrollTo({top: scrollTop + delta})`. Notice that if `delta` is some floating point, you'll end up with some anchor jitter if the user resizes browser smoothly/continuously, as the final scroll value is rounded or truncated and would keep jitter. E.g. continuously resizing might nudge the anchor lower and lower. Scroll Anchoring below keeps that from adding up by measuring from where the anchor was picked instead.
 
 ## Other Considerations
 
@@ -45,17 +45,17 @@ Despite all this, some effects are only possible through programmatic manipulati
 
 When content above the viewport changes (new items prepended, elements resizing), the visible items shift. Scroll anchoring compensates by adjusting `scrollTop` by the delta, keeping visible content stable.
 
-The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scroll-anchor`](../demos/scroll-anchor/index.ts)):
+The clean pattern (used in [chenglou.me](https://chenglou.me), demo: [`demos/scroll-anchor`](../demos/scroll-anchor/index.ts), resize demo: [`demos/photo-gallery`](../demos/photo-gallery/index.ts)):
 
 1. Read `scrollTop` once at the start of each render/frame.
-2. Compare to the stored value from last frame. If different → user scrolled → pick a new anchor (first item below `scrollTop`). If same → data changed → keep the old anchor and compute the delta.
-3. Compute layout. When the anchor item is encountered, `adjustedScrollTop = scrollTop + (currentY - anchor.prevY)`. Return the next anchor state too, e.g. `{id, prevY: currentY}`.
+2. Compare to the stored value from last frame. If different → user scrolled → pick a new anchor (first item below `scrollTop`). If same → data changed → keep the old anchor. The anchor keeps its screen offset, `anchor.screenY`: its y minus `scrollTop` when it was picked, against the read-back value from step 5.
+3. Compute layout. When the anchor item is encountered, `adjustedScrollTop = currentY - anchor.screenY`. Keep `screenY` until the user scrolls. If the user scrolled, return the new anchor's id and y instead, e.g. `{id, y: currentY}`.
 4. After all DOM writes, `scrollTo(adjustedScrollTop)` if it changed. Make sure to use `behavior: 'instant'` to avoid wrong smooth scrolling
-5. After `scrollTo`, read back `container.scrollTop` once and store it for the next frame's comparison. Treat this as a deliberate layout-forcing read: keep it at the end of the effect and don't do more DOM writes after it. If you request `10.6` but the browser exposes `10` or `10.5`, storing `10.6` makes the next render see a false mismatch.
+5. After `scrollTo`, read back `container.scrollTop` once and store it for the next frame's comparison. Treat this as a deliberate layout-forcing read: keep it at the end of the effect and don't do more DOM writes after it. If you request `10.6` but the browser exposes `10` or `10.5`, storing `10.6` makes the next render see a false mismatch. Measure a newly picked anchor's `screenY` against this read-back value, e.g. `{id, screenY: y - storedScrollTop}`, so a rounded or clamped scroll doesn't skew where the anchor sits on screen.
 
 This requires no flags or workarounds because each frame processes all accumulated state changes independently — `scrollTo` from frame N is fully resolved by frame N+1.
 
-Remaining limitation: continuous resize with fractional layout values causes sub-pixel anchor jitter from `scrollTop` truncation accumulating over frames (point 3 footnote). This is a fundamental browser limitation.
+Remaining limitation: continuous resize with fractional layout values still causes sub-pixel anchor jitter from `scrollTop` rounding (point 3 footnote). This is a fundamental browser limitation, but the jitter doesn't add up over frames, because every frame starts from the `screenY` measured when the anchor was picked. The delta formula `adjustedScrollTop = scrollTop + (currentY - anchor.prevY)` starts every frame from the rounded `scrollTop` instead, so the rounding adds up: the anchor drifted 4.25px over a 15-step continuous resize in Safari.
 
 For scroll anchoring, don't infer user scroll from whether a scroll event fired. Programmatic `scrollTo` also fires scroll events, so a "scroll happened" flag can mistake our own anchor adjustment for user input. Use the stored read-back value from step 5 for the next render's comparison.
 
@@ -67,7 +67,7 @@ The same value-comparison pattern from step 2 above works under React, avoiding 
 
 - **`storedScrollTop` ref**: in the scroll handler, only `forceUpdate` if `scrollTop !== storedScrollTop`. Programmatic `scrollTo` produces the same value we stored → handler skips → no extra render. User scroll produces a different value → `forceUpdate`. Even if React batches a data `setState` with a skipped scroll event, the render computes `userScrolled = scrollTop !== storedScrollTop` → `false` → anchor adjustment runs correctly.
 - **`storedScrollTop` read-back**: in `useLayoutEffect`, always store `container.scrollTop` after any `scrollTo` (same as step 5 — the read-back, not the requested value). This naturally handles browser truncation (points 3–4).
-- **`scrollAnchor.prevY = y`**: update `prevY` immediately after computing the adjustment. Without this, if another render fires before `prevY` is refreshed (e.g. rapid data updates), the delta is double-counted.
+- **`scrollAnchor.screenY`**: set a new anchor's `screenY` in `useLayoutEffect`, after the read-back. An adjustment scrolls to `y - screenY` and doesn't change the anchor, so there's nothing to refresh after an adjustment, and no delta to double-count when renders fire in quick succession (e.g. rapid data updates).
 
 None of these adaptations exist in a manual render loop architecture because events don't carry state; they just schedule renders.
 

@@ -59,9 +59,11 @@
 
   Limitation (Scrolling.md points 3-4 footnote):
     Continuous resize with fractional layout values causes sub-pixel
-    anchor jitter from scrollTop truncation accumulating over frames.
-    This is a fundamental browser limitation, not an architectural bug.
-    Cannot be demonstrated here (integer heights produce integer math).
+    anchor jitter from scrollTop truncation. It doesn't add up over
+    frames, because every frame scrolls to the anchor's y minus its
+    screenY from when it was picked. Cannot be demonstrated here (integer
+    heights produce integer math); demos/photo-gallery resizes a
+    fractional layout.
 -->
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }

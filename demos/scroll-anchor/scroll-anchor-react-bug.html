@@ -17,24 +17,25 @@
   event), so the code picks a new anchor instead of adjusting. The new items'
   shift goes uncompensated.
 
-  Fix (two parts, both independently necessary):
+  Fix: value comparison instead of onScrolled flag
+    Replace the boolean onScrolled flag with a value comparison:
+    userScrolled = (scrollTop !== storedScrollTop). storedScrollTop is the
+    read-back value from last render's useLayoutEffect (after any scrollTo).
+    If our scrollTo set scrollTop to X and we stored X, the next render sees
+    scrollTop=X === storedScrollTop=X → userScrolled=false → adjustment runs.
+    This eliminates the _isProgrammaticScroll flag, its prevScrollTop guard,
+    and the onScrolled flag entirely. Truncation (Scrolling.md points 3-4)
+    is handled naturally by storing the read-back value. That read can
+    force layout, so keep it at the end of the effect and don't do more
+    DOM writes after it.
 
-    Part 1: value comparison instead of onScrolled flag
-      Replace the boolean onScrolled flag with a value comparison:
-      userScrolled = (scrollTop !== storedScrollTop). storedScrollTop is the
-      read-back value from last render's useLayoutEffect (after any scrollTo).
-      If our scrollTo set scrollTop to X and we stored X, the next render sees
-      scrollTop=X === storedScrollTop=X → userScrolled=false → adjustment runs.
-      This eliminates the _isProgrammaticScroll flag, its prevScrollTop guard,
-      and the onScrolled flag entirely. Truncation (Scrolling.md points 3-4)
-      is handled naturally by storing the read-back value. That read can
-      force layout, so keep it at the end of the effect and don't do more
-      DOM writes after it.
-
-    Part 2: scrollAnchor.prevY = y
-      Updates prevY immediately after computing the adjustment. Without this,
-      if another render fires before prevY is refreshed (e.g. rapid async
-      updates), the delta is double-counted.
+  Both panels keep the anchor's screen offset: scrollAnchor.screenY is its
+  y minus scrollTop when it was picked, measured against the read-back in
+  useLayoutEffect. An adjustment scrolls to y - screenY and doesn't change
+  the anchor, so there's nothing to refresh after an adjustment, and no
+  delta to double-count when renders fire in quick succession (e.g. rapid
+  async updates). The onScrolled flag is the only difference between the
+  panels.
 
   How to use:
     1. Click "Scroll to 700" on both panels
@@ -180,8 +181,8 @@ function ScrollDemo({ buggy }) {
 
   // Scroll anchor state
   const onScrolledRef = useRef(false);        // BUGGY: boolean flag
-  const storedScrollTopRef = useRef(0);       // FIXED: read-back value from last scrollTo
-  const scrollAnchorRef = useRef(null);       // { id, prevY }
+  const storedScrollTopRef = useRef(0);       // read-back value from last scrollTo. FIXED detects user scroll with it
+  const scrollAnchorRef = useRef(null);       // { id, screenY }
   const scrollTopRef = useRef(0);
   const pendingAsyncRef = useRef([]);
 
@@ -258,22 +259,20 @@ function ScrollDemo({ buggy }) {
       if (!firstInSession) y += ITEM_GAP;
       firstInSession = false;
 
-      // Anchor picking: user scrolled, pick first item below scrollTop
+      // Anchor picking: user scrolled, pick first item below scrollTop.
+      // Its screenY is measured in useLayoutEffect, after the read-back.
       if (userScrolled && newScrollAnchor == null && y > scrollTopRef.current) {
-        newScrollAnchor = { id: item.id, prevY: y };
+        newScrollAnchor = { id: item.id, y };
       }
 
-      // Anchor adjustment: no user scroll, compensate for content shift
+      // Anchor adjustment: no user scroll, compensate for content shift by
+      // putting the anchor back at the same place on screen. Nothing to
+      // refresh afterwards: the anchor and its screenY stay the same.
       if (!userScrolled && scrollAnchorRef.current != null
         && item.id === scrollAnchorRef.current.id && scrollTopRef.current > 40) {
-        const adj = scrollTopRef.current + y - scrollAnchorRef.current.prevY;
+        const adj = y - scrollAnchorRef.current.screenY;
         if (adj !== scrollTopRef.current) {
           anchorScrollAdjustment = adj;
-        }
-        // Part 2: update prevY immediately to prevent double-counting
-        // across rapid renders (needed in both flag and value approaches).
-        if (!buggy) {
-          scrollAnchorRef.current.prevY = y;
         }
       }
 
@@ -292,23 +291,33 @@ function ScrollDemo({ buggy }) {
 
   const totalHeight = y;
 
-  // Apply scroll adjustment and store read-back value
+  // Apply scroll adjustment, store read-back value, commit a new anchor
   useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (el == null) return;
     if (anchorScrollAdjustment != null) {
-      containerRef.current?.scrollTo({ top: anchorScrollAdjustment, behavior: 'instant' });
+      el.scrollTo({ top: anchorScrollAdjustment, behavior: 'instant' });
     }
-    // FIXED: always store the read-back scrollTop. This is what the next
-    // render compares against to detect user scroll. Storing the read-back
+    // Always store the read-back scrollTop. FIXED compares the next render's
+    // scrollTop against it to detect user scroll. Storing the read-back
     // (not the requested value) handles browser truncation naturally.
     // This can force layout, so keep it at the end of the effect and don't
     // do more DOM writes after it.
-    if (!buggy && containerRef.current != null) {
-      storedScrollTopRef.current = containerRef.current.scrollTop;
+    storedScrollTopRef.current = el.scrollTop;
+    // Measure a new anchor's screenY against the read-back, so a rounded or
+    // clamped scroll doesn't skew where the anchor sits on screen.
+    if (newScrollAnchor != null) {
+      scrollAnchorRef.current = { id: newScrollAnchor.id, screenY: newScrollAnchor.y - storedScrollTopRef.current };
     }
   });
 
-  // Update anchor, reset buggy flag
-  if (newScrollAnchor != null) scrollAnchorRef.current = newScrollAnchor;
+  // A new anchor's screenY is stored in the effect above. Until then, the
+  // info line shows it against this render's scrollTop.
+  const infoAnchor = newScrollAnchor != null
+    ? { id: newScrollAnchor.id, screenY: newScrollAnchor.y - scrollTopRef.current }
+    : scrollAnchorRef.current;
+
+  // Reset buggy flag
   if (buggy) onScrolledRef.current = false;
 
   // ── Actions ──
@@ -367,7 +376,7 @@ function ScrollDemo({ buggy }) {
       </div>
       <div className="info">
         scrollTop: {Math.round(scrollTopRef.current)} |
-        anchor: {scrollAnchorRef.current?.id ?? 'none'} (prevY: {scrollAnchorRef.current ? Math.round(scrollAnchorRef.current.prevY) : '-'}) |
+        anchor: {infoAnchor?.id ?? 'none'} (screenY: {infoAnchor ? Math.round(infoAnchor.screenY) : '-'}) |
         items: {items.length}
       </div>
     </div>

@@ -13,9 +13,9 @@ export type AnchorLayoutItem = {
   day: string
 }
 
-export type AnchorResult = {
+export type Anchor = {
   id: string
-  prevY: number
+  screenY: number // the item's y minus scrollTop when it was picked, measured against the read-back scrollTop
 } | null
 
 export type AnchorItemPosition = {
@@ -32,8 +32,7 @@ export type AnchorHeaderPosition = {
 export type AnchorLayoutResult = {
   totalHeight: number
   adjustedScrollTop: number
-  newAnchor: AnchorResult
-  anchorPrevY: number
+  newAnchor: {id: string; y: number} | null // picked when the user scrolled. The caller sets its screenY after reading back scrollTop
   itemPositions: AnchorItemPosition[]
   headerPositions: AnchorHeaderPosition[]
 }
@@ -71,14 +70,13 @@ function anchorNextItemY(
 }
 
 /** @fit
- * return == scrollTop + (y - prevY)
+ * return == y - screenY
  */
 function adjustScrollTopForAnchor(
-  scrollTop: number, // @fit 0..<Infinity
   y: number, // @fit 0..<Infinity
-  prevY: number, // @fit 0..<Infinity
+  screenY: number, // @fit -Infinity<..<Infinity
 ) {
-  return scrollTop + (y - prevY)
+  return y - screenY
 }
 
 export function computeAnchorLayout(
@@ -86,13 +84,12 @@ export function computeAnchorLayout(
   currentScrollTop: number,
   requestedScrollTop: number | null,
   anchorId: string | null,
-  anchorPrevY: number,
+  anchorScreenY: number,
   userScrolled: boolean,
 ): AnchorLayoutResult {
   let y = 0
   let adjustedScrollTop = requestedScrollTop ?? currentScrollTop
-  let newAnchor: AnchorResult = null
-  let nextAnchorPrevY = anchorPrevY
+  let newAnchor: {id: string; y: number} | null = null
   const itemPositions: AnchorItemPosition[] = []
   const headerPositions: AnchorHeaderPosition[] = []
   let isFirstSession = true
@@ -114,12 +111,12 @@ export function computeAnchorLayout(
       itemPositions.push({id: item.id, day: item.day, y})
 
       if (userScrolled === true && newAnchor == null && y > adjustedScrollTop) {
-        newAnchor = {id: item.id, prevY: y}
+        newAnchor = {id: item.id, y}
       }
 
+      // absolute from where the anchor was picked, so scrollTop rounding doesn't add up over frames
       if (userScrolled === false && anchorId != null && item.id === anchorId && adjustedScrollTop > 40) {
-        adjustedScrollTop = adjustScrollTopForAnchor(adjustedScrollTop, y, anchorPrevY)
-        nextAnchorPrevY = y
+        adjustedScrollTop = adjustScrollTopForAnchor(y, anchorScreenY)
       }
 
       y = anchorNextItemY(y)
@@ -132,7 +129,6 @@ export function computeAnchorLayout(
     totalHeight: y,
     adjustedScrollTop,
     newAnchor,
-    anchorPrevY: nextAnchorPrevY,
     itemPositions,
     headerPositions,
   }

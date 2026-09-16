@@ -2,7 +2,7 @@ import {
   computeAnchorLayout,
   headerHeight,
   itemHeight,
-  type AnchorResult,
+  type Anchor,
 } from './anchor-layout'
 
 const targetScroll = 700
@@ -33,7 +33,7 @@ type Item = {
 type State = {
   counter: number
   items: Item[]
-  anchor: AnchorResult
+  anchor: Anchor
   storedScrollY: number // read-back value from last frame's scrollTo
   events: {
     scrollTo: number | null
@@ -84,7 +84,8 @@ document.getElementById('btn-rapid')!.addEventListener('click', () => {
   // Two separate data changes in quick succession (simulates rapid async updates).
   // Whether they land in one render or two depends on timing — works
   // either way. If one render: sees all 3, adjusts once. If two
-  // renders: each adjusts for its new items, prevY updated between.
+  // renders: each scrolls to the anchor's new y minus the same screenY,
+  // so nothing gets counted twice.
   // The counts are summed, not assigned: when the timeout runs before the
   // frame (every click in Safari, synthetic clicks in Chrome and Firefox),
   // assigning would drop the 1.
@@ -115,16 +116,12 @@ function render() {
     currentScrollY,
     st.events.scrollTo,
     st.anchor == null ? null : st.anchor.id,
-    st.anchor == null ? 0 : st.anchor.prevY,
+    st.anchor == null ? 0 : st.anchor.screenY,
     userScrolled,
   )
 
   // === commit state
-  if (userScrolled && layout.newAnchor != null) {
-    st.anchor = layout.newAnchor
-  } else if (userScrolled === false && st.anchor != null) {
-    st.anchor.prevY = layout.anchorPrevY
-  }
+  // A new anchor is committed after the scroll read-back at the end.
   st.events.scrollTo = st.events.addAbove = null
 
   // === DOM writes
@@ -162,7 +159,7 @@ function render() {
       node.style.top = itemPosition.y + 'px'
       node.style.height = itemHeight + 'px'
       node.style.background = item.color
-      node.textContent = item.label + ' \u2014 ' + item.day
+      node.textContent = item.label + ' — ' + item.day
       if (node.parentNode == null) domCache.spacer.appendChild(node)
     } else {
       const node = domCache.nodes.get(item.id)
@@ -171,10 +168,15 @@ function render() {
   }
 
   domCache.spacer.style.height = layout.totalHeight + 'px'
+  // A new anchor's screenY is stored after the read-back below. Until then,
+  // show it against the requested scroll value, like the scrollTop shown here.
+  const infoAnchor = layout.newAnchor != null
+    ? {id: layout.newAnchor.id, screenY: layout.newAnchor.y - layout.adjustedScrollTop}
+    : st.anchor
   domCache.info.textContent =
     'scrollTop: ' + Math.round(layout.adjustedScrollTop) +
-    ' | anchor: ' + (st.anchor != null ? st.anchor.id : 'none') +
-    ' (prevY: ' + (st.anchor != null ? Math.round(st.anchor.prevY) : '-') + ')' +
+    ' | anchor: ' + (infoAnchor != null ? infoAnchor.id : 'none') +
+    ' (screenY: ' + (infoAnchor != null ? Math.round(infoAnchor.screenY) : '-') + ')' +
     ' | items: ' + st.items.length
 
   // === side effects
@@ -189,6 +191,11 @@ function render() {
     st.storedScrollY = domCache.container.scrollTop
   } else {
     st.storedScrollY = currentScrollY
+  }
+  // Measured against the read-back, so a rounded or clamped scroll doesn't
+  // skew where the anchor sits on screen.
+  if (layout.newAnchor != null) {
+    st.anchor = {id: layout.newAnchor.id, screenY: layout.newAnchor.y - st.storedScrollY}
   }
 }
 

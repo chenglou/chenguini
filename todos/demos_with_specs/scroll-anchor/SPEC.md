@@ -21,7 +21,7 @@ Build a scroll anchoring demo with:
 - grouped day headers and colored absolute-positioned items
 - buttons for `Scroll to 700`, `Add 3 above`, and `Add 1, then 2 rapid`
 - one reference line across the middle of the viewport
-- an info line that shows `scrollTop`, `anchor`, `prevY`, and item count
+- an info line that shows `scrollTop`, `anchor`, `screenY`, and item count
 
 ## Data
 
@@ -73,10 +73,11 @@ Each new item should:
 - read `scrollTop` once at the start of render; the info line shows the computed scroll value instead of reading `scrollTop` again
 - detect user scroll by comparing current `scrollTop` to the stored read-back value from the previous frame, or by an explicit `scrollTo` event
 - if the user scrolled, pick a new anchor as the first item below `scrollTop`
-- if the user did not scroll and the anchor item is encountered, adjust scroll by `currentY - anchor.prevY`
-- update `anchor.prevY` immediately when that adjustment is computed
+- the anchor keeps `anchor.screenY`, its y minus `scrollTop` when it was picked; keep `screenY` until the user scrolls
+- if the user did not scroll and the anchor item is encountered, scroll to `currentY - anchor.screenY`
 - write all DOM, including the total height, before `scrollTo`, and call it with `behavior: 'instant'`
 - after `scrollTo`, store the read-back `container.scrollTop`, not the requested value; keep that read last, with no DOM writes after it
+- measure a newly picked anchor's `screenY` against that read-back value
 - rapid prepend in two quick steps should anchor correctly whether the changes land in one render or two
 - only mount visible headers and items
 
@@ -92,7 +93,7 @@ info
 ## Static Facts To State
 
 - layout math for headers, item positions, and total height
-- anchor picking and anchor delta adjustment logic
+- anchor picking and the `currentY - anchor.screenY` adjustment
 - product boundary: `scroll-to-700 then add-3-above` keeps the same item at the reference line
 - product boundary: `add-1 then 2 rapid` keeps the same item at the reference line
 - product boundary: user-scroll then prepend picks a new anchor from the new scroll position
