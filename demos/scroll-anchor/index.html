@@ -48,8 +48,9 @@
        either way and the anchor adjusts correctly. No double-counting, no flags.
     3. User scroll -- scroll manually, then add items. New anchor is
        picked from the new scroll position.
-    4. Resize -- narrow/widen the browser. Anchor keeps visible items
-       stable (items reflow but scroll compensates).
+    4. Resize -- narrow/widen the browser. Item heights don't depend on the
+       width here, so nothing above the anchor moves and there's nothing to
+       adjust.
 
   Limitation (Scrolling.md point 5):
     If the user scrolls between our scrollTo and the next frame's

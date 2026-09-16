@@ -70,12 +70,13 @@ Each new item should:
 
 ## Fragile Truths
 
-- read `scrollTop` once at the start of render
+- read `scrollTop` once at the start of render; the info line shows the computed scroll value instead of reading `scrollTop` again
 - detect user scroll by comparing current `scrollTop` to the stored read-back value from the previous frame, or by an explicit `scrollTo` event
 - if the user scrolled, pick a new anchor as the first item below `scrollTop`
 - if the user did not scroll and the anchor item is encountered, adjust scroll by `currentY - anchor.prevY`
 - update `anchor.prevY` immediately when that adjustment is computed
-- after `scrollTo`, store the read-back `container.scrollTop`, not the requested value
+- write all DOM, including the total height, before `scrollTo`, and call it with `behavior: 'instant'`
+- after `scrollTo`, store the read-back `container.scrollTop`, not the requested value; keep that read last, with no DOM writes after it
 - rapid prepend in two quick steps should anchor correctly whether the changes land in one render or two
 - only mount visible headers and items
 

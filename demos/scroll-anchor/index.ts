@@ -172,7 +172,7 @@ function render() {
 
   domCache.spacer.style.height = layout.totalHeight + 'px'
   domCache.info.textContent =
-    'scrollTop: ' + Math.round(domCache.container.scrollTop) +
+    'scrollTop: ' + Math.round(layout.adjustedScrollTop) +
     ' | anchor: ' + (st.anchor != null ? st.anchor.id : 'none') +
     ' (prevY: ' + (st.anchor != null ? Math.round(st.anchor.prevY) : '-') + ')' +
     ' | items: ' + st.items.length
