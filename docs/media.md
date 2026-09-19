@@ -49,7 +49,7 @@ Don't render a missing poster as `background-image: url(null)`: the browser may 
 
 Switching tabs or windows may not fire the pointer events that clear hover, leaving hover state true. If playback should stop outside the active document, listen to `visibilitychange` and window focus/blur events.
 
-Scrolling can move a card under a stationary pointer without firing `mouseenter`. If playback must follow the card under the pointer, update hover while scrolling or hit-test after layout with `document.elementFromPoint()`.
+Scrolling can move a card under a stationary pointer without firing `mouseenter`. If playback must follow the card under the pointer, update hover while scrolling or hit-test after layout.
 
 ## Scrubbing and playback speed
 
