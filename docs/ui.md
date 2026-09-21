@@ -120,6 +120,14 @@ A field like `st.events.click` only keeps the latest click of the frame; an earl
 
 A React app might not be able to follow this render architecture, but when the need arises (heavy interactivity), this can still be adopted within components.
 
+### State The Browser Keeps
+
+Some state isn't yours: keyboard focus, scroll position, text selection, a video's playback time. The browser keeps them. Treat them as inputs: read them at the top of `render` with the other DOM reads, e.g. `const searchInputFocused = document.activeElement === searchInput`, and write them in the side effects step, e.g. `searchInput.blur()`. Use the relevant events to `scheduleRender()`, but don't assume an event comes for every change. With native event listeners, use capture mode for `focus` and `blur`, since they don't bubble. Schedule further renders while the UI needs to follow an input that keeps changing, e.g. a video's playback time.
+
+**Don't keep a second copy of current browser state** through events, e.g. a `focusedItemId` set on `focus` and cleared on `blur` (see [engineering.md, Data Modeling](engineering.md#data-modeling)). That copy can go stale: removing a focused node can change focus without a `blur` event, and scrolling can move a card under a stationary pointer without `mouseenter` (see [media.md](media.md)). Keep historical input when your behavior needs it, though. E.g. record whether `:focus-visible` matched when focus arrived if that is when your UI decides to reveal controls for keyboard navigation. The selector reports the browser's decision to indicate focus, not whether the keyboard caused it; its answer can change without focus moving.
+
+Careful when your own DOM writes change what the browser keeps. E.g. `render` reads that focus is on an upload's cancel button, then removes that button because the upload finished. There may be no event to schedule another render, so whatever you derived from "the cancel button has focus" stays on screen. Don't read `document.activeElement` again after the writes to repair that result. The upload finishing is the upstream fact: if focus was on its cancel button, derive both "no cancel button" and "the upload's row no longer has focus" from it, in the same `render` (see [engineering.md, Model The Dependency Order Directly](engineering.md#model-the-dependency-order-directly)).
+
 ### State Management
 
 It's actually fine for most apps to have a single global state object, especially when AI's definitely of readability differs from human's from a LLM-as-a-compiler perspective (a compiler's binary is a single file and we don't worry about it not having encapstulating or that it contains duplication, from e.g. generic specialization).
