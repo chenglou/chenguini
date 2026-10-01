@@ -24,7 +24,7 @@ Bad producer guarantee: forcing every downstream renderer to accept `StackedRows
 
 DO NOT prematurily optimize data for performance at the cost of simplicity:
 - Avoid caching
-- Highly value single source of truth. Don't denormalize & add auxiliary fields on data that we could have just computed on the fly. The computations are quasi-free compared to memory
+- Highly value single source of truth. Don't denormalize & add auxiliary fields on data that we could have just computed on the fly. Computations over data you already hold are quasi-free compared to memory
 - Keep fewer data structures, flatter data, and collapse data with the same lifetimes together. E.g. store those same-lifetime values into object fields so that they're created & deleted together when we manipulate the obj. This is also why we avoid denormalized data, because having stuff in 2+ places falsely convey extra degrees of freedom. Think as if you need to manually allocate them; your app/component doesn't that _that_ many different lifetimes!
 - Ideally, derived data should be computed and then gone, in the same scope as the inputs that produced them. Fewer lifetimes mismatches, less staleness
 - Imagine: If multiple callsites need the same derived data in the same scope, we'd obviously compute it once and then use it many times below. But somehow, it feels ickier to store that derived data alongside the same object that holds the inputs that produced it. This is because a local derived value is just a computation result, but a derived field stored on the object becomes state. Its lifetime now follows the object rather than the evaluation that justified it, so you have created a second representation of the same fact, plus an invalidation problem
@@ -75,7 +75,13 @@ Resist future-proofing with generic helpers if you've only encountered one insta
 
 A good helper should create _local_, not global, "shape" pressure. Quick test: if you removed the helper tomorrow, would you only delete one adapter, or would you have to remodel your app state and control flow? If only the adapter breaks, the helper fits. If the whole app now has to carry the helper's shape around, the API is too prescriptive.
 
-Folks try to "solve" performance by hiding them behind ever more obscure control flows, e.g. nested ifs, lazy imports, etc. Avoid these; they often just obscure the perf degradation, and add extra state checking & debugging complexity. We prefer making systems with even latency and throughput, like shaders or real-time systems: branchless, predictable, uniform-cost. Branches (and caches) lower the cost of best-case scenarios by rising the cost of worst-case scenarios; we don't want that! We don't want a 4ms frame to reduce to 1ms while, in the worst case, upping it to 10ms (which is now a frame drop). So try to first and only cater to worst-case frame latency.
+Folks try to "solve" performance by hiding them behind ever more obscure control flows, e.g. nested ifs, lazy imports, etc. Avoid these; they often just obscure the perf degradation, and add extra state checking & debugging complexity. We prefer making systems with even latency and throughput, like shaders or real-time systems: branchless, predictable, uniform-cost. Branches (and caches) lower the cost of best-case scenarios by rising the cost of worst-case scenarios; we don't want that! We don't want a 4ms frame to reduce to 1ms while, in the worst case, upping it to 10ms (which is now a frame drop).
+
+Spot fixes made without the whole picture are waterbed-like. You push one case down and another quietly pops up. Cater to the worst case and every case stays acceptable. Folks picture costs as a long tail (p95, p99...), but we want a rectangle, aka uniform. Rectangles "compose" well. Don't make the easy things easier at the expense of making the hard things harder!
+
+So try to cater to worst-case frame latency first, though not only. A slight worst-case regression can be fine for a real gain, and a best-case gain that barely adds complexity is usually worth taking. And if the worst case can't improve and still misses a UX threshold (say it still drops frames), improve the best case too.
+
+Don't shape code to one JIT's heuristics. They change with every browser, version and machine. Write plain, predictable code, and if only a JIT makes it a bit slower, accept that and note it. Dead or redundant code that's only there because some JIT likes it gets deleted, even if that's a big regression. Nobody writing clean code would've written it in the first place, so that speedup's an accident. A few live lines arranged for a JIT can stay if they read like normal code (leave a comment so someone can double check later). But before blaming the JIT, count the work both versions do. A check that changes no result can still be skipping real work.
 
 Avoid excessive asyncs. If needed, at least spot the asyncs that need to go together, and wrap them in a group with Promise.all. Prefer top-down control flow. E.g. don't do one `configLoaded.then(...)`, one `dataLoaded.then(...)`, then some shared `maybeStart()` / `if (fooReady && barReady)` handshake if what you really mean is "wait for both, then start".
 
@@ -99,6 +105,8 @@ Avoid `reduce` in most cases except for simple cases like summing up numbers. Us
 Usually, O(n^2) or O(nm) are fine if n and m are bounded by the domain, e.g. images per job (~4) × collections (~tens) = ~hundreds. It's not fine when one n or m are user data that grows unboundedly (10k jobs, feed items). Watch out for bounded-looking inner loops that get nested inside an unbounded outer loop and repeated across the system — each instance is cheap but 4 repetitions × 10k jobs × 18 re-renders adds up. If you encounter O(n^3), then you're either doing interesting mathy things or you're likely modeling your product data wrong.
 
 Between monkey-patching data vs control flow, the latter is the lesser evil, but still, don't do it.
+
+Quick test for a patch: describe the fix in one sentence. A proper fix sounds like a rule of the domain, e.g. "February has 29 days in leap years". A patch sounds like a rule about the inputs that failed, e.g. "if the date is 2024-02-29, skip the check". If the proper rule's too costly, say what simpler assumption you're making instead, and when it's wrong.
 
 ### Exceptions
 
@@ -126,6 +134,8 @@ Modern computing's much cheaper than memory. Recompute instead of storing the re
 - truly expensive computations after real measurements
 - computations with stable input identity, real reuse, bounded cache size
 
+Careful with what counts as the input. It includes stuff the call doesn't pass in, e.g. a web font that finishes loading later, which changes every width you cached for it.
+
 React recommends useMemo and useCallback, but actually, try avoiding them.
 
 ## Iteration
@@ -134,17 +144,23 @@ You're trained on data that concerned itself with archaic concerns such as typin
 
 You can, but do not use enough of, small prototypes to validate your ideas. Start with quick, cheap, exploratory ways to gain confidence and/or to cut down on hypothesis space: temporary scaffold, debug helpers, repl. Make estimates and refine them through these quick iterations. Not enough cheap tries during the process!
 
-Speaking of estimates: you also underestimate your ability to just directly write the final code, then come back and judge in hindsight. Sometime the devil's in the detail and you should do the full task instead of guesstimating. Action produces information. So your way of estimating works much better if you do a few prototypes or maybe even the final code instead of doubting either way. We've had success blitzing through and producing the final code MVP (ignoring hacks and bugs), gain holistic understanding, then do a second more diligent redo. You should feel free to do that whenever needed.
+Speaking of estimates: you also underestimate your ability to just directly write the final code, then come back and judge in hindsight. Sometime the devil's in the detail and you should do the full task instead of guesstimating. Action produces information. So your way of estimating works much better if you do a few prototypes or maybe even the final code instead of doubting either way. We've had success blitzing through and producing the final code MVP (ignoring hacks and bugs), gain holistic understanding, then do a second more diligent redo. You should feel free to do that whenever needed. If a decision's blocking you, build all the candidates (unmerged) and we'll compare in hindsight. You might even revise your own estimates after building them. Just don't lose the plot!
 
-When you launch long-running task, unless the task's scope and structure is certain (e.g. known tasks, repeated tasks, etc.), you should be checking back more often than you think. For example, for a training run, don't just launch and check every 30m. Check every other minute if you have to, for blowups and others, then do back offs when you're more certain that the task won't drift.
+Put a long-running job's limits in its script, e.g. a timeout, a memory cap, and child processes that die with it (we've had orphaned children eat 40+ GB each!). When you launch long-running task, unless the task's scope and structure is certain (e.g. known tasks, repeated tasks, etc.), you should be checking back more often than you think. For example, for a training run, don't just launch and check every 30m. Check every other minute if you have to, for blowups and others, then do back offs when you're more certain that the task won't drift.
+
+When a change makes passing tests fail, don't just go "regression bad!". First check whether those tests passed for the right reason. Some pass by accident (e.g. two bugs cancelling out), or the test itself is wrong. Also weight pass rates by real usage. 99.8% sounds great until you notice it's mostly trivial cases. And don't let one-off bug repros pile up. Every now and then, fold them into general or generated cases.
 
 ### Exploration
 
 Exploratory work works better without overdousing subagents with context. Careful when setting overly concrete goals. Careful also not have subagents over-critique details. Ideas start fragile and sometime wrong; they then pivot and pivot until the original problem isn't necessarily solved, but rendered unimportant compared to the new idea's value props. If you're handling exploratory tasks, do NOT give up early and view experiments too much in the scope of present day. Prevent subagents from prematurily reducing entropy through petty adversarial critiques. But if you feel we're drifting off to the deep end and confusing ourselves, then validate the general architecture first (again, through quick prototypes). Some early critiques are fine, and sometime crucial and dovetail with rapid iteration & cutting down bad exploration space; for example, concretely actionable/verifiable critiques, falsifiable hypotheses (as opposed to "this'll usually not work" which is sometime just cynicism and are "not even wrong", per Wolfgang Pauli). For actual correctness, early counterexamples obviously help, but those refutations, during explorations, should serve more as spawn new ideas and scope changes/pivots rather than invalidating the exploration.
 
+When you write down a dead end, also write down how hard it was tried. A quick attempt nobody checked doesn't prove much, and someone might want to reopen it later.
+
 ## Refactors
 
 Traditional refactors partially aim to minimize the syntactical amount of code changed. This is no longer necessary/desirable under AI, where we can treat code as IR/assembly (compile fresh rather than incrementally changed). When refactoring, do the full, deep change, as if the desired feature was made fresh rather than partially tweaked from a previous feature state. This also means no intermediate glue code that bridges from some supposed legacy code (unless said code's actually still running during production, e.g. old logic still being called in an instance).
+
+That said, if the old code was faster or handled more cases, find out why before replacing it. Maybe it did something right you should snatch back.
 
 ## Project Setup
 
