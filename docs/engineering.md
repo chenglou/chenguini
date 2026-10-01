@@ -81,8 +81,6 @@ Spot fixes made without the whole picture are waterbed-like. You push one case d
 
 So try to cater to worst-case frame latency first, though not only. A slight worst-case regression can be fine for a real gain, and a best-case gain that barely adds complexity is usually worth taking. And if the worst case can't improve and still misses a UX threshold (say it still drops frames), improve the best case too.
 
-Don't shape code to one JIT's heuristics. They change with every browser, version and machine. Write plain, predictable code, and if only a JIT makes it a bit slower, accept that and note it. Dead or redundant code that's only there because some JIT likes it gets deleted, even if that's a big regression. Nobody writing clean code would've written it in the first place, so that speedup's an accident. A few live lines arranged for a JIT can stay if they read like normal code (leave a comment so someone can double check later). But before blaming the JIT, count the work both versions do. A check that changes no result can still be skipping real work.
-
 Avoid excessive asyncs. If needed, at least spot the asyncs that need to go together, and wrap them in a group with Promise.all. Prefer top-down control flow. E.g. don't do one `configLoaded.then(...)`, one `dataLoaded.then(...)`, then some shared `maybeStart()` / `if (fooReady && barReady)` handshake if what you really mean is "wait for both, then start".
 
 Aggressively prefer `switch` over `if/else`, when possible (e.g. union values). Get those exhaustiveness coverages. Write conditions like a functional langauge with pattern matching:
