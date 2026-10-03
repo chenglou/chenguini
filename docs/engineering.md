@@ -118,7 +118,7 @@ If the error is actually expected and recoverable, don't throw; model with regul
 
 If two parts of your app depend on the same upstream fact, derive both from that fact. Don't make the program rediscover dependencies it already knows.
 
-Reactive systems, event-driven systems, and DOM-driven code often do black-box theater here: one part "emits", "updates", or "writes to the DOM", and another part tries to recover meaning later. This hides order and precedence, then later someone has to reconstruct them from timing, subscription order, or DOM reads.
+Reactive systems, event-driven systems, and DOM-driven code often do black-box theater here: one part "emits", "updates", or "writes to the DOM", and another part tries to recover info later. This hides order and precedence, then later someone has to reconstruct them from timing, subscription order, or DOM reads. DOM-related layout especially causes this problem: `getBoundingClientRect`, `ResizeObserver` and others should be considered escape hatch hacks exemplary of such unclear control flow/ordering. Unfortunately, a giant ecosystem of APIs rely on DOM layout and thus call these. If you're able to e.g. hand-roll layout logic, doing so might be increasingly worthwhile.
 
 - don't update an animated card's DOM position, then measure the DOM somewhere else to drive a sibling effect. Compute the card position once, then feed both the DOM styles and the sibling effect from it.
 - don't fire several events and let downstream listeners reconstruct which state won. Put that ordering logic in one place that sees the relevant state, then feed the result downstream.

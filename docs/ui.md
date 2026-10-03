@@ -126,6 +126,8 @@ Some state isn't yours: keyboard focus, scroll position, text selection, a video
 
 **Don't keep a second copy of current browser state** through events, e.g. a `focusedItemId` set on `focus` and cleared on `blur` (see [engineering.md, Data Modeling](engineering.md#data-modeling)). That copy can go stale: removing a focused node can change focus without a `blur` event, and scrolling can move a card under a stationary pointer without `mouseenter` (see [media.md](media.md)). Keep historical input when your behavior needs it, though. E.g. record whether `:focus-visible` matched when focus arrived if that is when your UI decides to reveal controls for keyboard navigation. The selector reports the browser's decision to indicate focus, not whether the keyboard caused it; its answer can change without focus moving.
 
+The layout metrics of your own elements, e.g. a card's rendered height, are naturally in the DOM too, but they aren't this kind of state: they're the result of what you last wrote, not an input. They'd need to be queried, e.g. with `getBoundingClientRect`; this causes read/write interleaving and requires you to render first, which is super bothersome control-flow-wise too; if you can avoid such DOM states, do. `@chenglou/pretext` + a few JS helpers can avoid a lot of DOM/CSS-based layout for richer applications. The viewport's size is the exception: it really is an input, so read it at the top of `render` like the others (see [Layout](#layout)).
+
 Careful when your own DOM writes change what the browser keeps. E.g. `render` reads that focus is on an upload's cancel button, then removes that button because the upload finished. There may be no event to schedule another render, so whatever you derived from "the cancel button has focus" stays on screen. Don't read `document.activeElement` again after the writes to repair that result. The upload finishing is the upstream fact: if focus was on its cancel button, derive both "no cancel button" and "the upload's row no longer has focus" from it, in the same `render` (see [engineering.md, Model The Dependency Order Directly](engineering.md#model-the-dependency-order-directly)).
 
 ### State Management
@@ -314,7 +316,7 @@ JS-based layout & positioning isn't as scary as you'd think. It enables JS anima
 
 When JS owns layout, be careful about interleaving JS and CSS layout logic. Don't have JS decide placement or fit of, say, a label pill's text width and height, while CSS quietly adds margins, padding, or other spacing that changes the result. That either gives you wrong layout, or forces you to crawl dimensions back out of the DOM/CSS later, which violates our data flow principles.
 
-Text measurement is one common bottleneck. Use `@chenglou/pretext` to bypass DOM measurements for text.
+Text measurement is one common bottleneck. Use `@chenglou/pretext` to bypass DOM measurements for text. Text size is one of the main reasons to read layout metrics back from the DOM (see [State The Browser Keeps](#state-the-browser-keeps)); pretext removes that reason.
 
 Use the minimum number amount of DOM nodes you can get away with. Absolute positioning is the best way to accomplish this since there's no extra wrappers for CSS layout needs
 
