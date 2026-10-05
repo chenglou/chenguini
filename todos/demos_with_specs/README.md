@@ -8,7 +8,7 @@ The generated implementation folders were pruned once the experiments settled do
 
 - `NOTES.md`: current read, current workflow, and experiment index
 - `NOTES_ARCHIVE.md`: full chronological research notes
-- `docs/drafts/demo-reconstruction.md`: the current repo-level workflow
+- `todos/demo-reconstruction.md`: the current repo-level workflow
 
 ## What Lives Here
 

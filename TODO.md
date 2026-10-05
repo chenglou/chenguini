@@ -1,6 +1,6 @@
 - Actually describe vibeui and do a pass over the demos to make sure they respect it
 - fuse docs maybe?
-- bring over a proper claude.md
+- bring over a proper agents.md
 - clean up multiselect
 - document more about championing abs positioning for occlusion culling, animation, etc.
 - layout & occlusion/virtualization

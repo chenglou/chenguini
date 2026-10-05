@@ -14,7 +14,7 @@ The best split right now is:
 - static facts live beside pure geometry helpers
 - extra extraction guidance stays in worker prompts
 
-If you want the repo-level workflow, see `docs/drafts/demo-reconstruction.md`.
+If you want the repo-level workflow, see `todos/demo-reconstruction.md`.
 
 ## Current Conclusions
 
