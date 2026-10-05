@@ -1,6 +1,6 @@
 # Spec Writing For Demos
 
-For the current workflow, see `ai-demo-reconstruction.md`.
+For the current workflow, see `demo-reconstruction.md`.
 For the exact default packet, see `minimum-viable-demo-spec.md`.
 
 This doc keeps the packet-writing lessons that are still useful when the thin default starts wobbling.

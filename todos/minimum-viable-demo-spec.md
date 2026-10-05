@@ -2,7 +2,7 @@
 
 Use this as the default packet for a fresh `gpt-5.4 xhigh` worker when the shared docs are already strong.
 
-For the broader workflow, see `ai-demo-reconstruction.md`.
+For the broader workflow, see `demo-reconstruction.md`.
 For older packet shapes and overlays, see `spec-writing-for-demos.md`.
 
 ## Default Shape

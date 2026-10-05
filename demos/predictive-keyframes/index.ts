@@ -2,7 +2,7 @@
 
 const msPerAnimationStep = 6
 
-// Wellons lowbias32 (from ui-architecture.md)
+// Wellons lowbias32 (from ui.md)
 function hash(n: number) {
   n = n | 0
   n = Math.imul((n >>> 16) ^ n, 0x21f0aaad)

@@ -1,12 +1,12 @@
 # Photo Gallery Spec
 
-Use `docs/`, `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/DATA.md`, and this packet only. Do not inspect `demos/` or other specs.
+Use `docs/`, `todos/demos_with_specs/photo-gallery/DATA.md`, and this packet only. Do not inspect `demos/` or other specs.
 
 Read first:
 
 1. `docs/drafts/verification.md`
 2. `docs/drafts/layout-geometry.md`
-3. `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/DATA.md`
+3. `todos/demos_with_specs/photo-gallery/DATA.md`
 4. this file
 
 State static layout facts where the helper is pure, then implement, then validate.

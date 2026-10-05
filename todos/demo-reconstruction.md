@@ -10,8 +10,8 @@ The short version is:
 - static facts live beside pure geometry helpers
 - extra prompt guidance is optional and mostly affects shape, not correctness
 
-For the exact default packet, see `../../todos/minimum-viable-demo-spec.md`.
-For older packet variants and overlays, see `../../todos/spec-writing-for-demos.md`.
+For the exact default packet, see `todos/minimum-viable-demo-spec.md`.
+For older packet variants and overlays, see `todos/spec-writing-for-demos.md`.
 
 ## Current Split
 
@@ -163,9 +163,9 @@ What still feels narrower:
 
 ## Where The Research Lives
 
-For the current research summary, see `../../todos/demos_with_specs/NOTES.md`.
+For the current research summary, see `todos/demos_with_specs/NOTES.md`.
 
 For the full chronology, including early misses and dead ends, see:
 
-- `../../todos/demos_with_specs/NOTES_ARCHIVE.md`
-- `../../todos/demos_with_specs/*/RESULTS.md`
+- `todos/demos_with_specs/NOTES_ARCHIVE.md`
+- `todos/demos_with_specs/*/RESULTS.md`

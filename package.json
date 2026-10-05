@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./demos/*/index.html --host=$HOST:$PORT",
-    "start:templates": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./drafts/demo_templates/*/index.html --host=$HOST:$PORT",
+    "start:templates": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./todos/demo_templates/*/index.html --host=$HOST:$PORT",
     "check": "tsc && oxlint --type-aware demos --ignore-pattern '*.js'"
   },
   "devDependencies": {
