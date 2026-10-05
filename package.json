@@ -1,5 +1,5 @@
 {
-  "name": "vibescript",
+  "name": "chenguini",
   "private": true,
   "scripts": {
     "start": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./demos/*/index.html --host=$HOST:$PORT",
