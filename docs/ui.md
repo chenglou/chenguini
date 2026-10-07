@@ -111,8 +111,9 @@ So, allowed in event callbacks:
 
 - Storing raw input that'd otherwise be lost before the next render in regular transient state, e.g. `st.events.click = e`, `formValue = e.target.value`, or `dragStartTime = event.timeStamp`
 - `scheduleRender()`
+- On `copy` of a selection you draw yourself: `e.preventDefault()` + `e.clipboardData.setData(...)`, computed from the state the last `render` left. Don't defer this one to `render` + `writeText`: Edit → Copy isn't a gesture, so Safari and Firefox refuse the write and Chrome shows a permission prompt
 
-_btw, gesture-gated APIs (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`) used to behave more like they needed same-stack synchrony, esp on mobile Safari, which meant doing sync logic inside event callbacks. That's no longer true on modern browsers._
+_btw, gesture-gated APIs (`navigator.clipboard.writeText`, `element.requestFullscreen`, `audio.play`, `window.open`) used to behave more like they needed same-stack synchrony, esp on mobile Safari, which meant doing sync logic inside event callbacks. That's no longer true on modern browsers: they allow these for a few seconds after a press or key. One holdout: Safari's popup blocker only lets `window.open` through from the callback, or from a frame requested inside it. If a frame's already scheduled, `cancelAnimationFrame` it and re-request from the callback._
 
 The event fields are just regular state fields whose lifetime happens to be one frame or so. **don't forget to reset those event states** at the end of the render loop.
 
