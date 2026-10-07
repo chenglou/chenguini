@@ -217,9 +217,19 @@ window.addEventListener('click', () => {
   st.inputs.clicked = true
   scheduleRender()
 })
+// Whether a copy is ours: our selection has text in it, and the focus isn't in the search field, where copying is the browser's job
+function appTakesCopy() {
+  if (document.activeElement === threadView.search) return false
+  const {row, startTextOffset, endTextOffset, range} = st.selection
+  if (row != null && startTextOffset != null && endTextOffset != null) return startTextOffset !== endTextOffset
+  return !range.collapsed
+}
 window.addEventListener('copy', (e) => {
+  if (!appTakesCopy()) return // nothing of ours to copy: leave it to the browser
   e.preventDefault()
   st.inputs.copied = true
+  // `e.clipboardData` only works inside the event. Deferring to `navigator.clipboard.writeText` in render breaks Edit → Copy,
+  // which isn't a user gesture: Safari and Firefox refuse the write, Chrome asks for permission
   if (
     st.selection.row != null &&
     st.selection.startTextOffset != null &&
@@ -233,13 +243,16 @@ window.addEventListener('copy', (e) => {
     e.clipboardData?.setData('text/html', serialized.html)
     e.clipboardData?.setData('text/plain', serialized.plainText)
   } else {
-    // browser security dictates handling paste logic in the event itself instead of e.g. in render
     const content = document.createElement('div')
     content.appendChild(st.selection.range.cloneContents())
     e.clipboardData?.setData('text/html', content.innerHTML)
     e.clipboardData?.setData('text/plain', content.innerText)
   }
   scheduleRender()
+})
+window.addEventListener('beforecopy', (e) => {
+  // Safari 27 greys out Edit → Copy unless there's a native selection or this event is cancelled. Our selection is custom
+  if (appTakesCopy()) e.preventDefault()
 })
 window.addEventListener('contextmenu', () => {
   st.inputs.pointerState = 'up'
