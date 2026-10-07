@@ -81,6 +81,8 @@ Spot fixes made without the whole picture are waterbed-like. You push one case d
 
 So try to cater to worst-case frame latency first, though not only. A slight worst-case regression can be fine for a real gain, and a best-case gain that barely adds complexity is usually worth taking. And if the worst case can't improve and still misses a UX threshold (say it still drops frames), improve the best case too.
 
+For performance, careful not to reward hack against JIT heuristics, since browser JITs are moving targets. If you need that level of perf, aim for the stable heuristics, like stable types, good allocation patterns and brutalist C-like code. E.g. forcing a number array to hold only floats instead of a mix of ints and floats, or filling one preallocated buffer instead of allocating per item (measure though. No perf theatrics when optimizing). Leave comments for JIT tricks. Although stable types (numbers, fixed object shapes) are less about JIT and more about general good coding practice.
+
 Avoid excessive asyncs. If needed, at least spot the asyncs that need to go together, and wrap them in a group with Promise.all. Prefer top-down control flow. E.g. don't do one `configLoaded.then(...)`, one `dataLoaded.then(...)`, then some shared `maybeStart()` / `if (fooReady && barReady)` handshake if what you really mean is "wait for both, then start".
 
 Aggressively prefer `switch` over `if/else`, when possible (e.g. union values). Get those exhaustiveness coverages. Write conditions like a functional langauge with pattern matching:
