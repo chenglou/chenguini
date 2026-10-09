@@ -38,7 +38,7 @@ If you try to reproduce the scrolling physics, you'd usually fall short (e.g. ea
 Despite all this, some effects are only possible through programmatic manipulation of scrolling:
 
 - Occlusion culling/virtualization, where we read `scrollTop` and determine only the elements that need to be shown on screen. `IntersectionObserver` is the usual proposed alternative, but it's also capped at JS framerate (see earlier) and is a bit yuckier in terms of API architecture, among other flaws.
-- Scroll anchoring, where we keep a certain element stable while resizing container, when things above and below potentially change size and jitter said element around otherwise. `overflow-anchor` isn't yet a satisfying solution (no Safari support, etc.).
+- Scroll anchoring, where we keep a certain element stable while resizing container, when things above and below potentially change size and jitter said element around otherwise. `overflow-anchor` isn't yet a satisfying solution.
 - Rendering to canvas, where you're reading `scrollTop`from a transparent DOM container somewhere else in order not to recreate your own scrolling logic. Keep in mind the `scrollTop` quirks above. You can try keeping an old & new `scrollTop` value and interpolate between them into a smoother one.
 - Scroll position restoration across page changes.
 
@@ -74,7 +74,7 @@ None of these adaptations exist in a manual render loop architecture because eve
 
 ### Less Preferred Alternatives
 
-- **CSS `overflow-anchor`**: native, but lacks Safari support.
+- **CSS `overflow-anchor`**: native.
 - **Padding adjustment**: instead of `scrollTo`, reduce a preallocated top spacer (e.g. padding-top) by the delta. Content stays put, `scrollTop` doesn't change, no scroll event fires — sidesteps the entire detection problem. Downside: scrollbar thumb visually jumps, and the accumulated padding offset complicates virtualization.
 - **ResizeObserver above the anchor**: observe height changes of content above the anchor element, adjust `scrollTop` in the callback. More precise when existing elements resize unpredictably, but unnecessary when items have deterministic heights and layout is recomputed every frame.
 
