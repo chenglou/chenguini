@@ -22,7 +22,9 @@
 
 ## Timing
 
-Events contain a `timeStamp` property, the high-precision time when the event occurred. Use this over `performance.now()` and others, when relevant event-related calculations are involved. Refer to [FrameScheduling.md](FrameScheduling.md) for more details on timestamps.
+Events contain a `timeStamp` property, the time when the event occurred. Use this over `performance.now()` and others, when relevant event-related calculations are involved. Refer to [FrameScheduling.md](FrameScheduling.md) for more details on timestamps.
+
+Browsers round `timeStamp`, same as `performance.now()`: to 1ms in Safari and Firefox and to 0.1ms in Chrome. On a cross-origin isolated page (https or localhost, served with the headers `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`) the rounding is 20µs in Safari and Firefox and 5µs in Chrome. E.g. an iPhone scans a finger every 4.17ms, so in Safari two touch events one scan apart read as 4 or 5ms apart, unless the page is isolated.
 
 ## Pointer Coordinates
 
