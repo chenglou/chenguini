@@ -82,7 +82,7 @@ None of these adaptations exist in a manual render loop architecture because eve
 
 **Again, highly disrecommended**. But if you're gonna try (don't), might as well try properly.
 
-iOS and macOS' scrolling physics have changed over time, but nowadays settled. The original scrolling decay & rubberbanding were done by Bas Ording on Macromedia Director, with roughly `0.99` multiplier per 1 milisecond (yep) for decay velocity and a series of exponentials for rubberbanding (**not a spring**). The implementation's [here](https://github.com/grp/XNAnimation/blob/508e6aa093765c214500ef022e4f34f3ea5653c0/Animations/XNScrollView.m).\* An idiomatic spring physics during rubberbanding would be more elegant & correct, but would feel slightly off vs folks' decade-long expectations.
+iOS and macOS' scrolling physics have changed over time, but nowadays settled. The original scrolling decay & rubberbanding were done by Bas Ording on Macromedia Director, with roughly `0.998` multiplier per 1 milisecond (yep) for decay velocity, `0.99` for the return from past an end, and a series of exponentials for rubberbanding (**not a spring**). The implementation's [here](https://github.com/grp/XNAnimation/blob/508e6aa093765c214500ef022e4f34f3ea5653c0/Animations/XNScrollView.m).\* An idiomatic spring physics during rubberbanding would be more elegant & correct, but would feel slightly off vs folks' decade-long expectations.
 
 \* [Related link](https://gist.github.com/originell/6961057).
 
