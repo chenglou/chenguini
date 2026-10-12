@@ -12,7 +12,7 @@ Write tests first, then implementation, then validate.
 
 Build only inside:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/overlay-seed-corpus`
+- `todos/demos_with_specs/draggable-cards/overlay-seed-corpus`
 
 ## Summary
 

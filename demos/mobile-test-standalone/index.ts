@@ -1,4 +1,4 @@
-// === spring physics (from MidUI.ts)
+// === spring physics
 const msPerStep = 6
 
 type Spring = {
@@ -517,7 +517,7 @@ function render(now: number) {
     if (view.type === 'lightbox') newAdjustedScrollTop = clamp(0, newAdjustedScrollTop, Math.max(0, rowsTop[rowsTop.length - 1]! - containerSizeY_) + 1)
     const scrollDelta = newAdjustedScrollTop - currentScrollTop
     if (firstRender) {
-      // depoison NaN-initialized springs (same as justLoadedOldJobs path in the original)
+      // depoison NaN-initialized springs
       springForEach(data, springGoToEnd)
     } else {
       for (let i = 0; i < data.length; i++) {

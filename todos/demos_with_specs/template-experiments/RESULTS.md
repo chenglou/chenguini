@@ -14,10 +14,10 @@ Comparison:
 ### Main-Thread Results
 
 - `scroll-anchor/round-01-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/round-01-raw`
+  - `bun test todos/demos_with_specs/scroll-anchor/round-01-raw`
   - fail
 - `scroll-anchor/round-01-template`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/round-01-template`
+  - `bun test todos/demos_with_specs/scroll-anchor/round-01-template`
   - pass
 
 ### `round-01-raw`
@@ -62,10 +62,10 @@ Comparison:
 ### Main-Thread Results
 
 - `gesture-flick-snap-target/round-01-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/round-01-raw`
+  - `bun test todos/demos_with_specs/gesture-flick-snap-target/round-01-raw`
   - pass
 - `gesture-flick-snap-target/round-01-template`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/round-01-template`
+  - `bun test todos/demos_with_specs/gesture-flick-snap-target/round-01-template`
   - pass
 - `bun check`:
   - pass

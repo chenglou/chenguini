@@ -19,13 +19,13 @@ All workers were fresh `gpt-5.4 xhigh` agents.
 ### Raw
 
 - `repeat-raw-01`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-raw-01`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-raw-01`
   - pass
 - `repeat-raw-02`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-raw-02`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-raw-02`
   - pass
 - `repeat-raw-03`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-raw-03`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-raw-03`
   - pass
 
 Raw total:
@@ -35,13 +35,13 @@ Raw total:
 ### Template
 
 - `repeat-template-01`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-template-01`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-template-01`
   - pass
 - `repeat-template-02`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-template-02`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-template-02`
   - pass
 - `repeat-template-03`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-template-03`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-template-03`
   - pass
 
 Template total:
@@ -51,13 +51,13 @@ Template total:
 ### Guided
 
 - `repeat-guided-01`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-guided-01`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-guided-01`
   - pass
 - `repeat-guided-02`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-guided-02`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-guided-02`
   - pass
 - `repeat-guided-03`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/repeat-guided-03`
+  - `bun test todos/demos_with_specs/scroll-anchor/repeat-guided-03`
   - pass
 
 Guided total:

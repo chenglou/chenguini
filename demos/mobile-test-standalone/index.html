@@ -1,47 +1,36 @@
 <!DOCTYPE html>
 <!--
-  Standalone reproduction of the MobileCreationView component (commit b767b9dcd)
-  from midjourney/mj-gallery-2. Used to test mobile Safari-specific behaviors:
+  Standalone mobile creation view. Used to test mobile Safari-specific behaviors:
   input blur/focus, overflow, gestures, page zoom, soft keyboard interactions.
 
   == LAYOUT/CSS PITFALLS — DO NOT ==
 
-  1. Do NOT add styles to <html> or <body> beyond what's here. The original app
-     had conflicting global.css rules (min-height: 100vh, height: -webkit-fill-available)
-     that MobileCreation.tsx countered with a 100dvh override. This standalone has
-     neither side, intentionally. Adding height/overflow to html/body breaks the
-     Safari-specific behaviors we're testing (rubber-banding, pinch zoom, etc.).
+  1. Do NOT add styles to <html> or <body> beyond what's here. Adding
+     height/overflow to html/body, e.g. `min-height: 100vh` or
+     `height: -webkit-fill-available`, breaks the Safari-specific behaviors
+     we're testing (rubber-banding, pinch zoom, etc.).
 
   2. Do NOT use `overflow: hidden` on body. The .container_ div handles its own
      scroll via `overscroll-behavior: contain` and toggling `overflow-y: auto/hidden`
      between view modes. Body-level overflow constraints change Safari's gesture
      behavior.
 
-  3. The original app's DOM was deeply nested:
-       body > #app-root > #__next > #bodyContainer > parentContainer
-     This standalone is flat: body > #container (parentContainer). That's fine —
-     the extra nesting had no layout effect relevant here.
+  3. color-scheme must be "light", not "dark". The mobile creation view is
+     beige-themed and sets its own colors.
 
-  4. color-scheme must be "light", not "dark". The original _document.tsx had dark,
-     but the mobile creation view itself is beige-themed and sets its own colors.
-
-  5. CSS class `.container_` has a trailing underscore. The JS sets
+  4. CSS class `.container_` has a trailing underscore. The JS sets
      className = 'container_'. If your CSS says `.container` (no underscore),
      scrolling breaks silently.
 
-  6. `touch-action: none` on body is intentional — the component does all its own
+  5. `touch-action: none` on body is intentional — the component does all its own
      touch handling (touchstart/touchmove/touchend). Removing it causes double-
      handling with the browser's native gestures.
 
   == JS PITFALLS ==
 
-  7. Springs are initialized with NaN (pos = NaN) to surface bugs early. On first
+  6. Springs are initialized with NaN (pos = NaN) to surface bugs early. On first
      render you MUST call springGoToEnd() on all springs after computing their
-     destinations. The original code does this via the justLoadedOldJobs path.
-     Forgetting this = invisible images (translate3d(NaN, NaN, 0)).
-
-  8. The original fetchRecentAPI uses a callback pattern (not async/Promise) in
-     older commits. If stubbing it, support `opts.callback(null, result)`.
+     destinations. Forgetting this = invisible images (translate3d(NaN, NaN, 0)).
 -->
 <html>
 <head>

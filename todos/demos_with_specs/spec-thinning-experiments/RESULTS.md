@@ -56,7 +56,7 @@ Repeatability read:
 
 - main-thread result: fail
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/thin-level-0-rich`
+  - `bun test todos/demos_with_specs/photo-gallery/thin-level-0-rich`
 - repeated failure:
   - dismiss-to-row restore did not bring the focused row back into view
   - the same failure reproduced twice from the main thread
@@ -69,7 +69,7 @@ Repeatability read:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/thin-level-1-medium`
+  - `bun test todos/demos_with_specs/photo-gallery/thin-level-1-medium`
 - notes:
   - this already removed the separate oracle contract
   - all key browser seams still passed: hash sync, dismiss restore, caption selection, and occlusion
@@ -78,7 +78,7 @@ Repeatability read:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/thin-level-2-thin`
+  - `bun test todos/demos_with_specs/photo-gallery/thin-level-2-thin`
 - notes:
   - strongest result in the matrix
   - `gpt-5.4 xhigh` could reconstruct the gallery from a very small packet as long as the exact numbers and fragile truths stayed explicit
@@ -97,7 +97,7 @@ Current read for photo:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/thin-level-0-rich`
+  - `bun test todos/demos_with_specs/draggable-cards/thin-level-0-rich`
 - notes:
   - rich control worked as expected
 
@@ -105,7 +105,7 @@ Current read for photo:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/thin-level-1-medium`
+  - `bun test todos/demos_with_specs/draggable-cards/thin-level-1-medium`
 - notes:
   - dropping the staged helper hints did not hurt this model
   - browser seams and pure seams still landed cleanly
@@ -114,7 +114,7 @@ Current read for photo:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/thin-level-2-thin`
+  - `bun test todos/demos_with_specs/draggable-cards/thin-level-2-thin`
 - notes:
   - even the bare packet still reconstructed the core demo correctly
   - the stronger model did not need seed examples to land midpoint reorder, recent-history velocity, and top-until-settle

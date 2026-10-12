@@ -18,7 +18,7 @@ Rules for the experiment:
 ### Photo Gallery
 
 - Strong first pass. The worker reproduced the core interaction model from docs plus spec: responsive grid, line mode, hash routing, spring motion, dismiss-to-row scrolling, occlusion, and browser-backed semantic checks.
-- The round's tests passed when run directly in `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-01`.
+- The round's tests passed when run directly in `todos/demos_with_specs/photo-gallery/round-01`.
 - Miss: line mode does not truly lock scrolling underneath the overlay. The spec said line mode should disable scrolling, but the implementation keeps the scroll container alive underneath a fixed layer.
 - Miss: clicking a caption does not select the whole caption text the way the original demo does. The spec only said "select its text", which was too loose.
 - Gap signal: the worker chose a very local Safari AppleScript harness for browser checks. It worked here, but this is more ad hoc than the rest of the repo. We may want a clearer repo-level pattern for lightweight browser-backed verification.
@@ -26,9 +26,9 @@ Rules for the experiment:
 ### Draggable Cards
 
 - Partial failure. The worker got the core logic and pure tests in place, but the round did not land cleanly end-to-end.
-- `bun test logic.test.ts` passes in `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-01`.
+- `bun test logic.test.ts` passes in `todos/demos_with_specs/draggable-cards/round-01`.
 - The browser-backed test setup is miswired. `browser.spec.ts` is written in Playwright style, but the worker tried to run it through `bun test`, which fails before any browser scenario runs.
-- Root `bun check` fails because `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-01/index.ts` has a parse error near the duplicated import block at the top of the file.
+- Root `bun check` fails because `todos/demos_with_specs/draggable-cards/round-01/index.ts` has a parse error near the duplicated import block at the top of the file.
 - Gap signal: the spec and docs were not explicit enough about what "write browser-backed tests" should look like in this repo. The worker invented a second toolchain and a round-local `package.json`, which is probably not the direction we want.
 
 ### Cross-Cutting Notes
@@ -53,7 +53,7 @@ Rules for the experiment:
 
 - Improved shape, but still not clean end-to-end.
 - The fresh worker avoided the parse error from round 1 and kept the demo/test split simpler.
-- Pure logic and demo code landed in `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-02/`.
+- Pure logic and demo code landed in `todos/demos_with_specs/draggable-cards/round-02/`.
 - Miss: browser-backed tests still depend on `playwright`, but no dependency was installed, so `bun test index.test.ts` fails with `Cannot find package 'playwright'`.
 - Signal: tightening the spec helped with delivery shape, but we still need a repo-preferred browser-check pattern that does not encourage every worker to rediscover dependency management.
 
@@ -139,8 +139,8 @@ Rules for the experiment:
 ### Photo Gallery
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-05/gallery.test.ts`
-  - `bun test --timeout 35000 /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-05/browser.test.ts`
+  - `bun test todos/demos_with_specs/photo-gallery/round-05/gallery.test.ts`
+  - `bun test --timeout 35000 todos/demos_with_specs/photo-gallery/round-05/browser.test.ts`
   - `bun check`
 - The round rebuilt the main gallery shape successfully again: grid mode, line mode, hash routing, dismiss-to-row behavior, scroll lock, occlusion, low-res backgrounds, high-res focused image, and page-driven semantic reports.
 - Remaining miss against the spec and original demo: caption click still does not select the whole caption text. The implementation blocks mode changes on caption click, but it does not actively select the full prompt text.
@@ -149,8 +149,8 @@ Rules for the experiment:
 ### Draggable Cards
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-05/logic.test.ts`
-  - `bun test --timeout 30000 /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-05/browser.test.ts`
+  - `bun test todos/demos_with_specs/draggable-cards/round-05/logic.test.ts`
+  - `bun test --timeout 30000 todos/demos_with_specs/draggable-cards/round-05/browser.test.ts`
   - `bun check`
 - Round 5 is the first draggable reconstruction that looks converged end-to-end from the main thread.
 - The demo behavior landed cleanly: live reorder during drag, velocity-based release, and correct `lastDragged` depth while settling.
@@ -178,7 +178,7 @@ Rules for the experiment:
 ### Photo Gallery
 
 - Main-thread verification result:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-06/*.test.ts` failed
+  - `bun test todos/demos_with_specs/photo-gallery/round-06/*.test.ts` failed
 - Good news first: the new caption-selection requirement did land. The browser-backed caption-selection scenario passed, which means the tighter spec was strong enough to move that behavior.
 - Miss 1: the browser runner regressed. The round used a runner that relaunches headless Chrome through `execFile` while polling, and it waits for Chrome command success instead of treating the page-owned report as the authority. That reintroduced harness failure on the navigation scenario.
 - Miss 2: dismiss-to-row still does not restore the focused row with the intended peek. The measured row top after dismiss was about `623px`, far outside the expected `24px` to `80px` window.
@@ -187,7 +187,7 @@ Rules for the experiment:
 ### Draggable Cards
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-06`
+  - `bun test todos/demos_with_specs/draggable-cards/round-06`
   - `bun check`
 - This is the second fresh draggable round in a row that passed end-to-end from the main thread.
 - The draggable spec now looks materially more stable than before.
@@ -214,7 +214,7 @@ Rules for the experiment:
 ### Photo Gallery
 
 - Main-thread verification result:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-07/*.test.ts` failed
+  - `bun test todos/demos_with_specs/photo-gallery/round-07/*.test.ts` failed
 - Miss 1: the pure layout test already drifted on the basic width heuristics. The round chose a slightly different grid-width budget, which means the spec still was not explicit enough about horizontal page padding and the exact column budget.
 - Miss 2: the navigation browser scenario timed out at Bun's default `5000ms` test timeout, which means the round did not carry forward the explicit longer timeout budget we had already learned to require.
 - Miss 3: the browser harness still relied on waiting for Chrome to exit cleanly and then scraping the dumped DOM file, rather than polling one long-lived scenario run until the page-owned report reached `phase: ready`.
@@ -223,7 +223,7 @@ Rules for the experiment:
 ### Draggable Cards
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-07`
+  - `bun test todos/demos_with_specs/draggable-cards/round-07`
   - `bun check`
 - This is the third fresh draggable round in a row that passed end-to-end from the main thread.
 - The draggable side now looks reliably reconstructible from docs plus spec.
@@ -247,7 +247,7 @@ Rules for the experiment:
 ### Photo Gallery
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-08`
+  - `bun test todos/demos_with_specs/photo-gallery/round-08`
   - `bun check`
 - Round 8 is the first fresh photo reconstruction that passed from the main thread after the later spec tightening.
 - The previously narrow misses now look addressed in one pass:
@@ -260,7 +260,7 @@ Rules for the experiment:
 ### Draggable Cards
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-08`
+  - `bun test todos/demos_with_specs/draggable-cards/round-08`
   - `bun check`
 - This is the fourth fresh draggable round in a row that passed end-to-end from the main thread.
 - The draggable side now looks robustly reconstructible from `docs/` plus spec.
@@ -280,7 +280,7 @@ Rules for the experiment:
 ### Draggable Cards
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-09`
+  - `bun test todos/demos_with_specs/draggable-cards/round-09`
   - `bun check`
 - This is the fifth fresh draggable round in a row that passed end-to-end from the main thread.
 - At this point the draggable side looks stably reconstructible from `docs/` plus spec.
@@ -288,7 +288,7 @@ Rules for the experiment:
 ### Photo Gallery
 
 - Main-thread verification failed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-09`
+  - `bun test todos/demos_with_specs/photo-gallery/round-09`
 - The pure layout tests passed.
 - The browser-backed scenario tests failed in a familiar way:
   - caption selection still did not produce full selected text
@@ -310,7 +310,7 @@ Rules for the experiment:
 ### Draggable Cards
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-10`
+  - `bun test todos/demos_with_specs/draggable-cards/round-10`
   - `bun check`
 - This is the sixth fresh draggable round in a row that passed end-to-end from the main thread.
 - The cleanup did not make draggable any shakier. If anything, the spec reads more like a product target now and less like a mini repo policy doc.
@@ -318,7 +318,7 @@ Rules for the experiment:
 ### Photo Gallery
 
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-10`
+  - `bun test todos/demos_with_specs/photo-gallery/round-10`
   - `bun check`
 - The fresh round landed the same four browser seams that kept mattering:
   - navigation and hash sync
@@ -337,7 +337,7 @@ Rules for the experiment:
 ## Spec Writing Experiments
 
 - A separate spec-style comparison now lives in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/spec-writing-experiments/RESULTS.md`
+  - `todos/demos_with_specs/spec-writing-experiments/RESULTS.md`
 - Short version:
   - draggable liked `state-and-derivations` best
   - photo liked `scenario-first` best
@@ -347,7 +347,7 @@ Rules for the experiment:
 ## Spec Overlay Experiments
 
 - A follow-up overlay comparison now lives in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/spec-overlay-experiments/RESULTS.md`
+  - `todos/demos_with_specs/spec-overlay-experiments/RESULTS.md`
 - Short version:
   - all 6 overlay conditions passed from the main thread
   - photo liked `oracle-contract` best
@@ -357,7 +357,7 @@ Rules for the experiment:
 ## Spec Thinning Experiments
 
 - A model-upgrade thinning comparison now lives in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/spec-thinning-experiments/RESULTS.md`
+  - `todos/demos_with_specs/spec-thinning-experiments/RESULTS.md`
 - This round used `gpt-5.4` with `xhigh` reasoning instead of `gpt-5.4-mini`.
 - Short version:
   - draggable passed at rich, medium, and thin levels
@@ -379,11 +379,11 @@ Rules for the experiment:
 ## Life Calendar Transfer Test
 
 - We started a third-demo transfer test on:
-  - `/Users/chenglou/github/vibescript/demos/life-calendar`
+  - `demos/life-calendar`
 - The current spec packet is:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/life-calendar/SPEC.md`
+  - `todos/demos_with_specs/life-calendar/SPEC.md`
 - Round 1 used a fresh `gpt-5.4 xhigh` worker and produced:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/life-calendar/round-01`
+  - `todos/demos_with_specs/life-calendar/round-01`
 - Round 1 result:
   - the worker created the right file shape and a plausible test shape
   - but it stopped at scaffolding and placeholder stubs instead of finishing the loop
@@ -424,9 +424,9 @@ Tentative next move:
 ### Main-Thread Repro Check
 
 - We then tried the same demo locally from the main model in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/life-calendar/round-05`
+  - `todos/demos_with_specs/life-calendar/round-05`
 - Main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/life-calendar/round-05`
+  - `bun test todos/demos_with_specs/life-calendar/round-05`
   - `bun check`
 
 Updated read:
@@ -439,7 +439,7 @@ Updated read:
 
 - We then kept the same `life-calendar` packet but stopped asking fresh workers to discover docs from the repo.
 - Results live in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/life-calendar/COMPRESSED_PROMPT_RESULTS.md`
+  - `todos/demos_with_specs/life-calendar/COMPRESSED_PROMPT_RESULTS.md`
 - Short version:
   - `round-06`: partial
   - `round-07`: main-thread pass
@@ -454,7 +454,7 @@ Updated read:
 
 - We then reran the two older demos with fresh `gpt-5.4 xhigh` workers in a clean raw-vs-compressed A/B.
 - Results live in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/prompt-compression-experiments/RESULTS.md`
+  - `todos/demos_with_specs/prompt-compression-experiments/RESULTS.md`
 - Each demo got:
   - one `raw` round that read repo docs plus the current thin packet
   - one `compressed` round that got the demo truth and a tiny verification/browser excerpt inline
@@ -462,20 +462,20 @@ Updated read:
 ### Main-Thread Results
 
 - `photo-gallery/round-11-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-raw`
+  - `bun test todos/demos_with_specs/photo-gallery/round-11-raw`
   - pass
 - `photo-gallery/round-11-compressed`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed`
+  - `bun test todos/demos_with_specs/photo-gallery/round-11-compressed`
   - fail at the folder level because the round introduced a Playwright-style spec file that Bun tried to load
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed/gallery.unit.test.ts`
+  - `bun test todos/demos_with_specs/photo-gallery/round-11-compressed/gallery.unit.test.ts`
   - pass
-  - `bunx playwright test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed/browser.semantic.spec.ts --config /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed/playwright.config.ts`
+  - `bunx playwright test todos/demos_with_specs/photo-gallery/round-11-compressed/browser.semantic.spec.ts --config todos/demos_with_specs/photo-gallery/round-11-compressed/playwright.config.ts`
   - pass
 - `draggable-cards/round-11-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-11-raw`
+  - `bun test todos/demos_with_specs/draggable-cards/round-11-raw`
   - pass
 - `draggable-cards/round-11-compressed`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-11-compressed`
+  - `bun test todos/demos_with_specs/draggable-cards/round-11-compressed`
   - pass
 - `bun check`:
   - pass
@@ -499,9 +499,9 @@ Updated read:
 ## Template Experiment: Scroll Anchor
 
 - We then tested the new `todos/demo_templates/` surface on a third kind of demo:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/SPEC.md`
+  - `todos/demos_with_specs/scroll-anchor/SPEC.md`
 - Results live in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/template-experiments/RESULTS.md`
+  - `todos/demos_with_specs/template-experiments/RESULTS.md`
 
 The comparison was:
 
@@ -511,11 +511,11 @@ The comparison was:
 ### Main-Thread Results
 
 - `scroll-anchor/round-01-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/round-01-raw`
+  - `bun test todos/demos_with_specs/scroll-anchor/round-01-raw`
   - fail
   - the pure model tests passed, but the browser-backed `add-1 then 2 rapid` scenario failed
 - `scroll-anchor/round-01-template`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/round-01-template`
+  - `bun test todos/demos_with_specs/scroll-anchor/round-01-template`
   - pass
 - `bun check`:
   - pass
@@ -542,9 +542,9 @@ Tentative follow-on thought:
 ## Template Experiment: Gesture Flick Snap Target
 
 - We then tested the gesture template on a demo that still needs drag, flick, and snap behavior:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/SPEC.md`
+  - `todos/demos_with_specs/gesture-flick-snap-target/SPEC.md`
 - Results live in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/template-experiments/RESULTS.md`
+  - `todos/demos_with_specs/template-experiments/RESULTS.md`
 
 The comparison was:
 
@@ -554,10 +554,10 @@ The comparison was:
 ### Main-Thread Results
 
 - `gesture-flick-snap-target/round-01-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/round-01-raw`
+  - `bun test todos/demos_with_specs/gesture-flick-snap-target/round-01-raw`
   - pass
 - `gesture-flick-snap-target/round-01-template`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/round-01-template`
+  - `bun test todos/demos_with_specs/gesture-flick-snap-target/round-01-template`
   - pass
 - `bun check`:
   - pass
@@ -588,7 +588,7 @@ Updated template read:
 
 - We then tested whether the extra template extraction guidance should live in worker prompts, beyond plain template access.
 - Results live in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/prompt-guidance-experiments/RESULTS.md`
+  - `todos/demos_with_specs/prompt-guidance-experiments/RESULTS.md`
 
 The matrix was:
 
@@ -635,7 +635,7 @@ Current read:
 
 - We then ran a repeatability pass on `scroll-anchor` to see whether the prompt conditions differ in stability.
 - Results live in:
-  - `/Users/chenglou/github/vibescript/drafts/demos_with_specs/repeatability-experiments/RESULTS.md`
+  - `todos/demos_with_specs/repeatability-experiments/RESULTS.md`
 
 The matrix was:
 

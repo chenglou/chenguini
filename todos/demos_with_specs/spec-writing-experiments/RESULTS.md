@@ -16,12 +16,12 @@ Shared conditions:
 
 Baseline control:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-10`
+- `todos/demos_with_specs/draggable-cards/round-10`
 - main-thread result: pass
 
 `spatial-ascii`:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/style-spatial-ascii`
+- `todos/demos_with_specs/draggable-cards/style-spatial-ascii`
 - main-thread result: pass
 - notes:
   - geometry and depth were communicated well enough
@@ -30,7 +30,7 @@ Baseline control:
 
 `scenario-first`:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/style-scenario-first`
+- `todos/demos_with_specs/draggable-cards/style-scenario-first`
 - main-thread result: pass
 - notes:
   - very steady
@@ -39,7 +39,7 @@ Baseline control:
 
 `state-and-derivations`:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/style-state-and-derivations`
+- `todos/demos_with_specs/draggable-cards/style-state-and-derivations`
 - main-thread result: pass
 - notes:
   - strongest pure logic seam
@@ -57,12 +57,12 @@ Current read for draggable:
 
 Baseline control:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-10`
+- `todos/demos_with_specs/photo-gallery/round-10`
 - main-thread result: pass
 
 `spatial-ascii`:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/style-spatial-ascii`
+- `todos/demos_with_specs/photo-gallery/style-spatial-ascii`
 - main-thread result: pass
 - notes:
   - the picture helped with the page geometry
@@ -71,7 +71,7 @@ Baseline control:
 
 `scenario-first`:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/style-scenario-first`
+- `todos/demos_with_specs/photo-gallery/style-scenario-first`
 - main-thread result: pass
 - notes:
   - cleanest pass for the gallery
@@ -80,7 +80,7 @@ Baseline control:
 
 `state-and-derivations`:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/style-state-and-derivations`
+- `todos/demos_with_specs/photo-gallery/style-state-and-derivations`
 - main-thread result: fail
 - failure shape:
   - pure layout tests passed

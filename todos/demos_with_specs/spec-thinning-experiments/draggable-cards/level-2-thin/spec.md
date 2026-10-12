@@ -12,7 +12,7 @@ Write tests first, then implementation, then validate.
 
 Build only inside:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/thin-level-2-thin`
+- `todos/demos_with_specs/draggable-cards/thin-level-2-thin`
 
 Build a five-card drag demo with:
 

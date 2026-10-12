@@ -6,8 +6,8 @@ Read `docs/drafts/verification.md` first. Then read the rest of `docs/` as neede
 
 Shared browser-runner rules live in:
 
-- `/Users/chenglou/github/vibescript/docs/drafts/verification.md`
-- `/Users/chenglou/github/vibescript/docs/drafts/automating-browsers.md`
+- `docs/drafts/verification.md`
+- `docs/drafts/automating-browsers.md`
 
 ## Spatial Picture
 

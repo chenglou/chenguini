@@ -21,7 +21,7 @@ Main-thread results:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/overlay-oracle-contract`
+  - `bun test todos/demos_with_specs/photo-gallery/overlay-oracle-contract`
 - notes:
   - strongest boundary-rich overlay in this round
   - kept the browser-backed checks centered on demo truth instead of harness invention
@@ -32,7 +32,7 @@ Main-thread results:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/overlay-contrastive-boundaries`
+  - `bun test todos/demos_with_specs/photo-gallery/overlay-contrastive-boundaries`
 - notes:
   - directly helped the click-routing seams
   - especially strong on image-area vs caption and left vs middle vs right strip behavior
@@ -43,7 +43,7 @@ Main-thread results:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/overlay-two-pass`
+  - `bun test todos/demos_with_specs/photo-gallery/overlay-two-pass`
 - notes:
   - most important result in this round
   - delayed helper hints did NOT reintroduce the earlier gallery regression
@@ -62,7 +62,7 @@ Current read for photo:
 
 - main-thread result: pass
 - verification:
-  - `bun test --timeout 30000 /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/overlay-two-pass`
+  - `bun test --timeout 30000 todos/demos_with_specs/draggable-cards/overlay-two-pass`
 - notes:
   - very clean output shape
   - staged helper hints worked well here too
@@ -72,7 +72,7 @@ Current read for photo:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/overlay-temporal-trace`
+  - `bun test todos/demos_with_specs/draggable-cards/overlay-temporal-trace`
 - notes:
   - directly helped the mid-drag and settle semantics
   - good at making reorder-before-release and top-until-settle explicit
@@ -83,7 +83,7 @@ Current read for photo:
 
 - main-thread result: pass
 - verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/overlay-seed-corpus`
+  - `bun test todos/demos_with_specs/draggable-cards/overlay-seed-corpus`
 - notes:
   - strongest pure-test overlay in this round
   - particularly good for midpoint and velocity helpers

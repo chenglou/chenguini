@@ -17,7 +17,7 @@ Process:
 
 Build only inside:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/overlay-two-pass`
+- `todos/demos_with_specs/draggable-cards/overlay-two-pass`
 
 ## Summary
 

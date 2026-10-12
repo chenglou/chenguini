@@ -1,10 +1,10 @@
-- Actually describe vibeui and do a pass over the demos to make sure they respect it
+- Actually describe the UI guidelines and do a pass over the demos to make sure they respect them
 - fuse docs maybe?
 - clean up multiselect
 - document more about championing abs positioning for occlusion culling, animation, etc.
 - layout & occlusion/virtualization
-- bring over actual mj guidelines
-- safari pointer down up whatever in nicer-hacker-news and MobileCreationView and other demos
+- bring over the rest of the guidelines
+- safari pointer down up whatever in nicer-hacker-news and mobile-test-standalone and other demos
 - turn scrolling / scroll anchoring into a small skeleton instead of a prose-heavy doc section
 - debug control, time, rewind, etc.
 - document the `x/y/size + residual` pattern somewhere temporary first: regular values stay plain, residual is current on-screen delta to the new target, plain resize usually doesn't touch residuals, mode changes / reflow do
@@ -13,7 +13,6 @@
 - re-explore analytical springs: source-of-truth demo, regimes, near-critical behavior, and whether they actually keep the sweet spot
 - maybe revert photo-gallery `x/y/size + residual` split back to absolute springs; mathematically the residual can be implicit in `pos - dest`, but only if the real layout numbers stay separately trustworthy for hit testing, anchoring, resize policy, and hover/scroll/transition effects don't get mixed back together
 - tailwind-like layout naming conventions?
-- ben's video tweak advice from chromium
 
 - Safari
   - CSS for Drag section: recheck overflow: hidden vs clip

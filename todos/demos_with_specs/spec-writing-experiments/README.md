@@ -18,7 +18,7 @@ Current styles:
 
 The baseline control is the normal spec in:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/SPEC.md`
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/SPEC.md`
+- `todos/demos_with_specs/photo-gallery/SPEC.md`
+- `todos/demos_with_specs/draggable-cards/SPEC.md`
 
 We are not trying to find the prettiest spec. We are trying to find the one a fresh subagent can turn into tests and code with the fewest misses.

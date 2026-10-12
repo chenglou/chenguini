@@ -6,14 +6,14 @@ Read first:
 
 1. `docs/drafts/verification.md`
 2. `docs/drafts/automating-browsers.md`
-3. `/Users/chenglou/github/vibescript/drafts/demos_with_specs/spec-overlay-experiments/photo-gallery/shared-data.md`
+3. `todos/demos_with_specs/spec-overlay-experiments/photo-gallery/shared-data.md`
 4. this file
 
 Write tests first, then implementation, then validate.
 
 Build only inside:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/overlay-contrastive-boundaries`
+- `todos/demos_with_specs/photo-gallery/overlay-contrastive-boundaries`
 
 ## Summary
 

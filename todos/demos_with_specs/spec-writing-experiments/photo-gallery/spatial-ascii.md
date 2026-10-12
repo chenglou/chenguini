@@ -6,8 +6,8 @@ Read `docs/drafts/verification.md` first. Then read the rest of `docs/` as neede
 
 Shared browser-runner rules live in:
 
-- `/Users/chenglou/github/vibescript/docs/drafts/verification.md`
-- `/Users/chenglou/github/vibescript/docs/drafts/automating-browsers.md`
+- `docs/drafts/verification.md`
+- `docs/drafts/automating-browsers.md`
 
 This spec is only about the gallery itself.
 
@@ -70,7 +70,7 @@ Important line-mode facts:
 
 Use the exact data in:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/spec-writing-experiments/photo-gallery/shared-data.md`
+- `todos/demos_with_specs/spec-writing-experiments/photo-gallery/shared-data.md`
 
 ## Grid Sizing
 

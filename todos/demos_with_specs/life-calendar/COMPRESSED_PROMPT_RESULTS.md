@@ -33,7 +33,7 @@ Read:
 ## `round-07`
 
 - main-thread verification passed:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/life-calendar/round-07`
+  - `bun test todos/demos_with_specs/life-calendar/round-07`
 - landed:
   - pure geometry helpers
   - canvas-first app
@@ -55,7 +55,7 @@ Read:
   - browser test
 - main-thread verification:
   - pure tests passed
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/life-calendar/round-08` failed in the browser test with a hook timeout and a dangling process cleanup
+  - `bun test todos/demos_with_specs/life-calendar/round-08` failed in the browser test with a hook timeout and a dangling process cleanup
 
 Read:
 

@@ -23,7 +23,7 @@ All 4 workers were fresh. All 4 were forbidden from inspecting `demos/`.
 ## `photo-gallery/round-11-raw`
 
 - main-thread verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-raw`
+  - `bun test todos/demos_with_specs/photo-gallery/round-11-raw`
 - result:
   - pass
 
@@ -35,9 +35,9 @@ Read:
 ## `photo-gallery/round-11-compressed`
 
 - main-thread verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed`
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed/gallery.unit.test.ts`
-  - `bunx playwright test /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed/browser.semantic.spec.ts --config /Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/round-11-compressed/playwright.config.ts`
+  - `bun test todos/demos_with_specs/photo-gallery/round-11-compressed`
+  - `bun test todos/demos_with_specs/photo-gallery/round-11-compressed/gallery.unit.test.ts`
+  - `bunx playwright test todos/demos_with_specs/photo-gallery/round-11-compressed/browser.semantic.spec.ts --config todos/demos_with_specs/photo-gallery/round-11-compressed/playwright.config.ts`
 - result:
   - the folder-level `bun test` failed because the round introduced a Playwright-style spec file that Bun tried to load
   - the unit test passed
@@ -52,7 +52,7 @@ Read:
 ## `draggable-cards/round-11-raw`
 
 - main-thread verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-11-raw`
+  - `bun test todos/demos_with_specs/draggable-cards/round-11-raw`
 - result:
   - pass
 
@@ -64,7 +64,7 @@ Read:
 ## `draggable-cards/round-11-compressed`
 
 - main-thread verification:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/draggable-cards/round-11-compressed`
+  - `bun test todos/demos_with_specs/draggable-cards/round-11-compressed`
 - result:
   - pass
 

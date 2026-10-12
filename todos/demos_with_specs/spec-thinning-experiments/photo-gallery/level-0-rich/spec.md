@@ -6,7 +6,7 @@ Read first:
 
 1. `docs/drafts/verification.md`
 2. `docs/drafts/automating-browsers.md`
-3. `/Users/chenglou/github/vibescript/drafts/demos_with_specs/spec-thinning-experiments/photo-gallery/shared-data.md`
+3. `todos/demos_with_specs/spec-thinning-experiments/photo-gallery/shared-data.md`
 4. this file
 5. `oracle-contract.md`
 
@@ -14,7 +14,7 @@ Write tests first, then implementation, then validate.
 
 Build only inside:
 
-- `/Users/chenglou/github/vibescript/drafts/demos_with_specs/photo-gallery/thin-level-0-rich`
+- `todos/demos_with_specs/photo-gallery/thin-level-0-rich`
 
 ## Summary
 

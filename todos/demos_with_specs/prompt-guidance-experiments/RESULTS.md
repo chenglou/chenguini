@@ -20,25 +20,25 @@ All workers were fresh `gpt-5.4 xhigh` agents.
 ### `scroll-anchor`
 
 - `prompt-01-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/prompt-01-raw`
+  - `bun test todos/demos_with_specs/scroll-anchor/prompt-01-raw`
   - pass
 - `prompt-01-template`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/prompt-01-template`
+  - `bun test todos/demos_with_specs/scroll-anchor/prompt-01-template`
   - pass
 - `prompt-01-guided`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/scroll-anchor/prompt-01-guided`
+  - `bun test todos/demos_with_specs/scroll-anchor/prompt-01-guided`
   - pass
 
 ### `gesture-flick-snap-target`
 
 - `prompt-01-raw`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/prompt-01-raw`
+  - `bun test todos/demos_with_specs/gesture-flick-snap-target/prompt-01-raw`
   - pass
 - `prompt-01-template`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/prompt-01-template`
+  - `bun test todos/demos_with_specs/gesture-flick-snap-target/prompt-01-template`
   - pass
 - `prompt-01-guided`:
-  - `bun test /Users/chenglou/github/vibescript/drafts/demos_with_specs/gesture-flick-snap-target/prompt-01-guided`
+  - `bun test todos/demos_with_specs/gesture-flick-snap-target/prompt-01-guided`
   - pass
 
 - `bun check`:
