@@ -1,18 +1,27 @@
 {
   "name": "chenguini",
-  "private": true,
+  "version": "0.0.1",
+  "description": "Cheng's engineering & UI guidelines for avoiding spaghetti code",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chenglou/chenguini.git"
+  },
+  "files": [
+    "docs",
+    "!docs/drafts",
+    "demos"
+  ],
   "scripts": {
     "start": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./demos/*/index.html --host=$HOST:$PORT",
     "start:templates": "HOST=${HOST:-0.0.0.0}; PORT=3000; bun ./todos/demo_templates/*/index.html --host=$HOST:$PORT",
     "check": "tsc && oxlint --type-aware demos --ignore-pattern '*.js'"
   },
   "devDependencies": {
+    "@chenglou/pretext": "^0.0.5",
     "@typescript/native": "npm:typescript@7.0.2",
     "oxlint": "latest",
     "oxlint-tsgolint": "latest",
     "typescript": "5.9.3"
-  },
-  "dependencies": {
-    "@chenglou/pretext": "^0.0.5"
   }
 }
