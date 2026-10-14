@@ -4,13 +4,7 @@ import {
   walkRichInlineLineRanges,
   type PreparedRichInline,
 } from '@chenglou/pretext/rich-inline'
-import {
-  layoutNextLine,
-  measureNaturalWidth,
-  prepareWithSegments,
-  type LayoutCursor,
-  type PreparedTextWithSegments,
-} from '@chenglou/pretext'
+import {measureNaturalWidth, prepareWithSegments} from '@chenglou/pretext'
 import {type HNCommentDoc, type HNRun} from './hn-comment-parser'
 
 export const COMMENT_LINE_HEIGHT = 14
@@ -21,7 +15,7 @@ export const COMMENT_CODE_FONT = '12px monospace'
 
 type PreparedCommentBlock =
   | {kind: 'paragraph'; flow: PreparedRichInline; runs: HNRun[]}
-  | {kind: 'codeBlock'; prepared: PreparedTextWithSegments; text: string}
+  | {kind: 'codeBlock'; flow: PreparedRichInline; text: string}
 
 export type PreparedHNCommentDoc = {
   blocks: PreparedCommentBlock[]
@@ -36,6 +30,10 @@ export type HNCommentLayoutFragment = {
   top: number
   width: number
   height: number
+  // Where the fragment sits in the comment's text (hnCommentDocToPlainText). This can span more characters than
+  // `text` has, since Pretext doesn't paint some of them, e.g. a soft hyphen it didn't break at. The helpers below
+  // still count painted characters from textStart, so after each such character they're off by one more, up to the
+  // fragment's end
   textStart: number
   textEnd: number
 }
@@ -85,7 +83,7 @@ export function prepareHNCommentDoc(doc: HNCommentDoc): PreparedHNCommentDoc {
         case 'codeBlock':
           return {
             kind: 'codeBlock',
-            prepared: prepareWithSegments(block.text, COMMENT_CODE_FONT, {whiteSpace: 'pre-wrap'}),
+            flow: prepareRichInline([{text: block.text, font: COMMENT_CODE_FONT}], {whiteSpace: 'pre-wrap'}),
             text: block.text,
           }
       }
@@ -97,7 +95,7 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
   const safeWidth = Math.max(1, maxWidth)
   const blocks: HNCommentLayoutBlock[] = []
   let top = 0
-  let textOffset = 0
+  let blockTextStart = 0 // where the block starts in the comment's text
 
   for (let blockIndex = 0; blockIndex < doc.blocks.length; blockIndex++) {
     const block = doc.blocks[blockIndex]!
@@ -109,12 +107,11 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
       case 'paragraph': {
         const lines: HNCommentLayoutLine[] = []
         let blockHeight = 0
-        // Where each run starts in the source
-        const runStarts: number[] = []
-        let runStart = textOffset
+        const runTextStarts: number[] = []
+        let blockTextEnd = blockTextStart
         for (let runIndex = 0; runIndex < block.runs.length; runIndex++) {
-          runStarts.push(runStart)
-          runStart += block.runs[runIndex]!.text.length
+          runTextStarts.push(blockTextEnd)
+          blockTextEnd += block.runs[runIndex]!.text.length
         }
 
         walkRichInlineLineRanges(block.flow, safeWidth, lineRange => {
@@ -127,10 +124,7 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
             const fragment = line.fragments[fragmentIndex]!
             const run = block.runs[fragment.itemIndex]!
             left += fragment.gapBefore
-            // Pretext says where the fragment's text sits in its run, past any whitespace it collapsed or dropped
-            // at a line start
-            const textStart = runStarts[fragment.itemIndex]! + fragment.sourceStart
-            const textEnd = textStart + fragment.text.length
+            const runTextStart = runTextStarts[fragment.itemIndex]!
             const width = fragment.occupiedWidth
             const layoutFragment: HNCommentLayoutFragment = {
               kind: run.kind,
@@ -141,12 +135,12 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
               top: lineTop,
               width,
               height: COMMENT_LINE_HEIGHT,
-              textStart,
-              textEnd,
+              // Pretext says where the fragment starts and ends in its run's text
+              textStart: runTextStart + fragment.sourceStart,
+              textEnd: runTextStart + fragment.sourceEnd,
             }
             fragments.push(layoutFragment)
             left += width
-            textOffset = textEnd
           }
 
           lines.push({
@@ -154,7 +148,7 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
             width: line.width,
             height: COMMENT_LINE_HEIGHT,
             textStart: fragments[0]!.textStart,
-            textEnd: textOffset,
+            textEnd: fragments[fragments.length - 1]!.textEnd,
             fragments,
           })
           blockHeight += COMMENT_LINE_HEIGHT
@@ -166,26 +160,27 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
           lines,
         })
         top += blockHeight
+        blockTextStart = blockTextEnd
         break
       }
 
       case 'codeBlock': {
         const lines: HNCommentLayoutLine[] = []
         let blockHeight = 0
-        let cursor: LayoutCursor | undefined
-        let sourceOffset = 0
 
-        while (true) {
-          const line = layoutNextLine(block.prepared, safeWidth, cursor)
-          if (line == null) break
-
+        walkRichInlineLineRanges(block.flow, safeWidth, lineRange => {
+          const line = materializeRichInlineLineRange(block.flow, lineRange)
           const lineTop = blockTop + blockHeight
-          const lineTextStart = textOffset
-          const lineTextEnd = lineTextStart + line.text.length
-          const fragment: HNCommentLayoutFragment = {
+          // The block is one item, so each line is one fragment, and Pretext says where it starts and ends in the
+          // block's text. The end is past the line break the line ends at, which isn't the line's own text
+          const fragment = line.fragments[0]!
+          const lineTextStart = blockTextStart + fragment.sourceStart
+          const lineTextEnd =
+            blockTextStart + fragment.sourceEnd - lineBreakCharCountBefore(block.text, fragment.sourceEnd)
+          const layoutFragment: HNCommentLayoutFragment = {
             kind: 'code',
             href: null,
-            text: line.text,
+            text: fragment.text,
             gapBefore: 0,
             left: 0,
             top: lineTop,
@@ -201,21 +196,10 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
             height: COMMENT_LINE_HEIGHT,
             textStart: lineTextStart,
             textEnd: lineTextEnd,
-            fragments: [fragment],
+            fragments: [layoutFragment],
           })
-
-          textOffset = lineTextEnd
-          sourceOffset += line.text.length
-          while (sourceOffset < block.text.length) {
-            const lineBreakWidth = lineBreakCharCountAt(block.text, sourceOffset)
-            if (lineBreakWidth === 0) break
-            sourceOffset += lineBreakWidth
-            textOffset += lineBreakWidth
-          }
-
           blockHeight += COMMENT_LINE_HEIGHT
-          cursor = line.end
-        }
+        })
 
         blocks.push({
           kind: 'codeBlock',
@@ -223,6 +207,7 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
           lines,
         })
         top += blockHeight
+        blockTextStart += block.text.length
         break
       }
     }
@@ -377,7 +362,7 @@ export function resolveHNCommentTextOffset(root: HTMLElement, textOffset: number
       if (!(textNode instanceof Text)) continue
       lastText = textNode
       if (target < partStart) return {node: textNode, offset: 0}
-      if (target <= partEnd) return {node: textNode, offset: clamp(0, target - partStart, textNode.length)}
+      if (target <= partEnd) return {node: textNode, offset: Math.min(target - partStart, textNode.length)}
     }
   }
 
@@ -390,8 +375,10 @@ export function findHNCommentTextOffset(root: HTMLElement, node: Node, offset: n
   if (node instanceof Text) {
     const owner = node.parentElement
     const start = owner == null ? null : readTextStart(owner)
-    if (start == null) return null
-    return start + clamp(0, offset, node.length)
+    const end = owner == null ? null : readTextEnd(owner)
+    if (start == null || end == null) return null
+    // The end of the painted text is the end of its span, which can be past start + length
+    return offset >= node.length ? end : start + offset
   }
 
   if (node instanceof HTMLElement) {
@@ -488,14 +475,15 @@ function createFragmentNode(fragment: HNCommentLayoutFragment) {
       node.className = 'comment-fragment comment-code-fragment'
       break
   }
-  node.textContent = fragment.text
+  // Not `textContent`, which leaves a blank code line with no text node, so with no place to put a caret
+  node.appendChild(document.createTextNode(fragment.text))
   return node
 }
 
-function lineBreakCharCountAt(text: string, index: number) {
-  const ch = text[index]
-  if (ch === '\r' && text[index + 1] === '\n') return 2
-  if (ch === '\r' || ch === '\n') return 1
+function lineBreakCharCountBefore(text: string, index: number) {
+  const ch = text[index - 1]
+  if (ch === '\n' && text[index - 2] === '\r') return 2
+  if (ch === '\n' || ch === '\r') return 1
   return 0
 }
 
@@ -645,10 +633,6 @@ function lastTextNodeIn(node: Node) {
     last = next as Text
   }
   return last
-}
-
-function clamp(min: number, v: number, max: number) {
-  return v > max ? max : v < min ? min : v
 }
 
 function escapeHTML(text: string) {
