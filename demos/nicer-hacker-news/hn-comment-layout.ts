@@ -109,13 +109,12 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
       case 'paragraph': {
         const lines: HNCommentLayoutLine[] = []
         let blockHeight = 0
-        // Where each run's text starts in the source, past the boundary whitespace Pretext collapses into gapBefore
-        const runTextStarts: number[] = []
+        // Where each run starts in the source
+        const runStarts: number[] = []
         let runStart = textOffset
         for (let runIndex = 0; runIndex < block.runs.length; runIndex++) {
-          const runText = block.runs[runIndex]!.text
-          runTextStarts.push(runStart + runText.length - runText.replace(/^[ \t\n\f\r]+/, '').length)
-          runStart += runText.length
+          runStarts.push(runStart)
+          runStart += block.runs[runIndex]!.text.length
         }
 
         walkRichInlineLineRanges(block.flow, safeWidth, lineRange => {
@@ -128,13 +127,9 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
             const fragment = line.fragments[fragmentIndex]!
             const run = block.runs[fragment.itemIndex]!
             left += fragment.gapBefore
-            // A fragment that starts its run begins at the run's source text. Counting gapBefore misses the space
-            // when a line wraps right before a run, because Pretext drops gapBefore at a line start
-            if (fragment.start.segmentIndex === 0 && fragment.start.graphemeIndex === 0) {
-              textOffset = runTextStarts[fragment.itemIndex]!
-            }
-
-            const textStart = textOffset
+            // Pretext says where the fragment's text sits in its run, past any whitespace it collapsed or dropped
+            // at a line start
+            const textStart = runStarts[fragment.itemIndex]! + fragment.sourceStart
             const textEnd = textStart + fragment.text.length
             const width = fragment.occupiedWidth
             const layoutFragment: HNCommentLayoutFragment = {
@@ -177,11 +172,11 @@ export function layoutPreparedHNCommentDoc(doc: PreparedHNCommentDoc, maxWidth: 
       case 'codeBlock': {
         const lines: HNCommentLayoutLine[] = []
         let blockHeight = 0
-        let cursor: LayoutCursor = {segmentIndex: 0, graphemeIndex: 0}
+        let cursor: LayoutCursor | undefined
         let sourceOffset = 0
 
         while (true) {
-          const line = layoutNextLine(block.prepared, cursor, safeWidth)
+          const line = layoutNextLine(block.prepared, safeWidth, cursor)
           if (line == null) break
 
           const lineTop = blockTop + blockHeight

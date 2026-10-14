@@ -72,7 +72,7 @@ function promptInnerMaxWidth(
 export function preparePrompt(prompt: string): PreparedPrompt {
   return {
     prepared: prepareRichInline([
-      {text: promptTextPrefix, font: promptFont, break: 'never'},
+      {text: promptTextPrefix, font: promptFont},
       {text: prompt, font: promptFont},
     ]),
   }
