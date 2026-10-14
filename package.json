@@ -18,7 +18,7 @@
     "check": "tsc && oxlint --type-aware demos --ignore-pattern '*.js'"
   },
   "devDependencies": {
-    "@chenglou/pretext": "^0.0.5",
+    "@chenglou/pretext": "^0.0.9",
     "oxlint": "latest",
     "oxlint-tsgolint": "latest",
     "typescript": "7.0.2"
