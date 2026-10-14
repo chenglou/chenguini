@@ -19,9 +19,8 @@
   },
   "devDependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@typescript/native": "npm:typescript@7.0.2",
     "oxlint": "latest",
     "oxlint-tsgolint": "latest",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   }
 }

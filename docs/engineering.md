@@ -178,7 +178,7 @@ We don't use rules that:
 
 Concretely, for TS config (use TypeScript 7's native `tsc`. Faster):
 
-TypeScript 7.0 does not expose a stable programmatic API yet. Install its CLI as the `@typescript/native` alias and keep TypeScript 6 under the `typescript` package name for Knip, editor tooling, and other API consumers. If either dependency changes, verify that `bun tsc --version` still reports TypeScript 7.
+TypeScript 7.0 does not expose a stable programmatic API yet, and ships no `tsserver`. If a tool you use still needs either one, install TypeScript 7's CLI as the `@typescript/native` alias and keep TypeScript 6 under the `typescript` package name for that tool. Otherwise just install TypeScript 7 as `typescript` (Knip 6 and oxlint no longer need the old API). Either way, verify that `bun tsc --version` reports TypeScript 7.
 
 ```jsonc
 "strict": true,
