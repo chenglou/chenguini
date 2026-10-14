@@ -155,10 +155,12 @@ function parseLinkRun(linkElement: HTMLAnchorElement): HNRun {
 }
 
 function addRun(runs: HNRun[], next: HNRun) {
-  const text = normalizeInlineWhitespace(next.text)
+  let text = normalizeInlineWhitespace(next.text)
+  const previous = runs[runs.length - 1]
+  // HTML collapses a space that follows another space, across tags too
+  if (previous != null && previous.text.endsWith(' ') && text.startsWith(' ')) text = text.slice(1)
   if (text === '') return
 
-  const previous = runs[runs.length - 1]
   if (previous == null) {
     runs.push({...next, text})
     return
