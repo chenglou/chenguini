@@ -43,10 +43,14 @@ if (st.events.click != null) {
   // use clickXLocal/YLocal for click hit testing
   pointer.x = st.events.click.clientX
   pointer.y = st.events.click.clientY
+  pointer.timeStamp = st.events.click.timeStamp
 }
-if (st.events.mousemove != null) {
+if (st.events.mousemove != null && st.events.mousemove.timeStamp >= pointer.timeStamp) {
+  // Guard against buffered mousemove events Chrome can deliver out of timestamp order after a context menu closes
+  // (if your listener keeps only one mousemove per frame, compare e.timeStamp there too)
   pointer.x = st.events.mousemove.clientX
   pointer.y = st.events.mousemove.clientY
+  pointer.timeStamp = st.events.mousemove.timeStamp
 }
 // for hover hit testing against absolute-positioned elements:
 const pointerXLocal = pointer.x + scrollX
@@ -74,7 +78,7 @@ For flick/throw gestures, estimate velocity from recent pointer history:
 
 ```js
 let pointer = [] // circular buffer, keep last ~20
-// On move: pointer.push({x: e.clientX, y: e.clientY, time: e.timeStamp})
+// On move: pointer.push({x: e.pageX, y: e.pageY, time: e.timeStamp})
 // On release, with now = the release event's timeStamp:
 let vx = 0
 if (pointer.length > 0) {
@@ -97,11 +101,13 @@ For drag interactions, depth usually wants 3 bands:
 
 Don't drop the released item back into normal z-order on `pointerup`. The snap-back looks wrong.
 
+Keep these z-indices local by putting the drag container in an isolated stacking context (`isolation: 'isolate'`, see [z-index-depth-management.md](z-index-depth-management.md#local-z-indexing-within-a-component)):
+
 ```js
 function cardZIndex(cardId) {
-  if (draggedCardId === cardId) return 300
-  if (draggedCardId == null && lastDraggedCardId === cardId) return 200
-  return 10 + orderedCardIds.indexOf(cardId)
+  if (draggedCardId === cardId) return orderedCardIds.length + 2
+  if (draggedCardId == null && lastDraggedCardId === cardId) return orderedCardIds.length + 1
+  return orderedCardIds.indexOf(cardId)
 }
 ```
 
