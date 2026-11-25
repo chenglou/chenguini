@@ -47,7 +47,7 @@ export const toast = d++
 ```
 
 ```tsx
-import { modal } from './z'
+import { modal } from './Z'
 
 <div style={{ zIndex: modal }}>
 ```

@@ -20,11 +20,12 @@ Essentially:
 
 ## Timestamps
 
-There are three time sources and they are **not** the same:
+There are four time sources and they are **not** the same:
 
 - **rAF's `now` parameter**: Scheduled frame start time (from VSync). All rAF callbacks in the same frame get the **same** value. Use for animation stepping inside rAF callbacks.
 - **`document.timeline.currentTime`**: Same value as rAF's `now` ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame)). Use when an event handler needs to capture a timestamp that would otherwise be lost before the next render.
-- **`performance.now()`**: Actual wall-clock time when the JS line executes. Advances between callbacks. Use for input timing (velocity estimation, gesture duration).
+- **`event.timeStamp`**: High-precision time when an input event occurred. Prefer this for input timing (velocity estimation, gesture duration); not on rAF's clock.
+- **`performance.now()`**: Actual wall-clock time when the JS line executes. Advances between callbacks. Fine for input timing when you don't have an event (or profiling); never use for animation.
 
 **For animation, never use `performance.now()`.** Use rAF's `now` inside rAF callbacks, and `document.timeline.currentTime` when you need the same clock outside rAF (e.g. storing `pointerDownTime` for the next render).
 
